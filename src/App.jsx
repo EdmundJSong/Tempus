@@ -363,9 +363,6 @@ export default function Tempus() {
 
   useEffect(() => { met.updS({ muted }); }, [muted]);
 
-  // Bug 2 fix: Start practice mode after re-render so go() has fresh timeline
-  useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
-
   useEffect(() => {
     met.setCb(evt => {
       if (evt.type === "beat") { const bar = tl[evt.barIdx]; setPs({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: true, countIn: false, isTimed: false, pctLabel: pracSections ? `${pracStep}%` : null }); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
@@ -377,6 +374,7 @@ export default function Tempus() {
   }, [met, tl, pracSections, pracStep]);
 
   const go = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); }, [tl, settings, met, muted, pracSections, pracStep]);
+  useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
   const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); }, [met]);
   const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) go(i); }, [tl, go]);
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) go(i); }, [ps, activeSections, tl, go]);
