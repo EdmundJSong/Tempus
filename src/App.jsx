@@ -1,31 +1,38 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 
 // ============ INLINE ICONS ============
-const Icon = ({ d, size = 18, fill = "none", strokeWidth = 2 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-    {Array.isArray(d) ? d.map((p, i) => <path key={i} d={p} />) : <path d={d} />}
+const Icon = ({ d, size = 18, fill = "none", strokeWidth = 2, viewBox = "0 0 24 24" }) => (
+  <svg width={size} height={size} viewBox={viewBox} fill={fill} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {Array.isArray(d) ? d.map((p, i) => React.isValidElement(p) ? React.cloneElement(p, { key: i }) : <path key={i} d={p} vectorEffect="non-scaling-stroke" />)
+      : React.isValidElement(d) ? d : <path d={d} vectorEffect="non-scaling-stroke" />}
   </svg>
 );
 
 const Icons = {
-  play: (s = 18) => <Icon size={s} d="M5 3l14 9-14 9V3z" fill="currentColor" stroke="none" />,
-  pause: (s = 18) => <Icon size={s} d={["M6 4h4v16H6z", "M14 4h4v16H14z"]} fill="currentColor" stroke="none" />,
-  stop: (s = 16) => <Icon size={s} d="M4 4h16v16H4z" fill="currentColor" stroke="none" />,
+  play: (s = 18) => <Icon size={s} d="M5 3l14 9-14 9V3z" fill="currentColor" strokeWidth={2} />,
+  pause: (s = 18) => <Icon size={s} d={[
+    <rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />,
+    <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />
+  ]} />,
+  stop: (s = 16) => <Icon size={s} d={<rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" stroke="none" />} />,
   chevLeft: (s = 18) => <Icon size={s} d="M15 18l-6-6 6-6" />,
   chevRight: (s = 18) => <Icon size={s} d="M9 18l6-6-6-6" />,
   plus: (s = 20) => <Icon size={s} d={["M12 5v14", "M5 12h14"]} />,
   trash: (s = 16) => <Icon size={s} d={["M3 6h18", "M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2", "M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"]} />,
+  copy: (s = 16) => <Icon size={s} d={["M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2", "M12 8h6a2 2 0 012 2v8a2 2 0 01-2 2h-6a2 2 0 01-2-2v-8a2 2 0 012-2z"]} />,
+  arrowUp: (s = 16) => <Icon size={s} d="M12 19V5M5 12l7-7 7 7" />,
+  arrowDown: (s = 16) => <Icon size={s} d="M12 5v14M5 12l7 7 7-7" />,
   x: (s = 18) => <Icon size={s} d={["M18 6L6 18", "M6 6l12 12"]} />,
   volOn: (s = 18) => <Icon size={s} d={["M11 5L6 9H2v6h4l5 4V5z", "M19.07 4.93a10 10 0 010 14.14", "M15.54 8.46a5 5 0 010 7.07"]} />,
   volOff: (s = 18) => <Icon size={s} d={["M11 5L6 9H2v6h4l5 4V5z", "M23 9l-6 6", "M17 9l6 6"]} />,
   clock: (s = 18) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" />
     </svg>
   ),
   music: (s = 14) => <Icon size={s} d={["M9 18V5l12-2v13", "M9 18a3 3 0 11-6 0 3 3 0 016 0z", "M21 16a3 3 0 11-6 0 3 3 0 016 0z"]} />,
   gear: (s = 18) => (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <circle cx="12" cy="12" r="3" />
       <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
     </svg>
@@ -62,23 +69,31 @@ const mkTimed = () => ({
 function NoteSVG({ type, dotted, size = 24 }) {
   const w = size, h = size * 1.6;
   const headY = h * 0.72, headX = w * 0.38;
-  const stemTop = h * 0.15, stemX = headX + 2.8;
+  const stemTop = h * 0.15, stemX = headX + 3.8;
   const isOpen = type === "w" || type === "h";
   const hasStem = type !== "w";
   const flags = type === "e" ? 1 : type === "16" ? 2 : type === "32" ? 3 : type === "64" ? 4 : 0;
+
+  // Professional oval notehead
+  const noteheadPath = `M${headX - 4.5},${headY + 1} C${headX - 4.5},${headY + 3.5} ${headX - 1},${headY + 4} ${headX + 1.5},${headY + 2.5} C${headX + 4},${headY + 1} ${headX + 4.5},${headY - 1.5} ${headX + 4.5},${headY - 3.5} C${headX + 4.5},${headY - 6} ${headX + 1},${headY - 6.5} ${headX - 1.5},${headY - 5} C${headX - 4},${headY - 3.5} ${headX - 4.5},${headY - 1} ${headX - 4.5},${headY + 1} Z`;
+
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }}>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }} aria-hidden="true">
       {isOpen ? (
-        <ellipse cx={headX} cy={headY} rx={3.2} ry={2.4} fill="none" stroke="currentColor" strokeWidth={1.2} transform={`rotate(-20,${headX},${headY})`} />
+        <path d={noteheadPath} fill="none" stroke="currentColor" strokeWidth={1.5} transform={`rotate(-15,${headX},${headY})`} />
       ) : (
-        <ellipse cx={headX} cy={headY} rx={3.2} ry={2.4} fill="currentColor" transform={`rotate(-20,${headX},${headY})`} />
+        <path d={noteheadPath} fill="currentColor" transform={`rotate(-15,${headX},${headY})`} />
       )}
-      {hasStem && <line x1={stemX} y1={headY - 1.5} x2={stemX} y2={stemTop} stroke="currentColor" strokeWidth={1.2} />}
-      {flags > 0 && Array.from({ length: flags }).map((_, i) => (
-        <path key={i} d={`M${stemX},${stemTop + i * 5} Q${stemX + 6},${stemTop + i * 5 + 3} ${stemX + 4},${stemTop + i * 5 + 8}`}
-          fill="none" stroke="currentColor" strokeWidth={1.2} />
-      ))}
-      {dotted && <circle cx={headX + 6.5} cy={headY} r={1.2} fill="currentColor" />}
+
+      {hasStem && <line x1={stemX} y1={headY} x2={stemX} y2={stemTop} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />}
+
+      {flags > 0 && Array.from({ length: flags }).map((_, i) => {
+        const fy = stemTop + i * 5;
+        // Traditional flag sweep
+        return <path key={i} d={`M${stemX},${fy} C${stemX + 4},${fy + 2} ${stemX + 7},${fy + 8} ${stemX + 5},${fy + 14} C${stemX + 5},${fy + 12} ${stemX + 3},${fy + 8} ${stemX},${fy + 6}`} fill="currentColor" />;
+      })}
+
+      {dotted && <circle cx={headX + 8.5} cy={headY} r={1.5} fill="currentColor" />}
     </svg>
   );
 }
@@ -164,18 +179,18 @@ function useMetronome() {
   }, []);
 
   const reqWL = useCallback(async () => {
-    try { if ("wakeLock" in navigator) wlRef.current = await navigator.wakeLock.request("screen"); } catch (e) {}
+    try { if ("wakeLock" in navigator) wlRef.current = await navigator.wakeLock.request("screen"); } catch (e) { }
     if (!saRef.current) {
       const a = document.createElement("audio");
       a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true");
       a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
       saRef.current = a;
     }
-    try { await saRef.current.play(); } catch (e) {}
+    try { await saRef.current.play(); } catch (e) { }
   }, []);
 
   const relWL = useCallback(() => {
-    if (wlRef.current) { wlRef.current.release().catch(() => {}); wlRef.current = null; }
+    if (wlRef.current) { wlRef.current.release().catch(() => { }); wlRef.current = null; }
     if (saRef.current) saRef.current.pause();
   }, []);
 
@@ -256,7 +271,7 @@ function useMetronome() {
         if (el >= bar.timedDuration) { tsStart.current = 0; tsMIdx.current = 0; barIdx.current++; continue; }
         nextBeat.current += 0.05; return;
       }
-      const bt = bar.beatTypes[beatIdx.current] || 2;
+      const bt = bar.beatTypes[beatIdx.current] ?? 2;
       click(ctx, nextBeat.current, bt);
       if (cbRef.current) cbRef.current({
         type: "beat", barIndex: barIdx.current, beatIndex: beatIdx.current, beatType: bt,
@@ -288,19 +303,19 @@ function useMetronome() {
 
   const updS = useCallback(s => { sRef.current = { ...sRef.current, ...s }; }, []);
   const setCb = useCallback(cb => { cbRef.current = cb; }, []);
-  useEffect(() => () => { stop(); if (audioCtx.current) audioCtx.current.close().catch(() => {}); }, [stop]);
+  useEffect(() => () => { stop(); if (audioCtx.current) audioCtx.current.close().catch(() => { }); }, [stop]);
   return { start, stop, setCb, playing, updS };
 }
 
 // ============ SHARED STYLES ============
 const numIn = {
-  width: 56, height: 36, background: C.surface, border: `1px solid ${C.border}`,
-  color: C.text, textAlign: "center", fontSize: 16, borderRadius: 4,
-  fontFamily: "'DM Mono', monospace", outline: "none", margin: "0 2px",
+  width: 56, height: 44, background: C.surface, border: `1px solid ${C.border}`,
+  color: C.text, textAlign: "center", fontSize: 18, borderRadius: 8,
+  fontFamily: "'DM Mono', monospace", outline: "none", margin: "0 4px",
 };
 const stepBtn = {
-  width: 32, height: 28, background: C.surface, border: `1px solid ${C.border}`,
-  color: C.textMuted, cursor: "pointer", borderRadius: 4,
+  width: 44, height: 44, background: C.surface, border: `1px solid ${C.border}`,
+  color: C.textMuted, cursor: "pointer", borderRadius: 8,
   display: "flex", alignItems: "center", justifyContent: "center",
 };
 const sBtn = (on) => ({
@@ -313,22 +328,22 @@ const sBtn = (on) => ({
 function Stepper({ value, onChange, min = 1, max = 999 }) {
   return (
     <div style={{ display: "flex", alignItems: "center" }}>
-      <button onClick={() => onChange(Math.max(min, value - 1))} style={stepBtn}>{Icons.chevLeft(12)}</button>
-      <input type="number" value={value}
+      <button onClick={() => onChange(Math.max(min, value - 1))} style={stepBtn}>{Icons.chevLeft(16)}</button>
+      <input type="number" inputMode="numeric" value={value}
         onChange={e => { const v = parseInt(e.target.value); if (!isNaN(v)) onChange(Math.min(max, Math.max(min, v))); }}
         style={numIn} />
-      <button onClick={() => onChange(Math.min(max, value + 1))} style={stepBtn}>{Icons.chevRight(12)}</button>
+      <button onClick={() => onChange(Math.min(max, value + 1))} style={stepBtn}>{Icons.chevRight(16)}</button>
     </div>
   );
 }
 function StepperF({ value, onChange, min = 0, max = 999, step = 0.5 }) {
   return (
     <div style={{ display: "flex", alignItems: "center" }}>
-      <button onClick={() => onChange(Math.max(min, +(value - step).toFixed(1)))} style={stepBtn}>{Icons.chevLeft(12)}</button>
-      <input type="number" value={value}
+      <button onClick={() => onChange(Math.max(min, +(value - step).toFixed(1)))} style={stepBtn}>{Icons.chevLeft(16)}</button>
+      <input type="number" inputMode="decimal" value={value}
         onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(Math.min(max, Math.max(min, +v.toFixed(1)))); }}
-        style={{ ...numIn, width: 64 }} />
-      <button onClick={() => onChange(Math.min(max, +(value + step).toFixed(1)))} style={stepBtn}>{Icons.chevRight(12)}</button>
+        style={{ ...numIn, width: 72 }} />
+      <button onClick={() => onChange(Math.min(max, +(value + step).toFixed(1)))} style={stepBtn}>{Icons.chevRight(16)}</button>
     </div>
   );
 }
@@ -365,8 +380,10 @@ function SectionEditor({ section, onSave, onClose, onDelete }) {
   };
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100,
-      display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100,
+      display: "flex", alignItems: "flex-end", justifyContent: "center"
+    }} onClick={onClose}>
       <div style={{
         width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`,
         borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto",
@@ -383,14 +400,14 @@ function SectionEditor({ section, onSave, onClose, onDelete }) {
 
         {isMet ? (<>
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-              <input type="number" value={s.tsNum}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <input type="number" inputMode="numeric" value={s.tsNum}
                 onChange={e => { const v = parseInt(e.target.value); if (v > 0 && v <= 32) upd("tsNum", v); }}
-                style={{ ...numIn, width: 48, height: 42, fontSize: 22, fontWeight: 700 }} />
-              <div style={{ height: 1, width: 36, background: C.textMuted }} />
-              <input type="number" value={s.tsDen}
-                onChange={e => { const v = parseInt(e.target.value); if ([1,2,4,8,16,32,64].includes(v)) upd("tsDen", v); }}
-                style={{ ...numIn, width: 48, height: 42, fontSize: 22, fontWeight: 700 }} />
+                style={{ ...numIn, width: 56, height: 48, fontSize: 24, fontWeight: 700 }} />
+              <div style={{ height: 1, width: 44, background: C.textMuted }} />
+              <input type="number" inputMode="numeric" value={s.tsDen}
+                onChange={e => { const v = parseInt(e.target.value); if ([1, 2, 4, 8, 16, 32, 64].includes(v)) upd("tsDen", v); }}
+                style={{ ...numIn, width: 56, height: 48, fontSize: 24, fontWeight: 700 }} />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>
               <button onClick={() => {
@@ -411,28 +428,30 @@ function SectionEditor({ section, onSave, onClose, onDelete }) {
           </div>
           <Row label="Bars"><Stepper value={s.bars} onChange={v => upd("bars", v)} min={1} max={999} /></Row>
           <Row label="Grouping">
-            <input value={s.grouping} onChange={e => upd("grouping", e.target.value)}
-              style={{ ...numIn, width: 120, textAlign: "left", padding: "0 8px", fontSize: 14,
-                borderColor: gValid ? C.border : C.danger }} placeholder="e.g. 2+3" />
-            {!gValid && <span style={{ color: C.danger, fontSize: 11 }}>≠ {s.tsNum}</span>}
+            <input inputMode="numeric" value={s.grouping} onChange={e => upd("grouping", e.target.value)}
+              style={{
+                ...numIn, width: 120, textAlign: "left", padding: "0 12px", fontSize: 15,
+                borderColor: gValid ? C.border : C.danger
+              }} placeholder="e.g. 2+3" />
+            {!gValid && <span style={{ color: C.danger, fontSize: 13 }}>≠ {s.tsNum}</span>}
           </Row>
           <Row label="Curve">
             {["constant", "accel", "rit"].map(c => (
               <button key={c} onClick={() => upd("curve", c)} style={{
-                padding: "6px 12px", borderRadius: 6, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`,
+                padding: "8px 14px", borderRadius: 8, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`,
                 background: s.curve === c ? C.downbeat + "22" : "transparent",
                 color: s.curve === c ? C.downbeat : C.textMuted,
-                fontSize: 12, fontFamily: "'Outfit', sans-serif", cursor: "pointer",
+                fontSize: 13, fontFamily: "'Outfit', sans-serif", cursor: "pointer",
               }}>{c === "constant" ? "—" : c === "accel" ? "accel." : "rit."}</button>
             ))}
           </Row>
           {s.curve !== "constant" && (
             <Row label={Icons.arrow(14)}>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <div style={{ color: C.text, display: "flex", alignItems: "center", minWidth: 30 }}>
-                  <NoteSVG type={s.beatUnit} dotted={s.dotted} size={16} />
+                  <NoteSVG type={s.beatUnit} dotted={s.dotted} size={18} />
                 </div>
-                <span style={{ color: C.textMuted, fontSize: 16, fontFamily: "'DM Mono', monospace" }}>=</span>
+                <span style={{ color: C.textMuted, fontSize: 18, fontFamily: "'DM Mono', monospace" }}>=</span>
                 <Stepper value={s.endTempo} onChange={v => upd("endTempo", v)} min={10} max={400} />
               </div>
             </Row>
@@ -440,14 +459,14 @@ function SectionEditor({ section, onSave, onClose, onDelete }) {
         </>) : (<>
           <Row label="Duration">
             <StepperF value={s.duration} onChange={v => upd("duration", v)} min={0.5} max={600} />
-            <span style={{ color: C.textMuted, fontSize: 13, fontFamily: "'DM Mono', monospace", marginLeft: 4 }}>s</span>
+            <span style={{ color: C.textMuted, fontSize: 15, fontFamily: "'DM Mono', monospace", marginLeft: 6 }}>s</span>
           </Row>
           <Row label="Markers">
-            <input value={s.markers} onChange={e => upd("markers", e.target.value)}
-              style={{ ...numIn, width: 160, textAlign: "left", padding: "0 8px", fontSize: 13 }}
+            <input inputMode="decimal" value={s.markers} onChange={e => upd("markers", e.target.value)}
+              style={{ ...numIn, width: 200, textAlign: "left", padding: "0 12px", fontSize: 14 }}
               placeholder="e.g. 3, 7.5, 12" />
           </Row>
-          <div style={{ fontSize: 11, color: C.textMuted, marginBottom: 14, marginLeft: 82, fontFamily: "'DM Mono', monospace" }}>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14, marginLeft: 82, fontFamily: "'DM Mono', monospace" }}>
             {parseMarkers(s.markers).length} cue{parseMarkers(s.markers).length !== 1 ? "s" : ""}
           </div>
         </>)}
@@ -455,11 +474,20 @@ function SectionEditor({ section, onSave, onClose, onDelete }) {
         <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
           {onDelete && (
             <button onClick={() => { onDelete(s.id); onClose(); }}
-              style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`,
-                background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>
+              style={{
+                flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`,
+                background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center"
+              }}>
               {Icons.trash(16)}
             </button>
           )}
+          <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }}
+            style={{
+              flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`,
+              background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center"
+            }}>
+            {Icons.copy(16)}
+          </button>
           <button onClick={onClose} style={{
             flex: 1, padding: "12px", borderRadius: 8, border: `1px solid ${C.border}`,
             background: "transparent", color: C.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "'Outfit', sans-serif",
@@ -476,7 +504,7 @@ function SectionEditor({ section, onSave, onClose, onDelete }) {
 }
 
 // ============ SECTION CARD ============
-function SectionCard({ section, index, onClick, onStartHere }) {
+function SectionCard({ section, index, total, onClick, onStartHere, onMove }) {
   const isTimed = section.type === "timed";
   return (
     <div onClick={onClick} style={{
@@ -484,9 +512,19 @@ function SectionCard({ section, index, onClick, onStartHere }) {
       border: `1px solid ${C.border}`, cursor: "pointer",
       display: "flex", alignItems: "center", gap: 12, transition: "background 0.15s",
     }}
-    onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
-    onMouseLeave={e => e.currentTarget.style.background = C.surface}>
-      <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.textMuted, minWidth: 18, textAlign: "center" }}>{index + 1}</div>
+      onMouseEnter={e => e.currentTarget.style.background = C.surfaceHover}
+      onMouseLeave={e => e.currentTarget.style.background = C.surface}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 24, alignItems: "center" }}>
+        <button disabled={index === 0} onClick={e => { e.stopPropagation(); onMove(-1); }}
+          style={{ background: "none", border: "none", color: index === 0 ? C.border : C.textMuted, cursor: index === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>
+          {Icons.arrowUp(14)}
+        </button>
+        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, color: C.textMuted, textAlign: "center", lineHeight: 1 }}>{index + 1}</div>
+        <button disabled={index === total - 1} onClick={e => { e.stopPropagation(); onMove(1); }}
+          style={{ background: "none", border: "none", color: index === total - 1 ? C.border : C.textMuted, cursor: index === total - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>
+          {Icons.arrowDown(14)}
+        </button>
+      </div>
       {isTimed ? (<>
         {Icons.clock(16)}
         <div style={{ flex: 1, fontFamily: "'DM Mono', monospace", fontSize: 15, color: C.text }}>{section.duration}s</div>
@@ -494,8 +532,10 @@ function SectionCard({ section, index, onClick, onStartHere }) {
           {parseMarkers(section.markers).length} cue{parseMarkers(section.markers).length !== 1 ? "s" : ""}
         </div>
       </>) : (<>
-        <div style={{ fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 700, color: C.text,
-          lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{
+          fontFamily: "'DM Mono', monospace", fontSize: 18, fontWeight: 700, color: C.text,
+          lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center"
+        }}>
           <span>{section.tsNum}</span>
           <div style={{ height: 1, width: "100%", background: C.textMuted, margin: "1px 0" }} />
           <span>{section.tsDen}</span>
@@ -524,7 +564,7 @@ function SectionCard({ section, index, onClick, onStartHere }) {
 }
 
 // ============ PLAY VIEW ============
-function PlayView({ playState, sections, onStop, onPause, onResume, onGoToBar, onPrevSec, onNextSec, vis, isPlaying, muted, onMute }) {
+function PlayView({ playState, sections, onStop, onPause, onResume, onGoToBar, onPrevSec, onNextSec, vis, isPlaying, muted, onMute, tl }) {
   const { absoluteBar, beatIndex, beatType, tsNum, tsDen, sectionIndex, flash, isTimed, countIn: isCI } = playState;
   const fc = beatType === 0 ? C.downbeat : beatType === 1 ? C.accent : C.text;
   const fo = flash ? (beatType === 0 ? 0.35 : beatType === 1 ? 0.2 : 0.08) : 0;
@@ -532,10 +572,33 @@ function PlayView({ playState, sections, onStop, onPause, onResume, onGoToBar, o
   const showF = vis === "flash" || vis === "dots+flash";
   const showD = vis === "dots" || vis === "dots+flash";
 
+  // Calculate Up Next
+  const sec = sections[sectionIndex];
+  const nxtSec = sections[sectionIndex + 1];
+  let upNextStr = null;
+  if (nxtSec && !isCI) {
+    if (isTimed) {
+      if (playState.remaining != null && playState.remaining <= 10) {
+        upNextStr = nxtSec.type === "timed" ? `${nxtSec.duration}s Free` : `${nxtSec.tsNum}/${nxtSec.tsDen} at ${nxtSec.tempo}`;
+      }
+    } else {
+      // Find how many bars left in this section
+      const barsInSec = tl.filter(b => b.sectionIndex === sectionIndex);
+      if (barsInSec.length > 0) {
+        const lastBar = barsInSec[barsInSec.length - 1].absoluteBar;
+        if (lastBar - absoluteBar <= 1) { // 2 bars warning
+          upNextStr = nxtSec.type === "timed" ? `${nxtSec.duration}s Free` : `${nxtSec.tsNum}/${nxtSec.tsDen} at ${nxtSec.tempo}`;
+        }
+      }
+    }
+  }
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50,
+    <div style={{
+      position: "fixed", inset: 0, background: C.bg, zIndex: 50,
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      fontFamily: "'DM Mono', monospace" }}>
+      fontFamily: "'DM Mono', monospace"
+    }}>
       {showF && flash && <div style={{ position: "absolute", inset: 0, background: fc, opacity: fo, transition: "opacity 0.05s", pointerEvents: "none" }} />}
 
       <div style={{ fontSize: 20, color: C.textMuted, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, position: "relative", zIndex: 1, marginBottom: 8 }}>
@@ -548,13 +611,16 @@ function PlayView({ playState, sections, onStop, onPause, onResume, onGoToBar, o
         </>)}
       </div>
 
-      <div style={{ fontFamily: "'Bebas Neue', 'DM Mono', monospace", fontSize: 120, fontWeight: 400,
-        color: C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
+      <div style={{
+        fontFamily: "'Bebas Neue', 'DM Mono', monospace", fontSize: 120, fontWeight: 400,
+        color: C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2
+      }}>
         {isCI ? "—" : isTimed ? (playState.remaining != null ? playState.remaining.toFixed(1) : "—") : absoluteBar}
       </div>
 
-      {!isCI && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, position: "relative", zIndex: 1 }}>
-        {sectionIndex + 1}/{sections.length}{!isTimed && playState.tempo ? ` · ${Math.round(playState.tempo)}` : ""}
+      {!isCI && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+        <div>{sectionIndex + 1}/{sections.length}{!isTimed && playState.tempo ? ` · ${Math.round(playState.tempo)}` : ""}</div>
+        {upNextStr && <div style={{ color: C.downbeat, fontSize: 14, fontWeight: 600, animation: "pulse 2s infinite" }}>Up Next: {upNextStr}</div>}
       </div>}
 
       {showD && !isTimed && !isCI && (
@@ -562,9 +628,11 @@ function PlayView({ playState, sections, onStop, onPause, onResume, onGoToBar, o
           {(playState.allBeatTypes || []).map((bt, i) => {
             const on = i === beatIndex;
             const c = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.sub;
-            return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%",
+            return <div key={i} style={{
+              width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%",
               background: on ? c : `${c}55`, transition: "all 0.06s",
-              border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
+              border: on ? `2px solid ${c}` : "2px solid transparent"
+            }} />;
           })}
         </div>
       )}
@@ -574,9 +642,11 @@ function PlayView({ playState, sections, onStop, onPause, onResume, onGoToBar, o
           {Array.from({ length: playState.totalMarkers }).map((_, i) => {
             const on = i === playState.markerIdx;
             const past = i < (playState.markerIdx || 0);
-            return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%",
+            return <div key={i} style={{
+              width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%",
               background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`,
-              transition: "all 0.06s", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent" }} />;
+              transition: "all 0.06s", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent"
+            }} />;
           })}
         </div>
       )}
@@ -625,10 +695,14 @@ const tBtnS = {
 function SettingsPanel({ settings, onChange, onClose }) {
   const upd = (k, v) => onChange({ ...settings, [k]: v });
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100,
-      display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
-      <div style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`,
-        borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}>
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100,
+      display: "flex", alignItems: "flex-end", justifyContent: "center"
+    }} onClick={onClose}>
+      <div style={{
+        width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`,
+        borderRadius: "16px 16px 0 0", padding: "20px 20px 32px"
+      }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
           <div style={{ fontFamily: "'Outfit', sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div>
           <button onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{Icons.x(18)}</button>
@@ -640,10 +714,10 @@ function SettingsPanel({ settings, onChange, onClose }) {
           {["pitched", "unpitched"].map(v => <button key={v} onClick={() => upd("pitched", v === "pitched")} style={sBtn(settings.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}
         </SRow>
         <SRow label="Visual">
-          {[["dots","●"],["dots+flash","● ◻"],["flash","◻"]].map(([v,l]) => <button key={v} onClick={() => upd("visualMode", v)} style={{...sBtn(settings.visualMode===v),fontSize:11}}>{l}</button>)}
+          {[["dots", "●"], ["dots+flash", "● ◻"], ["flash", "◻"]].map(([v, l]) => <button key={v} onClick={() => upd("visualMode", v)} style={{ ...sBtn(settings.visualMode === v), fontSize: 11 }}>{l}</button>)}
         </SRow>
         <SRow label="Count-in">
-          {[0,1,2].map(v => <button key={v} onClick={() => upd("countIn", v)} style={sBtn(settings.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v>1?"s":""}`}</button>)}
+          {[0, 1, 2].map(v => <button key={v} onClick={() => upd("countIn", v)} style={sBtn(settings.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}
         </SRow>
       </div>
     </div>
@@ -677,22 +751,28 @@ export default function Tempus() {
     met.setCb(evt => {
       if (evt.type === "beat") {
         const bar = tl[evt.barIndex];
-        setPs({ absoluteBar: evt.absoluteBar, beatIndex: evt.beatIndex, beatType: evt.beatType,
+        setPs({
+          absoluteBar: evt.absoluteBar, beatIndex: evt.beatIndex, beatType: evt.beatType,
           tsNum: evt.tsNum, tsDen: evt.tsDen, tempo: evt.tempo, sectionIndex: evt.sectionIndex,
-          allBeatTypes: bar?.beatTypes || [], flash: true, countIn: false, isTimed: false });
+          allBeatTypes: bar?.beatTypes || [], flash: true, countIn: false, isTimed: false
+        });
         if (fto.current) clearTimeout(fto.current);
         fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80);
       } else if (evt.type === "countIn") {
-        setPs(p => ({ ...p || {}, countIn: true, flash: true, isTimed: false,
+        setPs(p => ({
+          ...p || {}, countIn: true, flash: true, isTimed: false,
           beatIndex: evt.beatInBar - 1, beatType: evt.beatInBar === 1 ? 0 : 2,
           tsNum: evt.totalBeats, tsDen: 0,
-          allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2) }));
+          allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2)
+        }));
         if (fto.current) clearTimeout(fto.current);
         fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80);
       } else if (evt.type === "timedTick") {
-        setPs(p => ({ ...p || {}, isTimed: true, countIn: false, absoluteBar: evt.absoluteBar,
+        setPs(p => ({
+          ...p || {}, isTimed: true, countIn: false, absoluteBar: evt.absoluteBar,
           sectionIndex: evt.sectionIndex, remaining: evt.remaining, flash: p?.flash || false,
-          tsNum: 0, tsDen: 0, beatType: 0, totalMarkers: p?.totalMarkers || 0, markerIdx: p?.markerIdx || 0 }));
+          tsNum: 0, tsDen: 0, beatType: 0, totalMarkers: p?.totalMarkers || 0, markerIdx: p?.markerIdx || 0
+        }));
       } else if (evt.type === "timedMarker") {
         setPs(p => ({ ...p || {}, flash: true, beatType: 0, totalMarkers: evt.totalMarkers, markerIdx: evt.markerIdx }));
         if (fto.current) clearTimeout(fto.current);
@@ -705,9 +785,11 @@ export default function Tempus() {
     if (!tl.length) return;
     const i = Math.max(0, Math.min(fi, tl.length - 1));
     const b = tl[i];
-    setPs({ absoluteBar: b.absoluteBar, beatIndex: 0, beatType: 0, tsNum: b.tsNum, tsDen: b.tsDen,
+    setPs({
+      absoluteBar: b.absoluteBar, beatIndex: 0, beatType: 0, tsNum: b.tsNum, tsDen: b.tsDen,
       tempo: b.tempo, sectionIndex: b.sectionIndex, allBeatTypes: b.beatTypes,
-      flash: false, countIn: false, isTimed: b.isTimed, remaining: b.isTimed ? b.timedDuration : undefined });
+      flash: false, countIn: false, isTimed: b.isTimed, remaining: b.isTimed ? b.timedDuration : undefined
+    });
     setIsP(true);
     met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted });
   }, [tl, settings, met, muted]);
@@ -735,6 +817,16 @@ export default function Tempus() {
     setSections(p => [...p, ns]); setEditId(ns.id);
   };
 
+  const moveSec = (index, dir) => {
+    setSections(p => {
+      const arr = [...p];
+      if (index + dir >= 0 && index + dir < arr.length) {
+        [arr[index], arr[index + dir]] = [arr[index + dir], arr[index]];
+      }
+      return arr;
+    });
+  };
+
   const editSec = sections.find(s => s.id === editId);
 
   return (
@@ -745,6 +837,7 @@ export default function Tempus() {
         input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
         input[type=number]{-moz-appearance:textfield}
         ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:${C.border};border-radius:2px}
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
@@ -763,8 +856,9 @@ export default function Tempus() {
 
       <div style={{ padding: "8px 16px 100px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
         {sections.map((sec, i) => (
-          <SectionCard key={sec.id} section={sec} index={i} onClick={() => setEditId(sec.id)}
-            onStartHere={() => { const idx = tl.findIndex(b => b.sectionIndex === i); if (idx >= 0) go(idx); }} />
+          <SectionCard key={sec.id} section={sec} index={i} total={sections.length} onClick={() => setEditId(sec.id)}
+            onStartHere={() => { const idx = tl.findIndex(b => b.sectionIndex === i); if (idx >= 0) go(idx); }}
+            onMove={(dir) => moveSec(i, dir)} />
         ))}
         <button onClick={addSec} style={{
           width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`,
@@ -773,8 +867,10 @@ export default function Tempus() {
         }}>{Icons.plus(20)}</button>
       </div>
 
-      <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 16px 20px",
-        background: `linear-gradient(transparent, ${C.bg} 20%)`, display: "flex", justifyContent: "center" }}>
+      <div style={{
+        position: "fixed", bottom: 0, left: 0, right: 0, padding: "12px 16px 20px",
+        background: `linear-gradient(transparent, ${C.bg} 20%)`, display: "flex", justifyContent: "center"
+      }}>
         <button onClick={() => go(0)} disabled={!sections.length} style={{
           width: 64, height: 64, borderRadius: "50%", background: C.downbeat, border: "none",
           color: "#000", cursor: "pointer", boxShadow: `0 0 30px ${C.downbeat}44`,
@@ -782,13 +878,20 @@ export default function Tempus() {
         }}>{Icons.play(24)}</button>
       </div>
 
-      {ps && <PlayView playState={ps} sections={sections} onStop={stopP}
+      {ps && <PlayView playState={ps} sections={sections} tl={tl} onStop={stopP}
         onPause={() => { met.stop(); setIsP(false); }}
         onResume={() => { if (ps && !ps.countIn) { const i = tl.findIndex(b => b.absoluteBar === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } } }}
         onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)}
         vis={settings.visualMode} isPlaying={isP} muted={muted} onMute={() => setMuted(m => !m)} />}
 
-      {editSec && <SectionEditor section={editSec} onSave={u => setSections(p => p.map(s => s.id === u.id ? u : s))}
+      {editSec && <SectionEditor section={editSec}
+        onSave={(u, isDup = false) => {
+          if (isDup) {
+            setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; });
+          } else {
+            setSections(p => p.map(s => s.id === u.id ? u : s));
+          }
+        }}
         onClose={() => setEditId(null)} onDelete={sections.length > 1 ? id => setSections(p => p.filter(s => s.id !== id)) : null} />}
 
       {showSet && <SettingsPanel settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
