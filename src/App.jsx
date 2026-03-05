@@ -39,8 +39,11 @@ const C = { bg: "#07070a", surface: "#111116", surfaceHover: "#1a1a22", border: 
 const mkM = () => ({ id: Date.now() + Math.random(), type: "metered", tsNum: 4, tsDen: 4, beatUnit: "q", dotted: false, tempo: 120, bars: 4, grouping: "1+1+1+1", curve: "constant", endTempo: 120 });
 const mkT = () => ({ id: Date.now() + Math.random(), type: "timed", duration: 10, markers: "" });
 const SK = "tempus_profiles";
-function ldP() { try { return JSON.parse(localStorage.getItem(SK)) || []; } catch { return []; } }
-function svP(p) { localStorage.setItem(SK, JSON.stringify(p)); }
+const _memStore = {};
+function _getLS(k) { try { return localStorage.getItem(k); } catch { return _memStore[k] || null; } }
+function _setLS(k, v) { try { localStorage.setItem(k, v); } catch { _memStore[k] = v; } }
+function ldP() { try { return JSON.parse(_getLS(SK)) || []; } catch { return []; } }
+function svP(p) { _setLS(SK, JSON.stringify(p)); }
 
 // ============ SVG NOTE ============
 function NoteSVG({ type, dotted, size = 24 }) {
@@ -90,7 +93,7 @@ function useMetronome() {
   const prime = useCallback(async () => { const ctx = init(); if (ctx.state === "suspended") await ctx.resume(); const buf = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate), src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start(); await new Promise(r => setTimeout(r, 200)); return ctx; }, [init]);
   const clk = useCallback((ctx, time, bt) => {
     const { accented, pitched, muted } = sR.current; if (muted) return; const e = accented ? bt : 2;
-    if ("vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
     if (pitched) { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.08); }
     else { const l = Math.floor(ctx.sampleRate * 0.015), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++)d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.04); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 4000 : e === 1 ? 3000 : 2000; fl.Q.value = 1.5; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(time); src.stop(time + 0.05); }
   }, []);
