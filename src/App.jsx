@@ -397,7 +397,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const showNav = !isP || isEnded;
 
   return (
-    <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 4px ${borderColor}, inset 0 0 30px ${borderColor}44` : undefined }}>
+    <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 3px ${borderColor}` : undefined }}>
       {showF && flash && <div style={{ position: "absolute", inset: 0, background: fc, opacity: fo, transition: "opacity 0.05s", pointerEvents: "none" }} />}
       {splitMsg && <div style={{ position: "absolute", inset: 0, background: C.record, opacity: 0.15, pointerEvents: "none", transition: "opacity 0.3s" }} />}
 
@@ -479,7 +479,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
     </div>);
 }
 const nv = { padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", justifyContent: "center" };
-const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", background: C.downbeat, color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.downbeat}33` };
+const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", background: C.downbeat, color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" };
 
@@ -753,28 +753,26 @@ export default function Tempus() {
         @keyframes ripple { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.6); opacity: 0; } }
         .sec-card { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.15s; }
         .sec-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); border-color: ${C.textMuted}44; background: ${C.surfaceHover} !important; }
-        .glass-pill { background: rgba(17, 17, 22, 0.65); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-radius: 40px; border: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-        .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; animation: breathe 8s ease-in-out infinite; }
-        .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
+        .glass-pill { background: rgba(17, 17, 22, 0.92); border-radius: 40px; border: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
+        .hdr-text { text-shadow: 0 0 16px currentColor; transition: transform 0.05s ease; }
         .pump { transform: scale(1.05); }
         .btn-ripple { position: relative; }
-        .btn-ripple::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; z-index: -1; animation: ripple 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         [data-tip], [data-tip-b] { position: relative; }
         [data-tip]::after, [data-tip-b]::after { position: absolute; left: 50%; transform: translateX(-50%); background: ${C.surface}; color: ${C.text}; font-size: 11px; font-family: 'Outfit',sans-serif; padding: 4px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.1s; border: 1px solid ${C.border}; z-index: 999; }
         [data-tip]::after { content: attr(data-tip); bottom: calc(100% + 6px); }
         [data-tip-b]::after { content: attr(data-tip-b); top: calc(100% + 8px); }
         [data-tip]:hover::after, [data-tip-b]:hover::after { opacity: 1; }
         @media (pointer: coarse) { [data-tip]::after, [data-tip-b]::after { display: none; } }
-        button { cursor: pointer; transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease; }
-        button:hover:not(:disabled) { filter: brightness(1.15); }
-        button:active:not(:disabled) { filter: brightness(0.85); transform: scale(0.98); }
+        button { cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease; }
+        button:hover:not(:disabled) { opacity: 0.85; }
+        button:active:not(:disabled) { opacity: 0.7; transform: scale(0.98); }
 
-        @keyframes modalFadeIn { from { opacity: 0; backdrop-filter: blur(0px); } to { opacity: 1; backdrop-filter: blur(8px); } }
+        @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.4) !important; }
-        .modal-content { animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(17, 17, 22, 0.75) !important; backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.06) !important; border-top: 1px solid rgba(255,255,255,0.12) !important; box-shadow: 0 -20px 60px rgba(0,0,0,0.6); }
-        .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
-        @keyframes breathe { 0%, 100%{ opacity: 0.6; transform: scale(1); } 50%{ opacity: 1; transform: scale(1.06); } }
+        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.7) !important; }
+        .modal-content { animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(17, 17, 22, 0.97) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-top: 1px solid rgba(255,255,255,0.12) !important; box-shadow: 0 -8px 30px rgba(0,0,0,0.5); }
+        .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
@@ -802,9 +800,9 @@ export default function Tempus() {
       {/* Bottom buttons: Play / Record / Practice */}
       <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
         <div className="glass-pill" style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
-          {settings.appMode !== "basic" && <button onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>}
-          <button className="btn-ripple" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}` }}>{I.play(24)}</button>
-          {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} data-tip="Practice" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}` }}>{I.target(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.rec(18)}</button>}
+          <button className="btn-ripple" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.play(24)}</button>
+          {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} data-tip="Practice" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.target(18)}</button>}
         </div>
       </div>
 
