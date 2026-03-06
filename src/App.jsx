@@ -181,7 +181,8 @@ function useMetronome() {
   const updS = useCallback(s => { sR.current = { ...sR.current, ...s }; }, []);
   const setCb = useCallback(cb => { cbR.current = cb; }, []);
   useEffect(() => () => { stop(); if (actx.current) actx.current.close().catch(() => { }); }, [stop]);
-  return { start, stop, setCb, pl, updS };
+  const tap = useCallback(() => { const ctx = init(); if (ctx.state === "suspended") ctx.resume(); return ctx; }, [init]);
+  return { start, stop, setCb, pl, updS, tap };
 }
 
 // ============ STYLES ============
@@ -370,8 +371,9 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const [goBar, setGoBar] = useState("");
   const [splitMsg, setSplitMsg] = useState(null);
   const splitMsgTimer = useRef(null);
-  const mountTime = useRef(Date.now());
-  const guardedAction = fn => () => { if (Date.now() - mountTime.current < 400) return; fn(); };
+  const mountReady = useRef(false);
+  useEffect(() => { const t = setTimeout(() => { mountReady.current = true; }, 600); return () => clearTimeout(t); }, []);
+  const guardedAction = fn => () => { if (!mountReady.current) return; fn(); };
   useEffect(() => () => { if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); }, []);
   const showF = vis === "flash" || vis === "dots+flash", showD = vis === "dots" || vis === "dots+flash";
   const borderColor = mode === "record" ? C.record : mode === "practice" ? C.practice : null;
@@ -632,7 +634,7 @@ export default function Tempus() {
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if (e.code === "Space") { e.preventDefault(); if (isP) { met.stop(); setIsP(false); } else if (ps && (ps.ended || ps.countIn)) { go(0); } else if (ps) { const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } } else { go(0); } }
+      if (e.code === "Space") { e.preventDefault(); if (isP) { met.stop(); setIsP(false); } else if (ps && (ps.ended || ps.countIn)) { met.tap(); go(0); } else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } } else { met.tap(); go(0); } }
       else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); }
       else if (isP && e.code === "ArrowLeft") jumpSec(-1);
       else if (isP && e.code === "ArrowRight") jumpSec(1);
@@ -788,20 +790,20 @@ export default function Tempus() {
       </div>
 
       <div style={{ padding: "8px 16px 120px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
-        {sections.map((sec, i) => <SecCard key={sec.id} section={sec} index={i} total={sections.length} onClick={() => setEditId(sec.id)} onStartHere={() => { const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={d => moveSec(i, d)} onDelete={sections.length > 1 ? handleDelete : null} onDragStart={handleDragStart} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} />)}
+        {sections.map((sec, i) => <SecCard key={sec.id} section={sec} index={i} total={sections.length} onClick={() => setEditId(sec.id)} onStartHere={() => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={d => moveSec(i, d)} onDelete={sections.length > 1 ? handleDelete : null} onDragStart={handleDragStart} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} />)}
         <button onClick={addSec} style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(20)}</button>
       </div>
 
       {/* Bottom buttons: Play / Record / Practice */}
       <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
         <div className="glass-pill" style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
-          {settings.appMode !== "basic" && <button onClick={() => { setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>}
-          <button className="btn-ripple" onClick={() => { setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}` }}>{I.play(24)}</button>
+          {settings.appMode !== "basic" && <button onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>}
+          <button className="btn-ripple" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}` }}>{I.play(24)}</button>
           {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} data-tip="Practice" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}` }}>{I.target(18)}</button>}
         </div>
       </div>
 
-      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={() => { if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => go(0)} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} settings={settings} onSettings={setSettings} />}
+      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={() => { met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} settings={settings} onSettings={setSettings} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} />}
