@@ -370,6 +370,8 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const [goBar, setGoBar] = useState("");
   const [splitMsg, setSplitMsg] = useState(null);
   const splitMsgTimer = useRef(null);
+  const mountTime = useRef(Date.now());
+  const guardedAction = fn => () => { if (Date.now() - mountTime.current < 400) return; fn(); };
   useEffect(() => () => { if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); }, []);
   const showF = vis === "flash" || vis === "dots+flash", showD = vis === "dots" || vis === "dots+flash";
   const borderColor = mode === "record" ? C.record : mode === "practice" ? C.practice : null;
@@ -461,7 +463,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
           <div style={{ width: 44, display: "flex", justifyContent: "center" }}>
             {showNav && <button onClick={onRestart} data-tip="Restart" style={tS}>{I.restart(18)}</button>}
           </div>
-          <button onClick={isP ? onPause : onResume} data-tip={isP ? "Pause" : "Play"} style={tB}>{isP ? I.pause(22) : I.play(22)}</button>
+          <button onClick={guardedAction(isP ? onPause : onResume)} data-tip={isP ? "Pause" : "Play"} style={tB}>{isP ? I.pause(22) : I.play(22)}</button>
           <div style={{ width: 44, display: "flex", justifyContent: "center" }}>
             {mode === "normal" && onTapTempo ? <button onClick={onTapTempo} style={tS}><span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace" }}>TAP</span></button> : null}
           </div>
