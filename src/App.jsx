@@ -177,7 +177,12 @@ function useMetronome() {
     }
   }, [clk]);
   const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; rlwl(); }, [rlwl]);
-  const start = useCallback(async (tl, from = 0, ci = 0, s = {}) => { stop(); sR.current = { accented: true, pitched: true, muted: false, ...s }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false; const ctx = await prime(); await rwl(); const bar = tl[from]; if (!bar) return; ciL.current = bar.isT ? 0 : ci * bar.cpb; pl.current = true; nb.current = ctx.currentTime + 0.05; tmr.current = setInterval(sched, 20); }, [stop, prime, rwl, sched]);
+  const start = useCallback((tl, from = 0, ci = 0, s = {}) => { stop(); sR.current = { accented: true, pitched: true, muted: false, ...s }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false;
+    const doStart = ctx => { const bar = tl[from]; if (!bar) return; ciL.current = bar.isT ? 0 : ci * bar.cpb; pl.current = true; nb.current = ctx.currentTime + 0.05; tmr.current = setInterval(sched, 20); };
+    const ctx = actx.current;
+    if (ctx && ctx.state === "running") { rwl(); doStart(ctx); }
+    else { (async () => { const c = await prime(); await rwl(); doStart(c); })(); }
+  }, [stop, prime, rwl, sched]);
   const updS = useCallback(s => { sR.current = { ...sR.current, ...s }; }, []);
   const setCb = useCallback(cb => { cbR.current = cb; }, []);
   useEffect(() => () => { stop(); if (actx.current) actx.current.close().catch(() => { }); }, [stop]);
