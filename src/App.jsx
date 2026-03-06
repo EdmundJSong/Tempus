@@ -160,7 +160,7 @@ function useMetronome() {
       }
       const pbc = bar.perBeatCd;
       const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
-      const beatCd = pbc ? pbc[bei.current]?.cd ?? bar.cd : bar.cd;
+      const beatCd = pbc ? (pbc[bei.current]?.cd ?? pbc[0]?.cd ?? 0.5) : (bar.cd ?? 0.5);
       const beatTempo = pbc ? pbc[bei.current]?.cd ? Math.round(60 / (pbc[bei.current].cd / ((D2Q[bar.tsD] || 1) / (BU.find(x => x.id === "q")?.q || 1)))) : bar.tempo : bar.tempo;
       if (cbR.current) cbR.current({ type: "beat", barIdx: bi.current, beatIdx: bei.current, bt, ab: bar.ab, tsN: bar.tsN, tsD: bar.tsD, tempo: beatTempo, si: bar.si });
       nb.current += beatCd;
@@ -370,6 +370,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const [goBar, setGoBar] = useState("");
   const [splitMsg, setSplitMsg] = useState(null);
   const splitMsgTimer = useRef(null);
+  useEffect(() => () => { if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); }, []);
   const showF = vis === "flash" || vis === "dots+flash", showD = vis === "dots" || vis === "dots+flash";
   const borderColor = mode === "record" ? C.record : mode === "practice" ? C.practice : null;
   const nxt = sections[si + 1]; let upN = null;
@@ -396,7 +397,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
         <button onClick={onMute} data-tip-b={muted ? "Unmute" : "Mute"} style={tS}>{muted ? I.volOff(18) : I.volOn(18)}</button>
         <div style={{ display: "flex", gap: 8 }}>
           {isRec && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.record, display: "flex", alignItems: "center", gap: 4, animation: "pulse 2s infinite" }}>{I.rec(12)} REC</div>}
-          {mode === "practice" && ps.pctLabel && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.practice, fontWeight: 600 }}>{ps.pctLabel}</div>}
+          {mode === "practice" && ps.pctLabel && !isEnded && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.practice, fontWeight: 600 }}>{ps.pctLabel}</div>}
           <button onClick={onExit} data-tip-b="Exit" style={tS}>{I.x(18)}</button>
         </div>
       </div>
@@ -629,7 +630,7 @@ export default function Tempus() {
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if (e.code === "Space") { e.preventDefault(); if (isP) { met.stop(); setIsP(false); } else if (ps) { const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } } else { go(0); } }
+      if (e.code === "Space") { e.preventDefault(); if (isP) { met.stop(); setIsP(false); } else if (ps && (ps.ended || ps.countIn)) { go(0); } else if (ps) { const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } } else { go(0); } }
       else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); }
       else if (isP && e.code === "ArrowLeft") jumpSec(-1);
       else if (isP && e.code === "ArrowRight") jumpSec(1);
