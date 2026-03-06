@@ -37,7 +37,7 @@ const I = {
 const BU = [{ id: "w", q: 4 }, { id: "h", q: 2 }, { id: "q", q: 1 }, { id: "e", q: 0.5 }, { id: "16", q: 0.25 }, { id: "32", q: 0.125 }];
 const D2Q = { 1: 4, 2: 2, 4: 1, 8: 0.5, 16: 0.25, 32: 0.125 };
 const C = { bg: "#07070a", surface: "#111116", surfaceHover: "#1a1a22", border: "#25252e", text: "#eeeef0", textMuted: "#6e6e7a", downbeat: "#f0a030", accent: "#8b7cf6", sub: "#3a3a45", danger: "#ef4444", record: "#ef4444", practice: "#22c55e", glowDownbeat: "rgba(240, 160, 48, 0.4)", glowPractice: "rgba(34, 197, 94, 0.4)", glowRecord: "rgba(239, 68, 68, 0.4)" };
-const mkM = () => ({ id: Date.now() + Math.random(), type: "metered", tsNum: 4, tsDen: 4, beatUnit: "q", dotted: false, tempo: 120, bars: 4, grouping: "1+1+1+1", curve: "constant", endTempo: 120, loop: false });
+const mkM = () => ({ id: Date.now() + Math.random(), type: "metered", tsNum: 4, tsDen: 4, beatUnit: "q", dotted: false, tempo: 120, bars: 4, grouping: "1+1+1+1", curve: "constant", endTempo: 120, loop: false, expressive: false, beatMap: null });
 const mkT = () => ({ id: Date.now() + Math.random(), type: "timed", duration: 10, markers: "" });
 const SK = "tempus_profiles";
 const _memStore = {};
@@ -66,6 +66,7 @@ function pG(s) { if (!s || !s.trim()) return [1]; return s.split("+").map(x => p
 function sG(n, d) { if (d >= 8 && n % 3 === 0 && n > 3) return Array(n / 3).fill(3).join("+"); return Array(n).fill(1).join("+"); }
 function gBT(g) { const t = []; g.forEach((v, gi) => { for (let i = 0; i < v; i++)t.push(gi === 0 && i === 0 ? 0 : i === 0 ? 1 : 2); }); return t; }
 function pM(s) { if (!s || !s.trim()) return []; return s.split(",").map(x => parseFloat(x.trim())).filter(n => !isNaN(n) && n >= 0).sort((a, b) => a - b); }
+function mkBeatMap(n, tempo) { return Array.from({ length: n }, () => ({ tempo, fermata: false, fermataHold: 0 })); }
 
 function buildTL(sections) {
   const bars = []; let at = 0, ab = 1;
@@ -73,7 +74,25 @@ function buildTL(sections) {
     if (s.type === "timed") { bars.push({ si, bin: 1, ab: ab, st: at, dur: s.duration, cd: s.duration, tempo: 0, tsN: 0, tsD: 0, bts: [0], cpb: 1, isT: true, tDur: s.duration, mk: pM(s.markers) }); at += s.duration; ab++; return; }
     const grp = pG(s.grouping), cpb = s.tsNum;
     const loopFirstIdx = bars.length;
-    for (let b = 0; b < s.bars; b++) { let t = s.tempo; if (s.curve !== "constant") { const r = s.bars > 1 ? b / (s.bars - 1) : 0; t = s.tempo + (s.endTempo - s.tempo) * r; } const cd = gCD(t, s.beatUnit, s.dotted, s.tsDen); bars.push({ si, bin: b + 1, ab, st: at, dur: cpb * cd, cd, tempo: t, tsN: s.tsNum, tsD: s.tsDen, bts: gBT(grp), cpb, isT: false, loop: !!s.loop, loopTo: loopFirstIdx }); at += cpb * cd; ab++; }
+    for (let b = 0; b < s.bars; b++) {
+      let t = s.tempo; if (s.curve !== "constant") { const r = s.bars > 1 ? b / (s.bars - 1) : 0; t = s.tempo + (s.endTempo - s.tempo) * r; }
+      const bm = s.expressive && s.beatMap && s.beatMap.length === cpb ? s.beatMap : null;
+      // Calculate per-beat durations if expressive
+      let perBeatCd = null, totalDur = 0;
+      if (bm) {
+        perBeatCd = bm.map(beat => {
+          const cd = gCD(beat.tempo, s.beatUnit, s.dotted, s.tsDen);
+          const hold = beat.fermata ? beat.fermataHold * cd : 0;
+          return { cd, hold, fermata: beat.fermata };
+        });
+        totalDur = perBeatCd.reduce((sum, b) => sum + b.cd + b.hold, 0);
+      } else {
+        const cd = gCD(t, s.beatUnit, s.dotted, s.tsDen);
+        totalDur = cpb * cd;
+      }
+      bars.push({ si, bin: b + 1, ab, st: at, dur: totalDur, cd: bm ? null : gCD(t, s.beatUnit, s.dotted, s.tsDen), tempo: t, tsN: s.tsNum, tsD: s.tsDen, bts: gBT(grp), cpb, isT: false, loop: !!s.loop, loopTo: loopFirstIdx, perBeatCd });
+      at += totalDur; ab++;
+    }
   }); return bars;
 }
 
@@ -82,13 +101,16 @@ function scaleSections(sections, pct) {
   return sections.map(s => {
     if (s.type === "timed") return { ...s, id: Date.now() + Math.random() };
     const ratio = pct / 100;
-    return { ...s, id: Date.now() + Math.random(), tempo: Math.round(s.tempo * ratio), endTempo: Math.round(s.endTempo * ratio) };
+    const scaled = { ...s, id: Date.now() + Math.random(), tempo: Math.round(s.tempo * ratio), endTempo: Math.round(s.endTempo * ratio) };
+    if (s.beatMap) scaled.beatMap = s.beatMap.map(b => ({ ...b, tempo: Math.round(b.tempo * ratio) }));
+    return scaled;
   });
 }
 
 // ============ AUDIO ENGINE ============
 function useMetronome() {
   const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, pitched: true, muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false);
+  const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false);
   const init = useCallback(() => { if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, []);
   const rwl = useCallback(async () => { try { if ("wakeLock" in navigator) wl.current = await navigator.wakeLock.request("screen"); } catch { } if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { await sa.current.play(); } catch { } }, []);
   const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) sa.current.pause(); }, []);
@@ -111,16 +133,33 @@ function useMetronome() {
         if (cbR.current) cbR.current({ type: "timedTick", ab: bar.ab, si: bar.si, el, rem: Math.max(0, bar.tDur - el), dur: bar.tDur });
         if (el >= bar.tDur) { tsS.current = 0; tsM.current = 0; tsF.current = false; bi.current++; continue; } nb.current += 0.05; return;
       }
+      // Fermata hold in progress
+      if (inFerm.current) {
+        const el = nb.current - fermS.current;
+        if (cbR.current) cbR.current({ type: "fermataHold", ab: bar.ab, si: bar.si, rem: Math.max(0, fermD.current - el), dur: fermD.current, beatIdx: bei.current });
+        if (el >= fermD.current) { inFerm.current = false; bei.current++; if (bei.current >= bar.cpb) { bei.current = 0; bi.current++;
+          const nextBar = tl[bi.current]; if (!nextBar || (nextBar.si !== bar.si)) { if (bar.loop && bar.loopTo != null) { bi.current = bar.loopTo; } } }
+          continue; }
+        nb.current += 0.05; return;
+      }
+      const pbc = bar.perBeatCd;
       const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
-      if (cbR.current) cbR.current({ type: "beat", barIdx: bi.current, beatIdx: bei.current, bt, ab: bar.ab, tsN: bar.tsN, tsD: bar.tsD, tempo: bar.tempo, si: bar.si });
-      nb.current += bar.cd; bei.current++; if (bei.current >= bar.cpb) { bei.current = 0; bi.current++;
-        // Loop: if we just left the last bar of a looped section, jump back
+      const beatCd = pbc ? pbc[bei.current]?.cd ?? bar.cd : bar.cd;
+      const beatTempo = pbc ? pbc[bei.current]?.cd ? Math.round(60 / (pbc[bei.current].cd / ((D2Q[bar.tsD] || 1) / (BU.find(x => x.id === "q")?.q || 1)))) : bar.tempo : bar.tempo;
+      if (cbR.current) cbR.current({ type: "beat", barIdx: bi.current, beatIdx: bei.current, bt, ab: bar.ab, tsN: bar.tsN, tsD: bar.tsD, tempo: beatTempo, si: bar.si });
+      nb.current += beatCd;
+      // Check for fermata on this beat
+      if (pbc && pbc[bei.current]?.fermata && pbc[bei.current]?.hold > 0) {
+        inFerm.current = true; fermS.current = nb.current; fermD.current = pbc[bei.current].hold;
+        continue;
+      }
+      bei.current++; if (bei.current >= bar.cpb) { bei.current = 0; bi.current++;
         const nextBar = tl[bi.current];
         if (!nextBar || (nextBar.si !== bar.si)) { if (bar.loop && bar.loopTo != null) { bi.current = bar.loopTo; } }
       }
     }
   }, [clk]);
-  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; rlwl(); }, [rlwl]);
+  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; rlwl(); }, [rlwl]);
   const start = useCallback(async (tl, from = 0, ci = 0, s = {}) => { stop(); sR.current = { accented: true, pitched: true, muted: false, ...s }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false; const ctx = await prime(); await rwl(); const bar = tl[from]; if (!bar) return; ciL.current = bar.isT ? 0 : ci * bar.cpb; pl.current = true; nb.current = ctx.currentTime + 0.05; tmr.current = setInterval(sched, 20); }, [stop, prime, rwl, sched]);
   const updS = useCallback(s => { sR.current = { ...sR.current, ...s }; }, []);
   const setCb = useCallback(cb => { cbR.current = cb; }, []);
@@ -171,21 +210,32 @@ function TapBtn({ onTap, size = "sm" }) {
 function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
 
 // ============ SECTION EDITOR ============
-function SecEd({ section, onSave, onClose, onDelete }) {
+function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
   const [s, setS] = useState({ ...section }); const upd = (k, v) => setS(p => ({ ...p, [k]: v })); const isMet = s.type === "metered";
   const tapTempo = useTapTempo(bpm => upd("tempo", bpm));
+  const isAdv = appMode === "advanced", isBas = appMode === "basic";
+  // Auto-enable expressive in advanced mode
+  useEffect(() => { if (isAdv && isMet && !s.expressive) upd("expressive", true); }, [isAdv]);
   useEffect(() => { if (!isMet) return; const sum = pG(s.grouping).reduce((a, b) => a + b, 0); if (sum !== s.tsNum) upd("grouping", sG(s.tsNum, s.tsDen)); }, [s.tsNum, s.tsDen]);
   const gV = useMemo(() => { if (!isMet) return true; return pG(s.grouping).reduce((a, b) => a + b, 0) === s.tsNum; }, [s.grouping, s.tsNum, isMet]);
   useEffect(() => { if (s.curve === "accel" && s.endTempo <= s.tempo) upd("endTempo", s.tempo + 1); if (s.curve === "rit" && s.endTempo >= s.tempo) upd("endTempo", Math.max(10, s.tempo - 1)); }, [s.curve, s.tempo]);
   const sET = v => { if (s.curve === "accel") upd("endTempo", Math.max(s.tempo + 1, v)); else if (s.curve === "rit") upd("endTempo", Math.min(s.tempo - 1, Math.max(10, v))); else upd("endTempo", v); };
   const swT = t => { if (t === s.type) return; setS(p => (t === "timed" ? { ...mkT(), id: p.id } : { ...mkM(), id: p.id })); };
+  // Expressive: init/update beatMap when toggled or tsNum changes
+  useEffect(() => { if (s.expressive && (!s.beatMap || s.beatMap.length !== s.tsNum)) upd("beatMap", mkBeatMap(s.tsNum, s.tempo)); }, [s.expressive, s.tsNum]);
+  const updBeat = (idx, k, v) => { if (!s.beatMap) return; const bm = [...s.beatMap]; bm[idx] = { ...bm[idx], [k]: v }; upd("beatMap", bm); };
+
+  // Grouping presets
+  const gPresets = useMemo(() => { const n = s.tsNum, d = s.tsDen, p = []; if (n <= 6) p.push(Array(n).fill(1).join("+")); if (n > 1 && n % 2 === 0) p.push(Array(n / 2).fill(2).join("+")); if (n >= 6 && n % 3 === 0) p.push(Array(n / 3).fill(3).join("+")); if (n === 5) { p.push("2+3", "3+2"); } if (n === 7) { p.push("2+2+3", "3+2+2", "2+3+2"); } if (n === 8 && d >= 8) { p.push("3+3+2", "3+2+3"); } return [...new Set(p)]; }, [s.tsNum, s.tsDen]);
+
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+        {/* Type toggle - hidden in basic */}
+        {!isBas && <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
           <button onClick={() => swT("metered")} style={{ ...oB(isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.music(14)} Metered</button>
           <button onClick={() => swT("timed")} style={{ ...oB(!isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.clock(14)} Timed</button>
-        </div>
+        </div>}
         {isMet ? (<>
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
@@ -200,29 +250,52 @@ function SecEd({ section, onSave, onClose, onDelete }) {
               <TapBtn onTap={tapTempo} />
             </div>
           </div>
-          <Row label="Bars">
+          {/* Bars + Loop */}
+          {!isBas && <Row label="Bars">
             <button onClick={() => upd("loop", !s.loop)} style={{ background: s.loop ? C.downbeat + "22" : "transparent", border: `1px solid ${s.loop ? C.downbeat : C.border}`, borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: s.loop ? C.downbeat : C.textMuted, display: "flex", alignItems: "center" }}>{I.loop(16)}</button>
             {!s.loop && <Stp value={s.bars} onChange={v => upd("bars", v)} min={1} max={999} />}
             {s.loop && <span style={{ color: C.downbeat, fontSize: 13, fontFamily: "'DM Mono',monospace" }}>∞</span>}
-          </Row>
-          <Row label="Grouping">
+          </Row>}
+          {isBas && <Row label="Bars"><Stp value={s.bars} onChange={v => upd("bars", v)} min={1} max={999} /></Row>}
+
+          {/* Grouping - pills always, number builder in advanced */}
+          {!isBas && <Row label="Grouping">
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
-                {(() => { const n = s.tsNum, d = s.tsDen, presets = []; if (n <= 4) presets.push(Array(n).fill(1).join("+")); if (n > 1 && n % 2 === 0) presets.push(Array(n / 2).fill(2).join("+")); if (n >= 6 && n % 3 === 0) presets.push(Array(n / 3).fill(3).join("+")); if (n === 5) { presets.push("2+3", "3+2"); } if (n === 7) { presets.push("2+2+3", "3+2+2", "2+3+2"); } if (n === 8 && d >= 8) { presets.push("3+3+2", "3+2+3"); } const unique = [...new Set(presets)]; return unique.map(p => <button key={p} onClick={() => upd("grouping", p)} style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${s.grouping === p ? C.downbeat : C.border}`, background: s.grouping === p ? C.downbeat + "22" : "transparent", color: s.grouping === p ? C.downbeat : C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace", cursor: "pointer" }}>{p}</button>); })()}
+                {gPresets.map(p => <button key={p} onClick={() => upd("grouping", p)} style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${s.grouping === p ? C.downbeat : C.border}`, background: s.grouping === p ? C.downbeat + "22" : "transparent", color: s.grouping === p ? C.downbeat : C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace", cursor: "pointer" }}>{p}</button>)}
               </div>
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              {isAdv && <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
                 {[1, 2, 3, 4, 5].map(n => { const cur = pG(s.grouping); const sum = cur.reduce((a, b) => a + b, 0); const canAdd = sum + n <= s.tsNum; return <button key={n} disabled={!canAdd} onClick={() => { if (!s.grouping || s.grouping.trim() === "" || sum === 0) upd("grouping", String(n)); else upd("grouping", s.grouping + "+" + n); }} style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: canAdd ? C.surface : "transparent", color: canAdd ? C.text : C.border, fontSize: 15, fontFamily: "'DM Mono',monospace", cursor: canAdd ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center" }}>{n}</button>; })}
                 <button onClick={() => { const cur = pG(s.grouping); if (cur.length > 1) { cur.pop(); upd("grouping", cur.join("+")); } else { upd("grouping", ""); } }} style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.textMuted, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>⌫</button>
-              </div>
+              </div>}
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: gV ? C.text : C.danger }}>{s.grouping || "—"}</span>
                 {!gV && <span style={{ color: C.danger, fontSize: 12 }}>({pG(s.grouping).reduce((a, b) => a + b, 0)}/{s.tsNum})</span>}
                 {gV && <span style={{ color: C.practice, fontSize: 11 }}>✓</span>}
               </div>
             </div>
-          </Row>
-          <Row label="Curve">{["constant", "accel", "rit"].map(c => <button key={c} onClick={() => upd("curve", c)} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`, background: s.curve === c ? C.downbeat + "22" : "transparent", color: s.curve === c ? C.downbeat : C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", cursor: "pointer" }}>{c === "constant" ? "—" : c === "accel" ? "accel." : "rit."}</button>)}</Row>
-          {s.curve !== "constant" && <Row label={I.arrow(14)}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ color: C.text, display: "flex", alignItems: "center", minWidth: 30 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={18} /></div><span style={{ color: C.textMuted, fontSize: 18, fontFamily: "'DM Mono',monospace" }}>=</span><Stp value={s.endTempo} onChange={sET} min={10} max={400} /></div></Row>}
+          </Row>}
+
+          {/* Curve - hidden in basic */}
+          {!isBas && <Row label="Curve">{["constant", "accel", "rit"].map(c => <button key={c} onClick={() => upd("curve", c)} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`, background: s.curve === c ? C.downbeat + "22" : "transparent", color: s.curve === c ? C.downbeat : C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", cursor: "pointer" }}>{c === "constant" ? "—" : c === "accel" ? "accel." : "rit."}</button>)}</Row>}
+          {!isBas && s.curve !== "constant" && <Row label={I.arrow(14)}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ color: C.text, display: "flex", alignItems: "center", minWidth: 30 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={18} /></div><span style={{ color: C.textMuted, fontSize: 18, fontFamily: "'DM Mono',monospace" }}>=</span><Stp value={s.endTempo} onChange={sET} min={10} max={400} /></div></Row>}
+
+          {/* Expressive - advanced only */}
+          {isAdv && <Row label="Expressive">
+            <button onClick={() => upd("expressive", !s.expressive)} style={{ background: s.expressive ? C.accent + "22" : "transparent", border: `1px solid ${s.expressive ? C.accent : C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: s.expressive ? C.accent : C.textMuted, fontSize: 12, fontFamily: "'Outfit',sans-serif" }}>{s.expressive ? "On" : "Off"}</button>
+          </Row>}
+          {isAdv && s.expressive && s.beatMap && <div style={{ marginBottom: 14, padding: 12, background: C.surface, borderRadius: 10, border: `1px solid ${C.accent}33`, overflowX: "auto" }}>
+            <div style={{ display: "flex", gap: 6, minWidth: s.tsNum * 64 }}>
+              {s.beatMap.map((b, idx) => (
+                <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1, minWidth: 56 }}>
+                  <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{idx + 1}</div>
+                  <NI value={b.tempo} onChange={v => updBeat(idx, "tempo", v)} min={10} max={400} step={1} style={{ width: 52, height: 36, fontSize: 14 }} />
+                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14 }}>𝄐</button>
+                  {b.fermata && <NI value={b.fermataHold} onChange={v => updBeat(idx, "fermataHold", v)} min={0} max={16} step={0.5} style={{ width: 44, height: 28, fontSize: 12 }} />}
+                </div>
+              ))}
+            </div>
+          </div>}
         </>) : (<>
           <Row label="Duration"><StpF value={s.duration} onChange={v => upd("duration", v)} min={0.5} max={600} /><span style={{ color: C.textMuted, fontSize: 15, fontFamily: "'DM Mono',monospace", marginLeft: 6 }}>s</span></Row>
           <Row label="Markers"><input inputMode="decimal" value={s.markers} onChange={e => upd("markers", e.target.value)} style={{ ...nI, width: 200, textAlign: "left", padding: "0 12px", fontSize: 14 }} placeholder="e.g. 3, 7.5, 12" /></Row>
@@ -304,7 +377,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
           {isCI ? "Count-in" : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} FREE</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
         </div>
         <div className="hdr-text" style={{ fontFamily: "'Bebas Neue','DM Mono',monospace", fontSize: 110, fontWeight: 400, color: C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
-          {isCI ? "—" : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
+          {isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
         </div>
       </div>
       {!isCI && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
@@ -334,7 +407,9 @@ const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", backgro
 const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 
 // ============ SETTINGS / SAVE / LIBRARY ============
-function SetP({ settings: s, onChange, onClose }) { const u = (k, v) => onChange({ ...s, [k]: v }); return (<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div><SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●"], ["dots+flash", "● ◻"], ["flash", "◻"]].map(([v, l]) => <button key={v} onClick={() => u("visualMode", v)} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR></div></div>); }
+function SetP({ settings: s, onChange, onClose }) { const u = (k, v) => onChange({ ...s, [k]: v }); return (<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+    <SR l="Mode">{["basic", "default", "advanced"].map(v => <button key={v} onClick={() => u("appMode", v)} style={{ ...oB(s.appMode === v), textTransform: "capitalize" }}>{v}</button>)}</SR>
+    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●"], ["dots+flash", "● ◻"], ["flash", "◻"]].map(([v, l]) => <button key={v} onClick={() => u("visualMode", v)} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR></div></div>); }
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved }) { const [t, sT] = useState(""), [c, sC] = useState(""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); p.push({ id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }); svP(p); onSaved(); onClose(); }; return (<div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600, marginBottom: 18 }}>Save Piece</div><input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} /><input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 15 }} /><div style={{ display: "flex", gap: 10 }}><button onClick={onClose} style={{ flex: 1, padding: "12px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Cancel</button><button onClick={go} style={{ flex: 1, padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button></div></div></div>); }
 function LibP({ onLoad, onClose }) {
@@ -441,7 +516,7 @@ export default function Tempus() {
   const [showSave, setShowSave] = useState(false);
   const [showLib, setShowLib] = useState(false);
   const [showPrac, setShowPrac] = useState(false);
-  const [settings, setSettings] = useState({ accented: true, pitched: true, visualMode: "dots+flash", countIn: 1 });
+  const [settings, setSettings] = useState({ accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default" });
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
   const [isP, setIsP] = useState(false);
@@ -462,11 +537,12 @@ export default function Tempus() {
 
   useEffect(() => {
     met.setCb(evt => {
-      if (evt.type === "beat") { const bar = tl[evt.barIdx]; setPs({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: true, countIn: false, isTimed: false, pctLabel: pracSections ? `${pracStep}%` : null }); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      if (evt.type === "beat") { const bar = tl[evt.barIdx]; setPs({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: true, countIn: false, isTimed: false, fermata: false, pctLabel: pracSections ? `${pracStep}%` : null }); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
       else if (evt.type === "countIn") { setPs(p => ({ ...p || {}, countIn: true, flash: true, isTimed: false, beatIndex: evt.beatInBar - 1, beatType: evt.beatInBar === 1 ? 0 : 2, tsNum: evt.totalBeats, tsDen: 0, allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2) })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
       else if (evt.type === "timedStart") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, flash: true, beatType: 0, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.dur, tsNum: 0, tsDen: 0 })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
       else if (evt.type === "timedTick") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.rem, flash: p?.flash || false, tsNum: 0, tsDen: 0, beatType: 0, totalMarkers: p?.totalMarkers || 0, markerIdx: p?.markerIdx || 0 })); }
       else if (evt.type === "timedMarker") { setPs(p => ({ ...p || {}, flash: true, beatType: 0, totalMarkers: evt.tm, markerIdx: evt.mi })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "fermataHold") { setPs(p => ({ ...p || {}, fermata: true, fermataRem: evt.rem, fermataDur: evt.dur })); }
     });
   }, [met, tl, pracSections, pracStep]);
 
@@ -556,8 +632,8 @@ export default function Tempus() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3, color: C.text }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setShowLib(true)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>
-          <button onClick={() => setShowSave(true)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>
+          {settings.appMode !== "basic" && <button onClick={() => setShowLib(true)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => setShowSave(true)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
           <button onClick={() => setShowSet(true)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
         </div>
       </div>
@@ -572,17 +648,17 @@ export default function Tempus() {
         <button onClick={addSec} style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(20)}</button>
       </div>
 
-      {/* Three bottom buttons: Play / Record / Practice */}
+      {/* Bottom buttons: Play / Record / Practice */}
       <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
         <div className="glass-pill" style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
-          <button onClick={() => { setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>
+          {settings.appMode !== "basic" && <button onClick={() => { setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>}
           <button className="btn-ripple" onClick={() => { setMode("normal"); go(0); }} disabled={!sections.length} style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}` }}>{I.play(24)}</button>
-          <button onClick={() => setShowPrac(true)} style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}` }}>{I.target(18)}</button>
+          {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}` }}>{I.target(18)}</button>}
         </div>
       </div>
 
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={() => { if (ps && !ps.countIn) { const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } } }} onRestart={() => go(0)} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} />}
-      {editSec && <SecEd section={editSec} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? id => setSections(p => p.filter(s => s.id !== id)) : null} />}
+      {editSec && <SecEd section={editSec} appMode={settings.appMode} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? id => setSections(p => p.filter(s => s.id !== id)) : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} />}
       {showLib && <LibP onLoad={s => setSections(s)} onClose={() => setShowLib(false)} />}
