@@ -124,9 +124,9 @@ function useMetronome() {
   const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, pitched: true, muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false);
   const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false);
   const init = useCallback(() => { if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, []);
-  const rwl = useCallback(async () => { try { if ("wakeLock" in navigator) wl.current = await navigator.wakeLock.request("screen"); } catch { } if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { await sa.current.play(); } catch { } }, []);
-  const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) sa.current.pause(); }, []);
-  const prime = useCallback(async () => { const ctx = init(); if (ctx.state === "suspended") await ctx.resume(); const buf = ctx.createBuffer(1, ctx.sampleRate * 0.05, ctx.sampleRate), src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start(); await new Promise(r => setTimeout(r, 200)); return ctx; }, [init]);
+  const rwl = useCallback(async () => { try { if ("wakeLock" in navigator) wl.current = await navigator.wakeLock.request("screen"); } catch { } if (sa.current && sa.current.paused) { try { await sa.current.play(); } catch { } } }, []);
+  const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) { sa.current.pause(); sa.current.currentTime = 0; } }, []);
+  const prime = useCallback(async () => { const ctx = init(); if (ctx.state === "suspended") await ctx.resume(); return ctx; }, [init]);
   const clk = useCallback((ctx, time, bt) => {
     const { accented, pitched, muted } = sR.current; if (muted) return; const e = accented ? bt : 2;
     if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
@@ -181,7 +181,7 @@ function useMetronome() {
   const updS = useCallback(s => { sR.current = { ...sR.current, ...s }; }, []);
   const setCb = useCallback(cb => { cbR.current = cb; }, []);
   useEffect(() => () => { stop(); if (actx.current) actx.current.close().catch(() => { }); }, [stop]);
-  const tap = useCallback(() => { const ctx = init(); if (ctx.state === "suspended") ctx.resume(); return ctx; }, [init]);
+  const tap = useCallback(() => { const ctx = init(); if (ctx.state === "suspended") ctx.resume(); const buf = ctx.createBuffer(1, 1, ctx.sampleRate), src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start(0); if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { sa.current.play().catch(() => {}); } catch {} return ctx; }, [init]);
   return { start, stop, setCb, pl, updS, tap };
 }
 
