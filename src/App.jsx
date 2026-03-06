@@ -206,23 +206,25 @@ function Row({ label, children }) { return (<div style={{ display: "flex", align
 function useTapTempo(onChange) {
   const taps = useRef([]);
   const resetTimer = useRef(null);
+  const [tapBpm, setTapBpm] = useState(null);
+  const [tapFlash, setTapFlash] = useState(false);
   const tap = useCallback(() => {
     const now = performance.now();
     taps.current.push(now);
-    // Keep last 8 taps or taps within 4 seconds
     const cutoff = now - 4000;
     taps.current = taps.current.filter(t => t > cutoff).slice(-8);
+    setTapFlash(true); setTimeout(() => setTapFlash(false), 150);
     if (taps.current.length >= 3) {
       const intervals = [];
       for (let i = 1; i < taps.current.length; i++) intervals.push(taps.current[i] - taps.current[i - 1]);
       const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
       const bpm = Math.round(60000 / avg);
-      if (bpm >= 10 && bpm <= 400) onChange(bpm);
+      if (bpm >= 10 && bpm <= 400) { onChange(bpm); setTapBpm(bpm); }
     }
     if (resetTimer.current) clearTimeout(resetTimer.current);
-    resetTimer.current = setTimeout(() => { taps.current = []; }, 2000);
+    resetTimer.current = setTimeout(() => { taps.current = []; setTapBpm(null); }, 2000);
   }, [onChange]);
-  return tap;
+  return { tap, tapBpm, tapFlash };
 }
 
 function TapBtn({ onTap, size = "sm" }) {
@@ -236,7 +238,7 @@ function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(
 // ============ SECTION EDITOR ============
 function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
   const [s, setS] = useState({ ...section }); const upd = (k, v) => setS(p => ({ ...p, [k]: v })); const isMet = s.type === "metered";
-  const tapTempo = useTapTempo(bpm => upd("tempo", bpm));
+  const { tap: tapTempo } = useTapTempo(bpm => upd("tempo", bpm));
   const isAdv = appMode === "advanced", isBas = appMode === "basic";
   // Auto-enable expressive in advanced mode
   useEffect(() => { if (isAdv && isMet && !s.expressive) upd("expressive", true); }, [isAdv, isMet]);
@@ -371,7 +373,7 @@ function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove,
 }
 
 // ============ PLAY VIEW ============
-function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, settings, onSettings }) {
+function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, tapBpm, tapFlash, settings, onSettings }) {
   const { absoluteBar: ab, beatIndex: bei, beatType: bt, tsNum: tsN, tsDen: tsD, sectionIndex: si, flash, isTimed: isT, countIn: isCI, ended: isEnded } = ps;
   const fc = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.text, fo = flash ? (bt === 0 ? 0.35 : bt === 1 ? 0.2 : 0.08) : 0;
   const [goBar, setGoBar] = useState("");
@@ -398,7 +400,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const showNav = !isP || isEnded;
 
   return (
-    <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 3px ${borderColor}` : undefined }}>
+    <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 4px ${borderColor}, inset 0 0 30px ${borderColor}44` : undefined }}>
       {showF && flash && <div style={{ position: "absolute", inset: 0, background: fc, opacity: fo, transition: "opacity 0.05s", pointerEvents: "none" }} />}
       {splitMsg && <div style={{ position: "absolute", inset: 0, background: C.record, opacity: 0.15, pointerEvents: "none", transition: "opacity 0.3s" }} />}
 
@@ -473,14 +475,17 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
           </div>
           <button onClick={guardedAction(isP ? onPause : onResume)} data-tip={isP ? "Pause" : "Play"} style={tB}>{isP ? I.pause(22) : I.play(22)}</button>
           <div style={{ width: 44, display: "flex", justifyContent: "center" }}>
-            {mode === "normal" && onTapTempo ? <button onClick={onTapTempo} style={tS}><span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace" }}>TAP</span></button> : null}
+            {mode === "normal" && onTapTempo ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, width: 44 }}>
+              {tapBpm && <span style={{ fontSize: 10, color: C.downbeat, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{tapBpm}</span>}
+              <button onClick={onTapTempo} style={{ ...tS, background: tapFlash ? C.downbeat : C.surface, color: tapFlash ? "#000" : C.text, transition: "background 0.15s, color 0.15s" }}><span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace" }}>TAP</span></button>
+            </div> : null}
           </div>
         </div>
       </div>
     </div>);
 }
 const nv = { padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", justifyContent: "center" };
-const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", background: C.downbeat, color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
+const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", background: C.downbeat, color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.downbeat}33` };
 const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" };
 
@@ -735,7 +740,7 @@ export default function Tempus() {
   };
 
   // Tap tempo in performance mode - updates current section's tempo live
-  const handleLiveTapTempo = useTapTempo(useCallback(bpm => {
+  const { tap: handleLiveTapTempo, tapBpm: liveTapBpm, tapFlash: liveTapFlash } = useTapTempo(useCallback(bpm => {
     if (!ps) return;
     const si = ps.sectionIndex;
     setSections(prev => prev.map((s, i) => i === si && s.type === "metered" ? { ...s, tempo: bpm } : s));
@@ -756,9 +761,10 @@ export default function Tempus() {
         .sec-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); border-color: ${C.textMuted}44; background: ${C.surfaceHover} !important; }
         .glass-pill { background: rgba(17, 17, 22, 0.92); border-radius: 40px; border: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
         .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
-        .hdr-text { text-shadow: 0 0 16px currentColor; transition: transform 0.05s ease; }
+        .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
         .pump { transform: scale(1.05); }
         .btn-ripple { position: relative; }
+        .btn-ripple::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; z-index: -1; animation: ripple 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         [data-tip], [data-tip-b] { position: relative; }
         [data-tip]::after, [data-tip-b]::after { position: absolute; left: 50%; transform: translateX(-50%); background: ${C.surface}; color: ${C.text}; font-size: 11px; font-family: 'Outfit',sans-serif; padding: 4px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.1s; border: 1px solid ${C.border}; z-index: 999; }
         [data-tip]::after { content: attr(data-tip); bottom: calc(100% + 6px); }
@@ -773,7 +779,7 @@ export default function Tempus() {
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
         .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.7) !important; }
         .modal-content { animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(17, 17, 22, 0.97) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-top: 1px solid rgba(255,255,255,0.12) !important; box-shadow: 0 -8px 30px rgba(0,0,0,0.5); }
-        .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
         @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
@@ -801,13 +807,13 @@ export default function Tempus() {
       {/* Bottom buttons: Play / Record / Practice */}
       <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
         <div className="glass-pill" style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
-          {settings.appMode !== "basic" && <button onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.rec(18)}</button>}
-          <button className="btn-ripple" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.play(24)}</button>
-          {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} data-tip="Practice" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.target(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>}
+          <button className="btn-ripple" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}` }}>{I.play(24)}</button>
+          {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} data-tip="Practice" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}` }}>{I.target(18)}</button>}
         </div>
       </div>
 
-      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={() => { met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} settings={settings} onSettings={setSettings} />}
+      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={() => { met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} />}
