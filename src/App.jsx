@@ -53,7 +53,7 @@ function NoteSVG({ type, dotted, size = 24 }) {
   const op = type === "w" || type === "h", hs = type !== "w", uf = type === "e", bm = type === "16" ? 2 : type === "32" ? 3 : 0;
   const np = `M${hX - 4.5},${hY + 1} C${hX - 4.5},${hY + 3.5} ${hX - 1},${hY + 4} ${hX + 1.5},${hY + 2.5} C${hX + 4},${hY + 1} ${hX + 4.5},${hY - 1.5} ${hX + 4.5},${hY - 3.5} C${hX + 4.5},${hY - 6} ${hX + 1},${hY - 6.5} ${hX - 1.5},${hY - 5} C${hX - 4},${hY - 3.5} ${hX - 4.5},${hY - 1} ${hX - 4.5},${hY + 1} Z`;
   return (<svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }} aria-hidden="true">
-    {op ? <path d={np} fill="none" stroke="currentColor" strokeWidth={1.5} transform={`rotate(-15,${hX},${hY})`} /> : <path d={np} fill="currentColor" transform={`rotate(-15,${hX},${hY})`} />}
+    {op ? <path d={np} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" transform={`rotate(-15,${hX},${hY})`} /> : <path d={np} fill="currentColor" stroke="currentColor" strokeWidth={0.5} strokeLinejoin="round" strokeLinecap="round" transform={`rotate(-15,${hX},${hY})`} />}
     {hs && <line x1={sX} y1={hY} x2={sX} y2={sT} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />}
     {uf && <path d={`M${sX},${sT} C${sX + 4},${sT + 2} ${sX + 7},${sT + 8} ${sX + 5},${sT + 14} C${sX + 5},${sT + 12} ${sX + 3},${sT + 8} ${sX},${sT + 6}`} fill="currentColor" />}
     {bm > 0 && Array.from({ length: bm }).map((_, i) => <line key={i} x1={sX} y1={sT + i * 4} x2={sX + 8} y2={sT + i * 4 + 2} stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" />)}
@@ -528,7 +528,7 @@ function LibP({ onLoad, onClose }) {
       <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
       {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
     </div>
-    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "40px 20px" }}>{p.length === 0 ? "No saved pieces yet" : "No results"}</div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text }}>{x.title}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip="Delete" style={{ background: "none", border: "none", color: C.danger + "88", cursor: "pointer", padding: 4, display: "flex" }}>{I.trash(14)}</button></div>))}</div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}><div style={{ opacity: 0.2 }}>{I.folder(48)}</div><div>{p.length === 0 ? "No saved pieces yet" : "No results"}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text }}>{x.title}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip="Delete" style={{ background: "none", border: "none", color: C.danger + "99", cursor: "pointer", padding: 4, display: "flex" }}>{I.trash(14)}</button></div>))}</div>
   </div></div>);
 }
 
@@ -745,7 +745,7 @@ export default function Tempus() {
         .sec-card { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.15s; }
         .sec-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); border-color: ${C.textMuted}44; background: ${C.surfaceHover} !important; }
         .glass-pill { background: rgba(17, 17, 22, 0.65); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-radius: 40px; border: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
-        .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
+        .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; animation: breathe 8s ease-in-out infinite; }
         .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
         .pump { transform: scale(1.05); }
         .btn-ripple { position: relative; }
@@ -756,16 +756,22 @@ export default function Tempus() {
         [data-tip-b]::after { content: attr(data-tip-b); top: calc(100% + 8px); }
         [data-tip]:hover::after, [data-tip-b]:hover::after { opacity: 1; }
         @media (pointer: coarse) { [data-tip]::after, [data-tip-b]::after { display: none; } }
-        @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes modalSlideUp { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .modal-bg { animation: modalFadeIn 0.2s ease-out forwards; }
-        .modal-content { animation: modalSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        button { cursor: pointer; transition: transform 0.15s ease, filter 0.15s ease, opacity 0.15s ease; }
+        button:hover:not(:disabled) { filter: brightness(1.15); }
+        button:active:not(:disabled) { filter: brightness(0.85); transform: scale(0.98); }
+
+        @keyframes modalFadeIn { from { opacity: 0; backdrop-filter: blur(0px); } to { opacity: 1; backdrop-filter: blur(8px); } }
+        @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.4) !important; }
+        .modal-content { animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(17, 17, 22, 0.75) !important; backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); border: 1px solid rgba(255,255,255,0.06) !important; border-top: 1px solid rgba(255,255,255,0.12) !important; box-shadow: 0 -20px 60px rgba(0,0,0,0.6); }
+        .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
+        @keyframes breathe { 0%, 100%{ opacity: 0.6; transform: scale(1); } 50%{ opacity: 1; transform: scale(1.06); } }
         @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
-        <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3, color: C.text }}>TEMPUS</div>
+        <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={handleClear} data-tip-b="New" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.fileNew(18)}</button>
           {settings.appMode !== "basic" && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
