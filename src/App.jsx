@@ -438,25 +438,25 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
       </div>
 
       {/* BOTTOM CONTROLS - fixed */}
-      <div style={{ position: "absolute", bottom: 24, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 2 }}>
+      <div style={{ position: "absolute", bottom: 24, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 2, pointerEvents: "none" }}>
         {/* Nav row - visibility hidden during play */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12, visibility: showNav ? "visible" : "hidden", opacity: showNav ? 1 : 0, transition: "opacity 0.15s" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, visibility: showNav ? "visible" : "hidden", pointerEvents: showNav ? "auto" : "none", opacity: showNav ? 1 : 0, transition: "opacity 0.15s" }}>
           <button onClick={onPrevSec} data-tip="Previous" style={nv}>{I.chevL(18)}</button>
           <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-            <input type="text" inputMode="numeric" value={goBar} onChange={e => setGoBar(e.target.value)} placeholder={isRec ? "Start from bar" : "Bar"} style={{ ...nI, width: isRec ? 110 : 64, fontSize: 14 }} onKeyDown={e => { if (e.key === "Enter") { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); setGoBar(""); } } }} />
+            <input type="text" inputMode="numeric" value={goBar} onChange={e => setGoBar(e.target.value)} placeholder="Bar #" style={{ ...nI, width: 64, fontSize: 14 }} onKeyDown={e => { if (e.key === "Enter") { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); setGoBar(""); } } }} />
             <button onClick={() => { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); setGoBar(""); } }} style={{ ...nv, fontSize: 12, padding: "8px 10px" }}>GO</button>
           </div>
           <button onClick={onNextSec} data-tip="Next" style={nv}>{I.chevR(18)}</button>
         </div>
         {/* Quick settings */}
-        {settings && onSettings && <div style={{ display: "flex", gap: 6, justifyContent: "center" }}>
+        {settings && onSettings && <div style={{ display: "flex", gap: 6, justifyContent: "center", pointerEvents: "auto" }}>
           <button onClick={() => onSettings({ ...settings, accented: !settings.accented })} style={qS}>{settings.accented ? "Accent" : "Flat"}</button>
           <button onClick={() => onSettings({ ...settings, pitched: !settings.pitched })} style={qS}>{settings.pitched ? "Pitch" : "Noise"}</button>
           <button onClick={() => { const m = ["dots", "dots+flash", "flash"]; const i = (m.indexOf(settings.visualMode) + 1) % m.length; onSettings({ ...settings, visualMode: m[i] }); }} style={qS}><span style={{ opacity: settings.visualMode.includes("dots") ? 1 : 0.25 }}>●</span> <span style={{ opacity: settings.visualMode.includes("flash") ? 1 : 0.25 }}>◻</span></button>
           <button onClick={() => onSettings({ ...settings, countIn: (settings.countIn + 1) % 3 })} style={qS}>{settings.countIn === 0 ? "No Count-in" : `${settings.countIn} Count-in`}</button>
         </div>}
         {/* Transport */}
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
           <div style={{ width: 44, display: "flex", justifyContent: "center" }}>
             {showNav && <button onClick={onRestart} data-tip="Restart" style={tS}>{I.restart(18)}</button>}
           </div>
