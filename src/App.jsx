@@ -137,7 +137,7 @@ function useMetronome() {
     const ctx = actx.current; if (!ctx || !pl.current) return; const tl = tlR.current;
     while (nb.current < ctx.currentTime + 0.12) {
       if (ciL.current > 0) { const bar = tl[bi.current]; if (!bar || bar.isT) { ciL.current = 0; continue; } const ciCd = bar.cd ?? (bar.perBeatCd?.[0]?.cd ?? 0.5); clk(ctx, nb.current, ciL.current % bar.cpb === 0 ? 0 : 2); if (cbR.current) cbR.current({ type: "countIn", beatsLeft: ciL.current, beatInBar: bar.cpb - ((ciL.current - 1) % bar.cpb), totalBeats: bar.cpb }); nb.current += ciCd; ciL.current--; continue; }
-      const bar = tl[bi.current]; if (!bar) { stop(); return; }
+      const bar = tl[bi.current]; if (!bar) { if (cbR.current) cbR.current({ type: "ended" }); stop(); return; }
       if (bar.isT) {
         if (tsS.current === 0) { tsS.current = nb.current; tsF.current = false; } const el = nb.current - tsS.current;
         if (!tsF.current) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedStart", ab: bar.ab, si: bar.si, dur: bar.tDur }); tsF.current = true; }
@@ -365,7 +365,7 @@ function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove,
 
 // ============ PLAY VIEW ============
 function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo }) {
-  const { absoluteBar: ab, beatIndex: bei, beatType: bt, tsNum: tsN, tsDen: tsD, sectionIndex: si, flash, isTimed: isT, countIn: isCI } = ps;
+  const { absoluteBar: ab, beatIndex: bei, beatType: bt, tsNum: tsN, tsDen: tsD, sectionIndex: si, flash, isTimed: isT, countIn: isCI, ended: isEnded } = ps;
   const fc = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.text, fo = flash ? (bt === 0 ? 0.35 : bt === 1 ? 0.2 : 0.08) : 0;
   const [goBar, setGoBar] = useState("");
   const [splitMsg, setSplitMsg] = useState(null);
@@ -379,11 +379,12 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const handleTap = e => { if (isRec && onSplit) { const t = e.target; if (t.closest && (t.closest("button") || t.closest("input"))) return; onSplit(ab); setSplitMsg(`Marked bar ${ab}`); if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); splitMsgTimer.current = setTimeout(() => setSplitMsg(null), 1200); } };
 
   const cR = 120, cC = 2 * Math.PI * cR; let prg = 0;
-  if (isCI) prg = tsN > 0 ? (bei + 1) / tsN : 0;
+  if (isEnded) prg = 1;
+  else if (isCI) prg = tsN > 0 ? (bei + 1) / tsN : 0;
   else if (isT && ps.remaining != null) prg = 1 - (ps.remaining / (sections[si]?.duration || 1));
   else if (!isT) { const bs = tl.filter(b => b.si === si); if (bs.length) { const t = bs.length, c = ab - bs[0].ab, bp = bei / Math.max(1, tsN); prg = (c + bp) / t; } }
   const sDo = cC - (prg * cC);
-  const showNav = !isP;
+  const showNav = !isP || isEnded;
 
   return (
     <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 4px ${borderColor}, inset 0 0 30px ${borderColor}44` : undefined, transition: splitMsg ? "box-shadow 0.1s" : undefined }}>
@@ -403,20 +404,20 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
           <circle cx={140} cy={140} r={cR} fill="none" stroke={borderColor || C.downbeat} strokeWidth={8} strokeDasharray={cC} strokeDashoffset={sDo} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.1s linear" }} />
         </svg>
         <div style={{ fontSize: 20, color: C.textMuted, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, position: "relative", zIndex: 1, marginBottom: 8 }}>
-          {isCI ? "Count-in" : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} FREE</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
+          {isEnded ? "" : isCI ? "Count-in" : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} FREE</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
         </div>
-        <div className={`hdr-text ${ps.flash && ps.beatType === 0 ? 'pump' : ''}`} style={{ fontFamily: "'Bebas Neue','DM Mono',monospace", fontSize: 110, fontWeight: 400, color: C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
-          {isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
+        <div className={`hdr-text ${ps.flash && ps.beatType === 0 ? 'pump' : ''}`} style={{ fontFamily: "'Bebas Neue','DM Mono',monospace", fontSize: isEnded ? 80 : 110, fontWeight: 400, color: isEnded ? C.downbeat : C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
+          {isEnded ? "END" : isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
         </div>
       </div>
       {splitMsg && <div style={{ fontSize: 14, color: C.record, fontWeight: 600, position: "relative", zIndex: 1, marginBottom: 8 }}>{splitMsg}</div>}
-      {!isCI && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+      {!isCI && !isEnded && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
         <div>{si + 1}/{sections.length}{!isT && ps.tempo ? ` · ${Math.round(ps.tempo)}` : ""}</div>
         {upN && <div style={{ color: C.downbeat, fontSize: 14, fontWeight: 600, animation: "pulse 2s infinite" }}>Up Next: {upN}</div>}
       </div>}
-      {showD && !isT && !isCI && <div style={{ display: "flex", gap: 8, marginTop: 24, position: "relative", zIndex: 1, flexWrap: "wrap", justifyContent: "center", maxWidth: 280, padding: "0 16px" }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />; })}</div>}
-      {showD && isT && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, marginTop: 24, position: "relative", zIndex: 1, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, transition: "all 0.06s", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent" }} />; })}</div>}
-      {isRec && isP && <div style={{ marginTop: 20, fontSize: 12, color: C.record, fontFamily: "'Outfit',sans-serif", position: "relative", zIndex: 1, opacity: 0.7 }}>Tap anywhere to mark section</div>}
+      {showD && !isT && !isCI && !isEnded && <div style={{ display: "flex", gap: 8, marginTop: 24, position: "relative", zIndex: 1, flexWrap: "wrap", justifyContent: "center", maxWidth: 280, padding: "0 16px" }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />; })}</div>}
+      {showD && isT && !isEnded && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, marginTop: 24, position: "relative", zIndex: 1, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, transition: "all 0.06s", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent" }} />; })}</div>}
+      {isRec && isP && !isEnded && <div style={{ marginTop: 20, fontSize: 12, color: C.record, fontFamily: "'Outfit',sans-serif", position: "relative", zIndex: 1, opacity: 0.7 }}>Tap anywhere to mark section</div>}
       {showNav && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 36, position: "relative", zIndex: 1 }}>
         <button onClick={onPrevSec} data-tip="Previous" style={nv}>{I.chevL(18)}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
@@ -578,6 +579,7 @@ export default function Tempus() {
       else if (evt.type === "timedTick") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.rem, flash: p?.flash || false, tsNum: 0, tsDen: 0, beatType: 0, totalMarkers: p?.totalMarkers || 0, markerIdx: p?.markerIdx || 0 })); }
       else if (evt.type === "timedMarker") { setPs(p => ({ ...p || {}, flash: true, beatType: 0, totalMarkers: evt.tm, markerIdx: evt.mi })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
       else if (evt.type === "fermataHold") { setPs(p => ({ ...p || {}, fermata: true, fermataRem: evt.rem, fermataDur: evt.dur })); }
+      else if (evt.type === "ended") { setPs(p => ({ ...p || {}, ended: true, flash: false, countIn: false, fermata: false })); setIsP(false); }
     });
   }, [met, tl, pracSections, pracStep]);
 
