@@ -31,6 +31,7 @@ const I = {
   rec: s => (<svg width={s || 18} height={s || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" /></svg>),
   target: s => <Icon size={s || 18} d={["M12 22a10 10 0 100-20 10 10 0 000 20z", "M12 18a6 6 0 100-12 6 6 0 000 12z", "M12 14a2 2 0 100-4 2 2 0 000 4z"]} />,
   loop: s => <Icon size={s || 16} d={["M17 1l4 4-4 4", "M3 11V9a4 4 0 014-4h14", "M7 23l-4-4 4-4", "M21 13v2a4 4 0 01-4 4H3"]} />,
+  fileNew: s => <Icon size={s || 18} d={["M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z", "M14 2v6h6", "M12 18v-6", "M9 15h6"]} />,
 };
 
 // ============ CONSTANTS ============
@@ -66,7 +67,7 @@ function pG(s) { if (!s || !s.trim()) return [1]; return s.split("+").map(x => p
 function sG(n, d) { if (d >= 8 && n % 3 === 0 && n > 3) return Array(n / 3).fill(3).join("+"); return Array(n).fill(1).join("+"); }
 function gBT(g) { const t = []; g.forEach((v, gi) => { for (let i = 0; i < v; i++)t.push(gi === 0 && i === 0 ? 0 : i === 0 ? 1 : 2); }); return t; }
 function pM(s) { if (!s || !s.trim()) return []; return s.split(",").map(x => parseFloat(x.trim())).filter(n => !isNaN(n) && n >= 0).sort((a, b) => a - b); }
-function mkBeatMap(n, tempo) { return Array.from({ length: n }, () => ({ tempo, fermata: false, fermataHold: 0 })); }
+function mkBeatMap(n, tempo) { return Array.from({ length: n }, () => ({ tempo, fermata: false, fermataHold: 0, fermataUnit: "beats" })); }
 
 function buildTL(sections) {
   const bars = []; let at = 0, ab = 1;
@@ -74,23 +75,34 @@ function buildTL(sections) {
     if (s.type === "timed") { bars.push({ si, bin: 1, ab: ab, st: at, dur: s.duration, cd: s.duration, tempo: 0, tsN: 0, tsD: 0, bts: [0], cpb: 1, isT: true, tDur: s.duration, mk: pM(s.markers) }); at += s.duration; ab++; return; }
     const grp = pG(s.grouping), cpb = s.tsNum;
     const loopFirstIdx = bars.length;
+    const totalBeats = s.bars * cpb;
     for (let b = 0; b < s.bars; b++) {
-      let t = s.tempo; if (s.curve !== "constant") { const r = s.bars > 1 ? b / (s.bars - 1) : 0; t = s.tempo + (s.endTempo - s.tempo) * r; }
       const bm = s.expressive && s.beatMap && s.beatMap.length === cpb ? s.beatMap : null;
-      // Calculate per-beat durations if expressive
       let perBeatCd = null, totalDur = 0;
       if (bm) {
         perBeatCd = bm.map(beat => {
           const cd = gCD(beat.tempo, s.beatUnit, s.dotted, s.tsDen);
-          const hold = beat.fermata ? beat.fermataHold * cd : 0;
+          const hold = beat.fermata ? (beat.fermataUnit === "sec" ? beat.fermataHold : beat.fermataHold * cd) : 0;
           return { cd, hold, fermata: beat.fermata };
         });
-        totalDur = perBeatCd.reduce((sum, b) => sum + b.cd + b.hold, 0);
+        totalDur = perBeatCd.reduce((sum, x) => sum + x.cd + x.hold, 0);
+      } else if (s.curve !== "constant" && totalBeats > 1) {
+        // Per-beat staircase interpolation
+        perBeatCd = [];
+        for (let i = 0; i < cpb; i++) {
+          const beatNum = b * cpb + i;
+          const t = beatNum / (totalBeats - 1);
+          const tempo = s.tempo + (s.endTempo - s.tempo) * t;
+          const cd = gCD(tempo, s.beatUnit, s.dotted, s.tsDen);
+          perBeatCd.push({ cd, hold: 0, fermata: false });
+        }
+        totalDur = perBeatCd.reduce((sum, x) => sum + x.cd, 0);
       } else {
-        const cd = gCD(t, s.beatUnit, s.dotted, s.tsDen);
+        const cd = gCD(s.tempo, s.beatUnit, s.dotted, s.tsDen);
         totalDur = cpb * cd;
       }
-      bars.push({ si, bin: b + 1, ab, st: at, dur: totalDur, cd: bm ? null : gCD(t, s.beatUnit, s.dotted, s.tsDen), tempo: t, tsN: s.tsNum, tsD: s.tsDen, bts: gBT(grp), cpb, isT: false, loop: !!s.loop, loopTo: loopFirstIdx, perBeatCd });
+      const barTempo = s.curve !== "constant" && totalBeats > 1 ? s.tempo + (s.endTempo - s.tempo) * (b * cpb / Math.max(1, totalBeats - 1)) : s.tempo;
+      bars.push({ si, bin: b + 1, ab, st: at, dur: totalDur, cd: perBeatCd ? null : gCD(s.tempo, s.beatUnit, s.dotted, s.tsDen), tempo: barTempo, tsN: s.tsNum, tsD: s.tsDen, bts: gBT(grp), cpb, isT: false, loop: !!s.loop, loopTo: loopFirstIdx, perBeatCd });
       at += totalDur; ab++;
     }
   }); return bars;
@@ -124,7 +136,7 @@ function useMetronome() {
   const sched = useCallback(() => {
     const ctx = actx.current; if (!ctx || !pl.current) return; const tl = tlR.current;
     while (nb.current < ctx.currentTime + 0.12) {
-      if (ciL.current > 0) { const bar = tl[bi.current]; if (!bar || bar.isT) { ciL.current = 0; continue; } clk(ctx, nb.current, ciL.current % bar.cpb === 0 ? 0 : 2); if (cbR.current) cbR.current({ type: "countIn", beatsLeft: ciL.current, beatInBar: bar.cpb - ((ciL.current - 1) % bar.cpb), totalBeats: bar.cpb }); nb.current += bar.cd; ciL.current--; continue; }
+      if (ciL.current > 0) { const bar = tl[bi.current]; if (!bar || bar.isT) { ciL.current = 0; continue; } const ciCd = bar.cd ?? (bar.perBeatCd?.[0]?.cd ?? 0.5); clk(ctx, nb.current, ciL.current % bar.cpb === 0 ? 0 : 2); if (cbR.current) cbR.current({ type: "countIn", beatsLeft: ciL.current, beatInBar: bar.cpb - ((ciL.current - 1) % bar.cpb), totalBeats: bar.cpb }); nb.current += ciCd; ciL.current--; continue; }
       const bar = tl[bi.current]; if (!bar) { stop(); return; }
       if (bar.isT) {
         if (tsS.current === 0) { tsS.current = nb.current; tsF.current = false; } const el = nb.current - tsS.current;
@@ -178,7 +190,7 @@ const sB = { width: 44, height: 44, background: C.surface, border: `1px solid ${
 const oB = on => ({ padding: "8px 16px", borderRadius: 8, border: `1px solid ${on ? C.downbeat : C.border}`, background: on ? C.downbeat + "15" : "transparent", color: on ? C.downbeat : C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" });
 
 // ============ INPUTS ============
-function NI({ value, onChange, min, max, style = {}, step = 1, validate }) { const [d, setD] = useState(String(value)); const drg = useRef({ on: false, active: false, stX: 0, stV: 0 }); useEffect(() => setD(String(value)), [value]); const cm = v => { const n = typeof v === "number" ? v : parseFloat(d); if (!isNaN(n) && n >= min && n <= max) { if (validate && !validate(n)) { setD(String(value)); return; } onChange(n); setD(String(n)); } else setD(String(value)); }; const pD = e => { drg.current = { on: true, active: false, stX: e.clientX, stV: value }; }; const pM = e => { if (!drg.current.on) return; const dX = e.clientX - drg.current.stX; if (!drg.current.active && Math.abs(dX) < 8) return; if (!drg.current.active) { drg.current.active = true; e.target.setPointerCapture(e.pointerId); } const nv = Math.min(max, Math.max(min, drg.current.stV + Math.round(dX / 5) * step)); setD(String(nv)); }; const pU = e => { if (drg.current.active) { drg.current.on = false; drg.current.active = false; try { e.target.releasePointerCapture(e.pointerId); } catch { } cm(parseFloat(d)); } else { drg.current.on = false; } }; return <input type="text" inputMode="decimal" value={d} onChange={e => setD(e.target.value)} onBlur={() => cm()} onKeyDown={e => { if (e.key === "Enter") { cm(); e.target.blur(); } }} onPointerDown={pD} onPointerMove={pM} onPointerUp={pU} onPointerCancel={pU} style={{ ...nI, cursor: "ew-resize", ...style }} />; }
+function NI({ value, onChange, min, max, style = {}, step = 1, validate }) { const [d, setD] = useState(String(value)); const drg = useRef({ on: false, active: false, stY: 0, stV: 0 }); useEffect(() => setD(String(value)), [value]); const cm = v => { const n = typeof v === "number" ? v : parseFloat(d); if (!isNaN(n) && n >= min && n <= max) { if (validate && !validate(n)) { setD(String(value)); return; } onChange(n); setD(String(n)); } else setD(String(value)); }; const pD = e => { drg.current = { on: true, active: false, stY: e.clientY, stV: value }; }; const pM = e => { if (!drg.current.on) return; const dY = drg.current.stY - e.clientY; if (!drg.current.active && Math.abs(dY) < 8) return; if (!drg.current.active) { drg.current.active = true; e.target.setPointerCapture(e.pointerId); } const nv = Math.min(max, Math.max(min, drg.current.stV + Math.round(dY / 5) * step)); setD(String(nv)); }; const pU = e => { if (drg.current.active) { drg.current.on = false; drg.current.active = false; try { e.target.releasePointerCapture(e.pointerId); } catch { } cm(parseFloat(d)); } else { drg.current.on = false; } }; return <input type="text" inputMode="decimal" value={d} onChange={e => setD(e.target.value)} onBlur={() => cm()} onKeyDown={e => { if (e.key === "Enter") { cm(); e.target.blur(); } }} onPointerDown={pD} onPointerMove={pM} onPointerUp={pU} onPointerCancel={pU} style={{ ...nI, cursor: "ns-resize", ...style }} />; }
 function Stp({ value, onChange, min = 1, max = 999 }) { return (<div style={{ display: "flex", alignItems: "center" }}><button onClick={() => onChange(Math.max(min, value - 1))} style={sB}>{I.chevL(16)}</button><NI value={value} onChange={onChange} min={min} max={max} /><button onClick={() => onChange(Math.min(max, value + 1))} style={sB}>{I.chevR(16)}</button></div>); }
 function StpF({ value, onChange, min = 0, max = 999, step = 0.5 }) { return (<div style={{ display: "flex", alignItems: "center" }}><button onClick={() => onChange(Math.max(min, +(value - step).toFixed(1)))} style={sB}>{I.chevL(16)}</button><NI value={value} onChange={onChange} min={min} max={max} step={step} style={{ width: 72 }} /><button onClick={() => onChange(Math.min(max, +(value + step).toFixed(1)))} style={sB}>{I.chevR(16)}</button></div>); }
 function Row({ label, children }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}><span style={{ color: C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", width: 70, flexShrink: 0, display: "flex", alignItems: "center" }}>{label}</span><div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>{children}</div></div>); }
@@ -212,7 +224,7 @@ function TapBtn({ onTap, size = "sm" }) {
 }
 
 // ============ BEAT UNIT PICKER ============
-function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} title="Beat Unit" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
+function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip="Beat Unit" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
 
 // ============ SECTION EDITOR ============
 function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
@@ -220,7 +232,7 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
   const tapTempo = useTapTempo(bpm => upd("tempo", bpm));
   const isAdv = appMode === "advanced", isBas = appMode === "basic";
   // Auto-enable expressive in advanced mode
-  useEffect(() => { if (isAdv && isMet && !s.expressive) upd("expressive", true); }, [isAdv]);
+  useEffect(() => { if (isAdv && isMet && !s.expressive) upd("expressive", true); }, [isAdv, isMet]);
   useEffect(() => { if (!isMet) return; const sum = pG(s.grouping).reduce((a, b) => a + b, 0); if (sum !== s.tsNum) upd("grouping", sG(s.tsNum, s.tsDen)); }, [s.tsNum, s.tsDen]);
   const gV = useMemo(() => { if (!isMet) return true; return pG(s.grouping).reduce((a, b) => a + b, 0) === s.tsNum; }, [s.grouping, s.tsNum, isMet]);
   useEffect(() => { if (s.curve === "accel" && s.endTempo <= s.tempo) upd("endTempo", s.tempo + 1); if (s.curve === "rit" && s.endTempo >= s.tempo) upd("endTempo", Math.max(10, s.tempo - 1)); }, [s.curve, s.tempo]);
@@ -236,7 +248,7 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
   return (
     <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}><button onClick={onClose} title="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
         {/* Type toggle - hidden in basic */}
         {!isBas && <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
           <button onClick={() => swT("metered")} style={{ ...oB(isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.music(14)} Metered</button>
@@ -257,12 +269,11 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
             </div>
           </div>
           {/* Bars + Loop */}
-          {!isBas && <Row label="Bars">
-            <button onClick={() => upd("loop", !s.loop)} title="Loop" style={{ background: s.loop ? C.downbeat + "22" : "transparent", border: `1px solid ${s.loop ? C.downbeat : C.border}`, borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: s.loop ? C.downbeat : C.textMuted, display: "flex", alignItems: "center" }}>{I.loop(16)}</button>
+          <Row label="Bars">
+            <button onClick={() => upd("loop", !s.loop)} data-tip="Loop" style={{ background: s.loop ? C.downbeat + "22" : "transparent", border: `1px solid ${s.loop ? C.downbeat : C.border}`, borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: s.loop ? C.downbeat : C.textMuted, display: "flex", alignItems: "center" }}>{I.loop(16)}</button>
             {!s.loop && <Stp value={s.bars} onChange={v => upd("bars", v)} min={1} max={999} />}
             {s.loop && <span style={{ color: C.downbeat, fontSize: 13, fontFamily: "'DM Mono',monospace" }}>∞</span>}
-          </Row>}
-          {isBas && <Row label="Bars"><Stp value={s.bars} onChange={v => upd("bars", v)} min={1} max={999} /></Row>}
+          </Row>
 
           {/* Grouping - pills always, number builder in advanced */}
           {!isBas && <Row label="Grouping">
@@ -290,14 +301,20 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
           {isAdv && <Row label="Expressive">
             <button onClick={() => upd("expressive", !s.expressive)} style={{ background: s.expressive ? C.accent + "22" : "transparent", border: `1px solid ${s.expressive ? C.accent : C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: s.expressive ? C.accent : C.textMuted, fontSize: 12, fontFamily: "'Outfit',sans-serif" }}>{s.expressive ? "On" : "Off"}</button>
           </Row>}
-          {isAdv && s.expressive && s.beatMap && <div style={{ marginBottom: 14, padding: 12, background: C.surface, borderRadius: 10, border: `1px solid ${C.accent}33`, overflowX: "auto" }}>
-            <div style={{ display: "flex", gap: 6, minWidth: s.tsNum * 64 }}>
+          {isAdv && s.expressive && s.beatMap && <div style={{ marginBottom: 14, padding: 12, background: C.surface, borderRadius: 10, border: `1px solid ${C.accent}33` }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {s.beatMap.map((b, idx) => (
-                <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: 1, minWidth: 56 }}>
+                <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 56, marginBottom: 6 }}>
                   <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{idx + 1}</div>
                   <NI value={b.tempo} onChange={v => updBeat(idx, "tempo", v)} min={10} max={400} step={1} style={{ width: 52, height: 36, fontSize: 14 }} />
-                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} title="Fermata" style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14 }}>𝄐</button>
-                  {b.fermata && <NI value={b.fermataHold} onChange={v => updBeat(idx, "fermataHold", v)} min={0} max={16} step={0.5} style={{ width: 44, height: 28, fontSize: 12 }} />}
+                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} data-tip="Fermata" style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14 }}>𝄐</button>
+                  {b.fermata && <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                      <NI value={b.fermataHold} onChange={v => updBeat(idx, "fermataHold", v)} min={0} max={16} step={0.5} style={{ width: 40, height: 24, fontSize: 11 }} />
+                      <span style={{ color: C.textMuted + "55", fontSize: 9, fontFamily: "'DM Mono',monospace" }}>{b.fermataUnit || "beats"}</span>
+                    </div>
+                    <button onClick={() => updBeat(idx, "fermataUnit", (b.fermataUnit || "beats") === "beats" ? "sec" : "beats")} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, padding: "1px 4px", cursor: "pointer", color: C.textMuted, fontSize: 8, fontFamily: "'DM Mono',monospace" }}>{(b.fermataUnit || "beats") === "beats" ? "→sec" : "→beats"}</button>
+                  </>}
                 </div>
               ))}
             </div>
@@ -308,8 +325,8 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
           <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14, marginLeft: 82, fontFamily: "'DM Mono',monospace" }}>{pM(s.markers).length} cue{pM(s.markers).length !== 1 ? "s" : ""}</div>
         </>)}
         <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-          {onDelete && <button onClick={() => { onDelete(s.id); onClose(); }} title="Delete" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`, background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.trash(16)}</button>}
-          <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }} title="Duplicate" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.copy(16)}</button>
+          {onDelete && <button onClick={() => { onDelete(s.id); onClose(); }} data-tip="Delete" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`, background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.trash(16)}</button>}
+          <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }} data-tip="Duplicate" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.copy(16)}</button>
           <div style={{ flex: 1 }} />
           <button onClick={() => { if (gV) { onSave(s); onClose(); } }} style={{ flex: 0, padding: "12px 24px", borderRadius: 8, border: "none", background: gV ? C.downbeat : C.sub, color: gV ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: gV ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Add</button>
         </div>
@@ -320,28 +337,29 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
 // ============ SECTION CARD ============
 function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx }) {
   const isT = s.type === "timed";
+  const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
   const [revealed, setRevealed] = useState(false);
   const [swX, setSwX] = useState(0);
   const swRef = useRef({ startX: 0, swiping: false });
-  const onTouchStart = e => { swRef.current = { startX: e.touches[0].clientX, swiping: true }; };
+  const onTouchStart = e => { if (e.target.closest && e.target.closest("button")) return; swRef.current = { startX: e.touches[0].clientX, swiping: true }; };
   const onTouchMove = e => { if (!swRef.current.swiping) return; const dx = e.touches[0].clientX - swRef.current.startX; if (revealed) { setSwX(Math.min(0, Math.max(-80, dx - 80))); } else { setSwX(Math.min(0, dx)); } };
-  const onTouchEnd = () => { swRef.current.swiping = false; if (swX < -40) { setSwX(-80); setRevealed(true); } else { setSwX(0); setRevealed(false); } };
+  const onTouchEnd = () => { if (!swRef.current.swiping) return; swRef.current.swiping = false; if (swX < -40) { setSwX(-80); setRevealed(true); } else { setSwX(0); setRevealed(false); } };
   const handleCardClick = () => { if (revealed) { setSwX(0); setRevealed(false); } else { onClick(); } };
   const handleDelete = e => { e.stopPropagation(); if (onDelete) onDelete(s.id); };
   return (<div style={{ position: "relative", overflow: "hidden", borderRadius: 10 }}>
-    <div onClick={handleDelete} title="Delete" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 80, background: C.danger, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "0 10px 10px 0", cursor: "pointer", color: "#fff" }}>{I.trash(20)}</div>
-    <div className="sec-card" draggable={true} onDragStart={e => onDragStart && onDragStart(e, i)} onDragEnter={e => onDragEnter && onDragEnter(e, i)} onDragOver={onDragOver} onDragEnd={onDragEnd} onDrop={e => onDrop && onDrop(e, i)} onClick={handleCardClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.surface, borderRadius: 10, padding: "12px 14px", border: `1px solid ${dropIdx === i ? C.accent : (s.capturedDuration ? C.record + "44" : C.border)}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, transform: `translateX(${swX}px)`, transition: swRef.current.swiping ? "none" : "transform 0.3s ease", position: "relative", zIndex: 1, opacity: dragIdx === i ? 0.5 : 1 }}>
+    {(revealed || swX < 0) && <div onClick={handleDelete} data-tip="Delete" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 80, background: C.danger, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "0 10px 10px 0", cursor: "pointer", color: "#fff" }}>{I.trash(20)}</div>}
+    <div className="sec-card" draggable={!isTouch} onDragStart={!isTouch && onDragStart ? e => onDragStart(e, i) : undefined} onDragEnter={!isTouch && onDragEnter ? e => onDragEnter(e, i) : undefined} onDragOver={!isTouch ? onDragOver : undefined} onDragEnd={!isTouch ? onDragEnd : undefined} onDrop={!isTouch && onDrop ? e => onDrop(e, i) : undefined} onClick={handleCardClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.surface, borderRadius: 10, padding: "12px 14px", border: `1px solid ${dropIdx === i ? C.accent : (s.capturedDuration ? C.record + "44" : C.border)}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, transform: `translateX(${swX}px)`, transition: swRef.current.swiping ? "none" : "transform 0.3s ease", position: "relative", zIndex: 1, opacity: dragIdx === i ? 0.5 : 1 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 24, alignItems: "center" }}>
-        <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} title="Move Up" style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
+        <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} data-tip="Move Up" style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, textAlign: "center", lineHeight: 1 }}>{i + 1}</div>
-        <button disabled={i === t - 1} onClick={e => { e.stopPropagation(); onMove(1); }} title="Move Down" style={{ background: "none", border: "none", color: i === t - 1 ? C.border : C.textMuted, cursor: i === t - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
+        <button disabled={i === t - 1} onClick={e => { e.stopPropagation(); onMove(1); }} data-tip="Move Down" style={{ background: "none", border: "none", color: i === t - 1 ? C.border : C.textMuted, cursor: i === t - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
       </div>
       {isT ? (<>{I.clock(16)}<div style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 15, color: C.text }}>{s.duration}s</div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{pM(s.markers).length} cue{pM(s.markers).length !== 1 ? "s" : ""}</div></>) : (<>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center" }}><span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted, margin: "1px 0" }} /><span>{s.tsDen}</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.text, flex: 1 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={16} /><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.textMuted }}>=</span><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 15 }}>{s.tempo}</span>{s.curve !== "constant" && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.accent, marginLeft: 4 }}>{s.curve === "accel" ? "→" : "←"}{s.endTempo}</span>}</div>
         <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: s.loop ? C.downbeat : C.text }}>{s.loop ? "∞" : `${s.bars} bar${s.bars !== 1 ? "s" : ""}`}</div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{s.grouping}</div></div>
       </>)}
-      <button onClick={e => { e.stopPropagation(); onStartHere(); }} title="Play From Here" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
+      <button onClick={e => { e.stopPropagation(); onStartHere(); }} data-tip="Play From Here" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
     </div></div>);
 }
 
@@ -350,28 +368,33 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const { absoluteBar: ab, beatIndex: bei, beatType: bt, tsNum: tsN, tsDen: tsD, sectionIndex: si, flash, isTimed: isT, countIn: isCI } = ps;
   const fc = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.text, fo = flash ? (bt === 0 ? 0.35 : bt === 1 ? 0.2 : 0.08) : 0;
   const [goBar, setGoBar] = useState("");
+  const [splitMsg, setSplitMsg] = useState(null);
+  const splitMsgTimer = useRef(null);
   const showF = vis === "flash" || vis === "dots+flash", showD = vis === "dots" || vis === "dots+flash";
   const borderColor = mode === "record" ? C.record : mode === "practice" ? C.practice : null;
   const nxt = sections[si + 1]; let upN = null;
   if (nxt && !isCI) { if (isT) { if (ps.remaining != null && ps.remaining <= 10) upN = nxt.type === "timed" ? `${nxt.duration}s Free` : `${nxt.tsNum}/${nxt.tsDen} at ${nxt.tempo}`; } else { const bis = tl.filter(b => b.si === si); if (bis.length > 0 && bis[bis.length - 1].ab - ab <= 1) upN = nxt.type === "timed" ? `${nxt.duration}s Free` : `${nxt.tsNum}/${nxt.tsDen} at ${nxt.tempo}`; } }
+  const isRec = mode === "record";
 
-  const handleTap = e => { if (mode === "record" && onSplit) { const t = e.target; if (t.closest && (t.closest("button") || t.closest("input"))) return; onSplit(ab); } };
+  const handleTap = e => { if (isRec && onSplit) { const t = e.target; if (t.closest && (t.closest("button") || t.closest("input"))) return; onSplit(ab); setSplitMsg(`Marked bar ${ab}`); if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); splitMsgTimer.current = setTimeout(() => setSplitMsg(null), 1200); } };
 
   const cR = 120, cC = 2 * Math.PI * cR; let prg = 0;
   if (isCI) prg = tsN > 0 ? (bei + 1) / tsN : 0;
   else if (isT && ps.remaining != null) prg = 1 - (ps.remaining / (sections[si]?.duration || 1));
   else if (!isT) { const bs = tl.filter(b => b.si === si); if (bs.length) { const t = bs.length, c = ab - bs[0].ab, bp = bei / Math.max(1, tsN); prg = (c + bp) / t; } }
   const sDo = cC - (prg * cC);
+  const showNav = !isP;
 
   return (
-    <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 4px ${borderColor}, inset 0 0 30px ${borderColor}44` : undefined }}>
+    <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 4px ${borderColor}, inset 0 0 30px ${borderColor}44` : undefined, transition: splitMsg ? "box-shadow 0.1s" : undefined }}>
       {showF && flash && <div style={{ position: "absolute", inset: 0, background: fc, opacity: fo, transition: "opacity 0.05s", pointerEvents: "none" }} />}
+      {splitMsg && <div style={{ position: "absolute", inset: 0, background: C.record, opacity: 0.15, pointerEvents: "none", transition: "opacity 0.3s" }} />}
       <div style={{ position: "absolute", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", zIndex: 2 }}>
-        <button onClick={onMute} title={muted ? "Unmute" : "Mute"} style={tS}>{muted ? I.volOff(18) : I.volOn(18)}</button>
+        <button onClick={onMute} data-tip-b={muted ? "Unmute" : "Mute"} style={tS}>{muted ? I.volOff(18) : I.volOn(18)}</button>
         <div style={{ display: "flex", gap: 8 }}>
-          {mode === "record" && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.record, display: "flex", alignItems: "center", gap: 4, animation: "pulse 2s infinite" }}>{I.rec(12)} REC</div>}
+          {isRec && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.record, display: "flex", alignItems: "center", gap: 4, animation: "pulse 2s infinite" }}>{I.rec(12)} REC</div>}
           {mode === "practice" && ps.pctLabel && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.practice, fontWeight: 600 }}>{ps.pctLabel}</div>}
-          <button onClick={onExit} title="Exit" style={tS}>{I.x(18)}</button>
+          <button onClick={onExit} data-tip-b="Exit" style={tS}>{I.x(18)}</button>
         </div>
       </div>
       <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "min(280px, 60vh)", height: "min(280px, 60vh)", marginBottom: 16 }}>
@@ -386,24 +409,25 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
           {isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
         </div>
       </div>
+      {splitMsg && <div style={{ fontSize: 14, color: C.record, fontWeight: 600, position: "relative", zIndex: 1, marginBottom: 8 }}>{splitMsg}</div>}
       {!isCI && <div style={{ fontSize: 12, color: C.textMuted, marginTop: 4, position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
         <div>{si + 1}/{sections.length}{!isT && ps.tempo ? ` · ${Math.round(ps.tempo)}` : ""}</div>
         {upN && <div style={{ color: C.downbeat, fontSize: 14, fontWeight: 600, animation: "pulse 2s infinite" }}>Up Next: {upN}</div>}
       </div>}
       {showD && !isT && !isCI && <div style={{ display: "flex", gap: 8, marginTop: 24, position: "relative", zIndex: 1, flexWrap: "wrap", justifyContent: "center", maxWidth: 280, padding: "0 16px" }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />; })}</div>}
       {showD && isT && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, marginTop: 24, position: "relative", zIndex: 1, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, transition: "all 0.06s", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent" }} />; })}</div>}
-      {mode === "record" && <div style={{ marginTop: 20, fontSize: 12, color: C.record, fontFamily: "'Outfit',sans-serif", position: "relative", zIndex: 1, opacity: 0.7 }}>Tap screen to mark section</div>}
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: mode === "record" ? 16 : 36, position: "relative", zIndex: 1 }}>
-        <button onClick={onPrevSec} title="Previous" style={nv}>{I.chevL(18)}</button>
+      {isRec && isP && <div style={{ marginTop: 20, fontSize: 12, color: C.record, fontFamily: "'Outfit',sans-serif", position: "relative", zIndex: 1, opacity: 0.7 }}>Tap anywhere to mark section</div>}
+      {showNav && <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 36, position: "relative", zIndex: 1 }}>
+        <button onClick={onPrevSec} data-tip="Previous" style={nv}>{I.chevL(18)}</button>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <input type="text" inputMode="numeric" value={goBar} onChange={e => setGoBar(e.target.value)} placeholder="Bar" style={{ ...nI, width: 64, fontSize: 14 }} onKeyDown={e => { if (e.key === "Enter") { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); setGoBar(""); } } }} />
+          <input type="text" inputMode="numeric" value={goBar} onChange={e => setGoBar(e.target.value)} placeholder={isRec ? "Start from bar" : "Bar"} style={{ ...nI, width: isRec ? 110 : 64, fontSize: 14 }} onKeyDown={e => { if (e.key === "Enter") { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); setGoBar(""); } } }} />
           <button onClick={() => { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); setGoBar(""); } }} style={{ ...nv, fontSize: 12, padding: "8px 10px" }}>GO</button>
         </div>
-        <button onClick={onNextSec} title="Next" style={nv}>{I.chevR(18)}</button>
-      </div>
+        <button onClick={onNextSec} data-tip="Next" style={nv}>{I.chevR(18)}</button>
+      </div>}
       <div style={{ display: "flex", gap: 16, marginTop: 24, position: "relative", zIndex: 1, alignItems: "center" }}>
-        <button onClick={onRestart} title="Restart" style={tS}>{I.restart(18)}</button>
-        <button onClick={isP ? onPause : onResume} title={isP ? "Pause" : "Play"} style={tB}>{isP ? I.pause(22) : I.play(22)}</button>
+        <button onClick={onRestart} data-tip="Restart" style={tS}>{I.restart(18)}</button>
+        <button onClick={isP ? onPause : onResume} data-tip={isP ? "Pause" : "Play"} style={tB}>{isP ? I.pause(22) : I.play(22)}</button>
         {mode === "normal" && onTapTempo ? <button onClick={onTapTempo} style={tS}><span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace" }}>TAP</span></button> : <div style={{ width: 44 }} />}
       </div>
     </div>);
@@ -414,14 +438,14 @@ const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.bor
 
 // ============ SETTINGS / SAVE / LIBRARY ============
 function SetP({ settings: s, onChange, onClose }) {
-  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} title="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
     <SR l="Mode">{["basic", "default", "advanced"].map(v => <button key={v} onClick={() => u("appMode", v)} style={{ ...oB(s.appMode === v), textTransform: "capitalize" }}>{v}</button>)}</SR>
-    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●"], ["dots+flash", "● ◻"], ["flash", "◻"]].map(([v, l]) => <button key={v} onClick={() => u("visualMode", v)} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR></div></div>);
+    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR></div></div>);
 }
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved }) {
   const [t, sT] = useState(""), [c, sC] = useState(""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); p.push({ id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button onClick={onClose} title="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
     <input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
     <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 15 }} />
     <button onClick={go} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button>
@@ -459,66 +483,53 @@ function LibP({ onLoad, onClose }) {
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Library</div><div style={{ display: "flex", gap: 6 }}>
       <button onClick={importFile} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, padding: "4px 8px", cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Import</button>
       <button onClick={exportAll} disabled={p.length === 0} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: p.length > 0 ? C.textMuted : C.border, padding: "4px 8px", cursor: p.length > 0 ? "pointer" : "default", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Export</button>
-      <button onClick={onClose} title="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button>
+      <button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button>
     </div></div>
     <div style={{ position: "relative", marginBottom: 12 }}>
       <input value={s} onChange={e => sS(e.target.value)} placeholder="Search..." style={{ ...nI, width: "100%", textAlign: "left", padding: "0 36px", fontSize: 14 }} />
       <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
       {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
     </div>
-    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "40px 20px" }}>{p.length === 0 ? "No saved pieces yet" : "No results"}</div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text }}>{x.title}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} title="Delete" style={{ background: "none", border: "none", color: C.danger + "88", cursor: "pointer", padding: 4, display: "flex" }}>{I.trash(14)}</button></div>))}</div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "40px 20px" }}>{p.length === 0 ? "No saved pieces yet" : "No results"}</div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text }}>{x.title}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip="Delete" style={{ background: "none", border: "none", color: C.danger + "88", cursor: "pointer", padding: 4, display: "flex" }}>{I.trash(14)}</button></div>))}</div>
   </div></div>);
 }
 
 // ============ PRACTICE SETUP MODAL ============
 function PracSetup({ sections, onStart, onClose }) {
-  const hasProfile = sections.length > 0 && sections.some(s => s.type === "metered");
-  const [mode, setMode] = useState(hasProfile ? "profile" : "standalone");
-  const [tsN, setTsN] = useState(4); const [tsD, setTsD] = useState(4); const [bu, setBu] = useState("q"); const [dot, setDot] = useState(false);
-  const [bars, setBars] = useState(4); const [startT, setStartT] = useState(80); const [targetT, setTargetT] = useState(120);
-  const [inc, setInc] = useState(5); const [reps, setReps] = useState(2);
-  const [pct, setPct] = useState(70); const [pctInc, setPctInc] = useState(5); const [pctReps, setPctReps] = useState(2);
+  const refSec = sections.find(s => s.type === "metered");
+  const refTempo = refSec?.tempo || 120;
+  const [startBpm, setStartBpm] = useState(Math.round(refTempo * 0.7));
+  const [inc, setInc] = useState(5);
+  const [reps, setReps] = useState(2);
+  const pct = Math.round((startBpm / refTempo) * 100);
   const doStart = () => {
-    if (mode === "standalone") {
-      const sec = { ...mkM(), tsNum: tsN, tsDen: tsD, beatUnit: bu, dotted: dot, bars, grouping: sG(tsN, tsD) };
-      const steps = []; for (let t = startT; t <= targetT; t += inc) { for (let r = 0; r < reps; r++)steps.push({ ...sec, id: Date.now() + Math.random(), tempo: Math.min(t, targetT) }); }
-      onStart(steps, null);
-    } else {
-      onStart(null, { startPct: pct, targetPct: 100, pctInc, pctReps });
-    }
+    const startPct = Math.max(10, Math.min(100, pct));
+    const pctInc = Math.max(1, Math.round((inc / refTempo) * 100));
+    onStart(null, { startPct, targetPct: 100, pctInc, pctReps: reps });
     onClose();
   };
   return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
     <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} Practice Mode</div><button onClick={onClose} title="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
-      {hasProfile && <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-        <button onClick={() => setMode("profile")} style={{ ...oB(mode === "profile"), borderColor: mode === "profile" ? C.practice : C.border, color: mode === "profile" ? C.practice : C.textMuted, background: mode === "profile" ? C.practice + "15" : "transparent", flex: 1, textAlign: "center", display: "flex", justifyContent: "center" }}>Profile</button>
-        <button onClick={() => setMode("standalone")} style={{ ...oB(mode === "standalone"), borderColor: mode === "standalone" ? C.practice : C.border, color: mode === "standalone" ? C.practice : C.textMuted, background: mode === "standalone" ? C.practice + "15" : "transparent", flex: 1, textAlign: "center", display: "flex", justifyContent: "center" }}>Standalone</button>
-      </div>}
-      {mode === "standalone" ? (<>
-        <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <NI value={tsN} onChange={setTsN} min={1} max={32} style={{ width: 48, height: 42, fontSize: 20, fontWeight: 700 }} />
-            <div style={{ height: 1, width: 36, background: C.textMuted }} />
-            <NI value={tsD} onChange={v => setTsD(v)} min={1} max={32} validate={v => [1, 2, 4, 8, 16, 32].includes(v)} style={{ width: 48, height: 42, fontSize: 20, fontWeight: 700 }} />
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
-            <BUP beatUnit={bu} dotted={dot} onSelect={(id, d) => { setBu(id); setDot(d); }} />
-          </div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} Practice Mode</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <Row label="Start">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Stp value={startBpm} onChange={setStartBpm} min={10} max={refTempo} />
+          <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
+          <span style={{ color: C.textMuted + "88", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{pct}%</span>
         </div>
-        <Row label="Bars"><Stp value={bars} onChange={setBars} min={1} max={32} /></Row>
-        <Row label="Start"><Stp value={startT} onChange={setStartT} min={10} max={400} /></Row>
-        <Row label="Target"><Stp value={targetT} onChange={setTargetT} min={10} max={400} /></Row>
-        <Row label="+ BPM"><Stp value={inc} onChange={setInc} min={1} max={50} /></Row>
-        <Row label="Repeats"><Stp value={reps} onChange={setReps} min={1} max={20} /></Row>
-      </>) : (<>
-        <Row label="Start %"><Stp value={pct} onChange={setPct} min={10} max={100} /></Row>
-        <Row label="+ %"><Stp value={pctInc} onChange={setPctInc} min={1} max={25} /></Row>
-        <Row label="Repeats"><Stp value={pctReps} onChange={setPctReps} min={1} max={20} /></Row>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace", marginBottom: 14, marginLeft: 82 }}>
-          {Math.ceil((100 - pct) / pctInc) + 1} steps × {pctReps} loops
+      </Row>
+      <Row label="Target">
+        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 16, color: C.text }}>{refTempo}</span>
+        <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
+        <span style={{ color: C.textMuted + "88", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>100%</span>
+      </Row>
+      <Row label="Increment">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Stp value={inc} onChange={setInc} min={1} max={50} />
+          <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
         </div>
-      </>)}
+      </Row>
+      <Row label="Repeats"><Stp value={reps} onChange={setReps} min={1} max={20} /></Row>
       <div style={{ marginTop: 18 }}>
         <button onClick={doStart} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: C.practice, color: "#000", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Start</button>
       </div>
@@ -549,6 +560,7 @@ export default function Tempus() {
 
   const [undoToast, setUndoToast] = useState(null);
   const undoTimer = useRef(null);
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
   const [dragIdx, setDragIdx] = useState(null);
   const [dropIdx, setDropIdx] = useState(null);
 
@@ -578,13 +590,13 @@ export default function Tempus() {
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if (e.code === "Space") { e.preventDefault(); if (isP) exitPlay(); else go(0); }
+      if (e.code === "Space") { e.preventDefault(); if (isP) { met.stop(); setIsP(false); } else if (ps) { const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } } else { go(0); } }
       else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); }
       else if (isP && e.code === "ArrowLeft") jumpSec(-1);
       else if (isP && e.code === "ArrowRight") jumpSec(1);
     };
     window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
-  }, [isP, exitPlay, go, jumpSec]);
+  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted]);
 
   const lastSplitTime = useRef(0);
   const lastSplitBar = useRef(0);
@@ -616,26 +628,31 @@ export default function Tempus() {
   }, [mode]);
 
   // Practice mode start
-  const startPractice = useCallback((standaloneSecs, profileOpts) => {
-    if (standaloneSecs) {
-      setPracSections(standaloneSecs); setPracStep(standaloneSecs[0]?.tempo || 0); setMode("practice");
-      setPracPending(true);
-    } else if (profileOpts) {
-      const { startPct, targetPct, pctInc, pctReps } = profileOpts;
-      let allSecs = [];
-      for (let p = startPct; p <= targetPct; p += pctInc) {
-        for (let r = 0; r < pctReps; r++) {
-          allSecs = allSecs.concat(scaleSections(sections, Math.min(p, targetPct)));
-        }
+  const startPractice = useCallback((_, profileOpts) => {
+    if (!profileOpts) return;
+    const { startPct, targetPct, pctInc, pctReps } = profileOpts;
+    let allSecs = [];
+    for (let p = startPct; p <= targetPct; p += pctInc) {
+      for (let r = 0; r < pctReps; r++) {
+        allSecs = allSecs.concat(scaleSections(sections, Math.min(p, targetPct)));
       }
-      setPracSections(allSecs); setPracStep(startPct); setMode("practice");
-      setPracPending(true);
     }
+    setPracSections(allSecs); setPracStep(startPct); setMode("practice");
+    setPracPending(true);
   }, [sections, go]);
 
   const addSec = () => { const ns = mkM(); if (sections.length > 0) { const l = sections[sections.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } } setSections(p => [...p, ns]); setEditId(ns.id); };
   const moveSec = (i, d) => { setSections(p => { const a = [...p]; if (i + d >= 0 && i + d < a.length) [a[i], a[i + d]] = [a[i + d], a[i]]; return a; }); };
   const editSec = sections.find(s => s.id === editId);
+
+  const handleClear = () => {
+    if (sections.length <= 1 && sections[0]?.tempo === 120 && sections[0]?.tsNum === 4) return;
+    const backup = [...sections];
+    setSections([mkM()]); setEditId(null);
+    setUndoToast({ section: backup, index: -1 });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndoToast(null), 5000);
+  };
 
   const handleDelete = id => {
     if (sections.length <= 1) return;
@@ -649,7 +666,11 @@ export default function Tempus() {
   };
   const handleUndo = () => {
     if (!undoToast) return;
-    setSections(p => { const c = [...p]; c.splice(undoToast.index, 0, undoToast.section); return c; });
+    if (undoToast.index === -1 && Array.isArray(undoToast.section)) {
+      setSections(undoToast.section);
+    } else {
+      setSections(p => { const c = [...p]; c.splice(undoToast.index, 0, undoToast.section); return c; });
+    }
     setUndoToast(null); if (undoTimer.current) clearTimeout(undoTimer.current);
   };
 
@@ -675,7 +696,8 @@ export default function Tempus() {
       <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet" />
       <style>{`
-        *{box-sizing:border-box;margin:0;padding:0} html{touch-action:manipulation}
+        *{box-sizing:border-box;margin:0;padding:0} html{touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+        input,textarea{-webkit-user-select:auto;user-select:auto}
         input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0} input[type=number]{-moz-appearance:textfield}
         ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:2px}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
@@ -688,6 +710,12 @@ export default function Tempus() {
         .pump { transform: scale(1.05); }
         .btn-ripple { position: relative; }
         .btn-ripple::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; z-index: -1; animation: ripple 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        [data-tip], [data-tip-b] { position: relative; }
+        [data-tip]::after, [data-tip-b]::after { position: absolute; left: 50%; transform: translateX(-50%); background: ${C.surface}; color: ${C.text}; font-size: 11px; font-family: 'Outfit',sans-serif; padding: 4px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.1s; border: 1px solid ${C.border}; z-index: 999; }
+        [data-tip]::after { content: attr(data-tip); bottom: calc(100% + 6px); }
+        [data-tip-b]::after { content: attr(data-tip-b); top: calc(100% + 8px); }
+        [data-tip]:hover::after, [data-tip-b]:hover::after { opacity: 1; }
+        @media (pointer: coarse) { [data-tip]::after, [data-tip-b]::after { display: none; } }
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
         .modal-bg { animation: modalFadeIn 0.2s ease-out forwards; }
@@ -699,9 +727,10 @@ export default function Tempus() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
         <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3, color: C.text }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {settings.appMode !== "basic" && <button onClick={() => setShowLib(true)} title="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
-          {settings.appMode !== "basic" && <button onClick={() => setShowSave(true)} title="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
-          <button onClick={() => setShowSet(true)} title="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
+          <button onClick={handleClear} data-tip-b="New" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.fileNew(18)}</button>
+          {settings.appMode !== "basic" && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
+          <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
         </div>
       </div>
 
@@ -718,9 +747,9 @@ export default function Tempus() {
       {/* Bottom buttons: Play / Record / Practice */}
       <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
         <div className="glass-pill" style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
-          {settings.appMode !== "basic" && <button onClick={() => { setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} title="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>}
-          <button className="btn-ripple" onClick={() => { setMode("normal"); go(0); }} disabled={!sections.length} title="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}` }}>{I.play(24)}</button>
-          {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} title="Practice" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}` }}>{I.target(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => { setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>}
+          <button className="btn-ripple" onClick={() => { setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}` }}>{I.play(24)}</button>
+          {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} data-tip="Practice" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}` }}>{I.target(18)}</button>}
         </div>
       </div>
 
@@ -731,7 +760,7 @@ export default function Tempus() {
       {showLib && <LibP onLoad={s => setSections(s)} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
       {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
-        <span style={{ fontSize: 13, color: C.text }}>Section deleted</span>
+        <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
         <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
       </div>}
     </div>
