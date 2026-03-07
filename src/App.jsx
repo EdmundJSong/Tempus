@@ -254,6 +254,11 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
   // Grouping presets
   const gPresets = useMemo(() => { const n = s.tsNum, d = s.tsDen, p = []; if (n <= 6) p.push(Array(n).fill(1).join("+")); if (n > 1 && n % 2 === 0) p.push(Array(n / 2).fill(2).join("+")); if (n >= 6 && n % 3 === 0) p.push(Array(n / 3).fill(3).join("+")); if (n === 5) { p.push("2+3", "3+2"); } if (n === 7) { p.push("2+2+3", "3+2+2", "2+3+2"); } if (n === 8 && d >= 8) { p.push("3+3+2", "3+2+3"); } return [...new Set(p)]; }, [s.tsNum, s.tsDen]);
 
+  useEffect(() => {
+    const hk = e => { if (e.key === "Enter") { e.preventDefault(); if (gV) { onSave(s); onClose(); } } };
+    window.addEventListener("keydown", hk); return () => window.removeEventListener("keydown", hk);
+  }, [s, gV, onSave, onClose]);
+
   return (
     <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
@@ -348,20 +353,30 @@ function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove,
   const isT = s.type === "timed";
   const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
   const [revealed, setRevealed] = useState(false);
+  const [showReorder, setShowReorder] = useState(false);
   const [swX, setSwX] = useState(0);
   const swRef = useRef({ startX: 0, swiping: false });
   const onTouchStart = e => { if (e.target.closest && e.target.closest("button")) return; swRef.current = { startX: e.touches[0].clientX, swiping: true }; };
   const onTouchMove = e => { if (!swRef.current.swiping) return; const dx = e.touches[0].clientX - swRef.current.startX; if (revealed) { setSwX(Math.min(0, Math.max(-80, dx - 80))); } else { setSwX(Math.min(0, dx)); } };
   const onTouchEnd = () => { if (!swRef.current.swiping) return; swRef.current.swiping = false; if (swX < -40) { setSwX(-80); setRevealed(true); } else { setSwX(0); setRevealed(false); } };
-  const handleCardClick = () => { if (revealed) { setSwX(0); setRevealed(false); } else { onClick(); } };
+  const handleCardClick = () => { if (revealed) { setSwX(0); setRevealed(false); } else if (showReorder) { setShowReorder(false); } else { onClick(); } };
   const handleDelete = e => { e.stopPropagation(); if (onDelete) onDelete(s.id); };
   return (<div style={{ position: "relative", overflow: "hidden", borderRadius: 10 }}>
     {(revealed || swX < 0) && <div onClick={handleDelete} data-tip="Delete" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 80, background: C.danger, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "0 10px 10px 0", cursor: "pointer", color: "#fff" }}>{I.trash(20)}</div>}
     <div className="sec-card" draggable={!isTouch} onDragStart={!isTouch && onDragStart ? e => onDragStart(e, i) : undefined} onDragEnter={!isTouch && onDragEnter ? e => onDragEnter(e, i) : undefined} onDragOver={!isTouch ? onDragOver : undefined} onDragEnd={!isTouch ? onDragEnd : undefined} onDrop={!isTouch && onDrop ? e => onDrop(e, i) : undefined} onClick={handleCardClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.surface, borderRadius: 10, padding: "12px 14px", border: `1px solid ${dropIdx === i ? C.accent : (s.capturedDuration ? C.record + "44" : C.border)}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, transform: `translateX(${swX}px)`, transition: swRef.current.swiping ? "none" : "transform 0.3s ease", position: "relative", zIndex: 1, opacity: dragIdx === i ? 0.5 : 1 }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 24, alignItems: "center" }}>
-        <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} data-tip="Move Up" style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, textAlign: "center", lineHeight: 1 }}>{i + 1}</div>
-        <button disabled={i === t - 1} onClick={e => { e.stopPropagation(); onMove(1); }} data-tip="Move Down" style={{ background: "none", border: "none", color: i === t - 1 ? C.border : C.textMuted, cursor: i === t - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
+        {isTouch && !showReorder ? (
+          <button onClick={e => { e.stopPropagation(); setShowReorder(true); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+            <span style={{ fontSize: 14, lineHeight: 1, letterSpacing: 2 }}>☰</span>
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted, lineHeight: 1 }}>{i + 1}</span>
+          </button>
+        ) : (
+          <>
+            <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} data-tip="Move Up" style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, textAlign: "center", lineHeight: 1 }}>{i + 1}</div>
+            <button disabled={i === t - 1} onClick={e => { e.stopPropagation(); onMove(1); }} data-tip="Move Down" style={{ background: "none", border: "none", color: i === t - 1 ? C.border : C.textMuted, cursor: i === t - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
+          </>
+        )}
       </div>
       {isT ? (<>{I.clock(16)}<div style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 15, color: C.text }}>{s.duration}s</div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{pM(s.markers).length} cue{pM(s.markers).length !== 1 ? "s" : ""}</div></>) : (<>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center" }}><span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted, margin: "1px 0" }} /><span>{s.tsDen}</span></div>
@@ -422,7 +437,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
             <circle cx={140} cy={140} r={cR} fill="none" stroke={borderColor || C.downbeat} strokeWidth={8} strokeDasharray={cC} strokeDashoffset={sDo} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.1s linear" }} />
           </svg>
           <div style={{ fontSize: 20, color: C.textMuted, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, position: "relative", zIndex: 1, marginBottom: 8 }}>
-            {isEnded ? "" : isCI ? <span>Count-in · Bar {ab}</span> : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} FREE</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
+            {isEnded ? "" : isCI ? <><span style={{ fontSize: 14 }}>Count-in</span><span style={{ fontSize: 14, color: C.downbeat, fontWeight: 600 }}>Bar {ab}</span></> : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} FREE</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
           </div>
           <div className={`hdr-text ${ps.flash && ps.beatType === 0 ? 'pump' : ''}`} style={{ fontFamily: "'Bebas Neue','DM Mono',monospace", fontSize: isEnded ? 80 : 110, fontWeight: 400, color: isEnded ? C.downbeat : C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
             {isEnded ? "END" : isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
@@ -589,7 +604,8 @@ function PracSetup({ sections, onStart, onClose }) {
 
 // ============ MAIN ============
 export default function Tempus() {
-  const [sections, setSections] = useState([mkM()]);
+  const [sections, setSections] = useState(() => { try { const saved = _getLS("tempus_sections"); if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length > 0) return parsed; } } catch {} return [mkM()]; });
+  useEffect(() => { _setLS("tempus_sections", JSON.stringify(sections)); }, [sections]);
   const [editId, setEditId] = useState(null);
   const [showSet, setShowSet] = useState(false);
   const [showSave, setShowSave] = useState(false);
