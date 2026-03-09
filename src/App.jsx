@@ -62,7 +62,7 @@ function NoteSVG({ type, dotted, size = 24 }) {
 }
 
 // ============ UTILITIES ============
-function gCD(tempo, bu, dot, den) { const b = BU.find(x => x.id === bu); if (!b) return 0.5; let q = b.q; if (dot) q *= 1.5; return (60 / tempo) * ((D2Q[den] || 1) / q); }
+function gCD(tempo, bu, dot, den) { const t = Math.max(1, tempo || 120); const b = BU.find(x => x.id === bu); if (!b) return 0.5; let q = b.q; if (dot) q *= 1.5; return (60 / t) * ((D2Q[den] || 1) / q); }
 function pG(s) { if (!s || !s.trim()) return [1]; return s.split("+").map(x => parseInt(x.trim())).filter(n => !isNaN(n) && n > 0); }
 function sG(n, d) { if (d >= 8 && n % 3 === 0 && n > 3) return Array(n / 3).fill(3).join("+"); return Array(n).fill(1).join("+"); }
 function gBT(g) { const t = []; g.forEach((v, gi) => { for (let i = 0; i < v; i++)t.push(gi === 0 && i === 0 ? 0 : i === 0 ? 1 : 2); }); return t; }
@@ -135,7 +135,8 @@ function useMetronome() {
   }, []);
   const sched = useCallback(() => {
     const ctx = actx.current; if (!ctx || !pl.current) return; const tl = tlR.current;
-    while (nb.current < ctx.currentTime + 0.12) {
+    let _guard = 0;
+    while (nb.current < ctx.currentTime + 0.12 && _guard++ < 200) {
       if (ciL.current > 0) { const bar = tl[bi.current]; if (!bar || bar.isT) { ciL.current = 0; continue; } const ciCd = bar.cd ?? (bar.perBeatCd?.[0]?.cd ?? 0.5); clk(ctx, nb.current, ciL.current % bar.cpb === 0 ? 0 : 2); if (cbR.current) cbR.current({ type: "countIn", beatsLeft: ciL.current, beatInBar: bar.cpb - ((ciL.current - 1) % bar.cpb), totalBeats: bar.cpb }); nb.current += ciCd; ciL.current--; continue; }
       const bar = tl[bi.current]; if (!bar) { if (cbR.current) cbR.current({ type: "ended" }); stop(); return; }
       if (bar.isT) {
@@ -160,7 +161,7 @@ function useMetronome() {
       }
       const pbc = bar.perBeatCd;
       const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
-      const beatCd = pbc ? (pbc[bei.current]?.cd ?? pbc[0]?.cd ?? 0.5) : (bar.cd ?? 0.5);
+      const beatCd = Math.max(0.01, pbc ? (pbc[bei.current]?.cd ?? pbc[0]?.cd ?? 0.5) : (bar.cd ?? 0.5));
       const beatTempo = pbc ? pbc[bei.current]?.cd ? Math.round(60 / (pbc[bei.current].cd / ((D2Q[bar.tsD] || 1) / (BU.find(x => x.id === "q")?.q || 1)))) : bar.tempo : bar.tempo;
       if (cbR.current) cbR.current({ type: "beat", barIdx: bi.current, beatIdx: bei.current, bt, ab: bar.ab, tsN: bar.tsN, tsD: bar.tsD, tempo: beatTempo, si: bar.si });
       nb.current += beatCd;
@@ -408,7 +409,8 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const splitMsgTimer = useRef(null);
   const mountReady = useRef(false);
   useEffect(() => { const t = setTimeout(() => { mountReady.current = true; }, 600); return () => clearTimeout(t); }, []);
-  const guardedAction = fn => () => { if (!mountReady.current) return; fn(); };
+  const lastAction = useRef(0);
+  const guardedAction = fn => () => { const now = Date.now(); if (!mountReady.current || now - lastAction.current < 250) return; lastAction.current = now; fn(); };
   useEffect(() => () => { if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); }, []);
   const showF = vis === "flash" || vis === "dots+flash", showD = vis === "dots" || vis === "dots+flash";
   const borderColor = mode === "record" ? C.record : mode === "practice" ? C.practice : null;
