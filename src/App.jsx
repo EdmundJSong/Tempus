@@ -38,7 +38,7 @@ const I = {
 const BU = [{ id: "w", q: 4 }, { id: "h", q: 2 }, { id: "q", q: 1 }, { id: "e", q: 0.5 }, { id: "16", q: 0.25 }, { id: "32", q: 0.125 }];
 const D2Q = { 1: 4, 2: 2, 4: 1, 8: 0.5, 16: 0.25, 32: 0.125 };
 const C = { bg: "#07070a", surface: "#111116", surfaceHover: "#1a1a22", border: "#25252e", text: "#eeeef0", textMuted: "#848492", downbeat: "#f0a030", accent: "#8b7cf6", sub: "#3a3a45", danger: "#ef4444", record: "#ef4444", practice: "#22c55e", glowDownbeat: "rgba(240, 160, 48, 0.4)", glowPractice: "rgba(34, 197, 94, 0.4)", glowRecord: "rgba(239, 68, 68, 0.4)" };
-const mkM = () => ({ id: Date.now() + Math.random(), type: "metered", tsNum: 4, tsDen: 4, beatUnit: "q", dotted: false, tempo: 120, bars: 4, grouping: "1+1+1+1", curve: "constant", endTempo: 120, loop: false, expressive: false, beatMap: null });
+const mkM = () => ({ id: Date.now() + Math.random(), type: "metered", tsNum: 4, tsDen: 4, beatUnit: "q", dotted: false, tempo: 120, bars: 8, grouping: "1+1+1+1", curve: "constant", endTempo: 120, loop: false, expressive: false, beatMap: null });
 const mkT = () => ({ id: Date.now() + Math.random(), type: "timed", duration: 10, markers: "" });
 const SK = "tempus_profiles";
 const _memStore = {};
@@ -236,7 +236,7 @@ function TapBtn({ onTap, size = "sm" }) {
 function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip="Beat Unit" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
 
 // ============ SECTION EDITOR ============
-function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
+function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew = false, editIndex = 0 }) {
   const [s, setS] = useState({ ...section }); const upd = (k, v) => setS(p => ({ ...p, [k]: v })); const isMet = s.type === "metered";
   const { tap: tapTempo } = useTapTempo(bpm => upd("tempo", bpm));
   const isAdv = appMode === "advanced", isBas = appMode === "basic";
@@ -262,7 +262,10 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
   return (
     <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
-        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{isNew ? "New Section" : `Edit Section ${editIndex}`}</div>
+          <button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+        </div>
         {/* Type toggle - hidden in basic */}
         {!isBas && <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
           <button onClick={() => swT("metered")} style={{ ...oB(isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.music(14)} Metered</button>
@@ -342,50 +345,59 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default" }) {
           {onDelete && <button onClick={() => { onDelete(s.id); onClose(); }} data-tip="Delete" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`, background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.trash(16)}</button>}
           <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }} data-tip="Duplicate" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.copy(16)}</button>
           <div style={{ flex: 1 }} />
-          <button onClick={() => { if (gV) { onSave(s); onClose(); } }} style={{ flex: 0, padding: "12px 24px", borderRadius: 8, border: "none", background: gV ? C.downbeat : C.sub, color: gV ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: gV ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Add</button>
+          <button onClick={() => { if (gV) { onSave(s); onClose(); } }} style={{ flex: 0, padding: "12px 24px", borderRadius: 8, border: "none", background: gV ? C.downbeat : C.sub, color: gV ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: gV ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>{isNew ? "Add" : "Save"}</button>
         </div>
       </div>
     </div>);
 }
 
 // ============ SECTION CARD ============
-function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx }) {
+const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx, onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx }, ref) {
   const isT = s.type === "timed";
   const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
   const [revealed, setRevealed] = useState(false);
   const [showReorder, setShowReorder] = useState(false);
   const [swX, setSwX] = useState(0);
   const swRef = useRef({ startX: 0, swiping: false });
-  const onTouchStart = e => { if (e.target.closest && e.target.closest("button")) return; swRef.current = { startX: e.touches[0].clientX, swiping: true }; };
-  const onTouchMove = e => { if (!swRef.current.swiping) return; const dx = e.touches[0].clientX - swRef.current.startX; if (revealed) { setSwX(Math.min(0, Math.max(-80, dx - 80))); } else { setSwX(Math.min(0, dx)); } };
-  const onTouchEnd = () => { if (!swRef.current.swiping) return; swRef.current.swiping = false; if (swX < -40) { setSwX(-80); setRevealed(true); } else { setSwX(0); setRevealed(false); } };
-  const handleCardClick = () => { if (revealed) { setSwX(0); setRevealed(false); } else if (showReorder) { setShowReorder(false); } else { onClick(); } };
+  const isDragged = tDrag && tDrag.idx === i;
+  const onTouchStart = e => { if (e.target.closest && e.target.closest("button")) return; if (tDrag) return; swRef.current = { startX: e.touches[0].clientX, swiping: true }; };
+  const onTouchMove = e => { if (tDrag) return; if (!swRef.current.swiping) return; const dx = e.touches[0].clientX - swRef.current.startX; if (revealed) { setSwX(Math.min(0, Math.max(-80, dx - 80))); } else { setSwX(Math.min(0, dx)); } };
+  const onTouchEnd = () => { if (tDrag) return; if (!swRef.current.swiping) return; swRef.current.swiping = false; if (swX < -40) { setSwX(-80); setRevealed(true); } else { setSwX(0); setRevealed(false); } };
+  const handleCardClick = () => { if (tDrag) return; if (revealed) { setSwX(0); setRevealed(false); } else if (showReorder) { setShowReorder(false); } else { onClick(); } };
   const handleDelete = e => { e.stopPropagation(); if (onDelete) onDelete(s.id); };
-  return (<div style={{ position: "relative", overflow: "hidden", borderRadius: 10 }}>
+  // Calculate shift for non-dragged cards during touch drag
+  let shiftY = 0;
+  if (tDrag && !isDragged && tDropIdx !== null) {
+    const from = tDrag.idx, to = tDropIdx;
+    const cardH = tDrag.positions?.[tDrag.idx]?.height || 60;
+    if (from < to && i > from && i <= to) shiftY = -(cardH + 6);
+    else if (from > to && i < from && i >= to) shiftY = cardH + 6;
+  }
+  return (<div ref={ref} style={{ position: "relative", overflow: isDragged ? "visible" : "hidden", borderRadius: 10 }}>
     {(revealed || swX < 0) && <div onClick={handleDelete} data-tip="Delete" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 80, background: C.danger, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "0 10px 10px 0", cursor: "pointer", color: "#fff" }}>{I.trash(20)}</div>}
-    <div className="sec-card" draggable={!isTouch} onDragStart={!isTouch && onDragStart ? e => onDragStart(e, i) : undefined} onDragEnter={!isTouch && onDragEnter ? e => onDragEnter(e, i) : undefined} onDragOver={!isTouch ? onDragOver : undefined} onDragEnd={!isTouch ? onDragEnd : undefined} onDrop={!isTouch && onDrop ? e => onDrop(e, i) : undefined} onClick={handleCardClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.surface, borderRadius: 10, padding: "12px 14px", border: `1px solid ${dropIdx === i ? C.accent : (s.capturedDuration ? C.record + "44" : C.border)}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, transform: `translateX(${swX}px)`, transition: swRef.current.swiping ? "none" : "transform 0.3s ease", position: "relative", zIndex: 1, opacity: dragIdx === i ? 0.5 : 1 }}>
+    <div className="sec-card" draggable={!isTouch} onDragStart={!isTouch && onDragStart ? e => onDragStart(e, i) : undefined} onDragEnter={!isTouch && onDragEnter ? e => onDragEnter(e, i) : undefined} onDragOver={!isTouch ? onDragOver : undefined} onDragEnd={!isTouch ? onDragEnd : undefined} onDrop={!isTouch && onDrop ? e => onDrop(e, i) : undefined} onClick={handleCardClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.surface, borderRadius: 10, padding: "12px 14px", border: `1px solid ${(tDropIdx === i && tDrag && tDrag.idx !== i) ? C.accent : dropIdx === i ? C.accent : (s.capturedDuration ? C.record + "44" : C.border)}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, transform: isDragged ? `translateY(${tDrag.offsetY}px)` : `translateX(${swX}px) translateY(${shiftY}px)`, transition: isDragged ? "box-shadow 0.2s" : (swRef.current.swiping ? "none" : "transform 0.25s ease, border 0.15s"), position: "relative", zIndex: isDragged ? 10 : 1, opacity: dragIdx === i ? 0.5 : 1, boxShadow: isDragged ? "0 8px 30px rgba(0,0,0,0.5)" : undefined }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 24, alignItems: "center" }}>
         {isTouch && !showReorder ? (
-          <button onClick={e => { e.stopPropagation(); setShowReorder(true); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+          <button onTouchStart={e => { e.stopPropagation(); onGripTouchStart(i, e); }} onTouchEnd={e => { e.stopPropagation(); if (!tDrag) cancelTouchDrag(); }} onTouchMove={e => { if (!tDrag) cancelTouchDrag(); }} onClick={e => { e.stopPropagation(); if (!tDrag) setShowReorder(true); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex", flexDirection: "column", gap: 1, touchAction: "none" }}>
             <span style={{ fontSize: 14, lineHeight: 1, letterSpacing: 2 }}>☰</span>
             <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted, lineHeight: 1 }}>{i + 1}</span>
           </button>
         ) : (
           <>
-            <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} data-tip="Move Up" style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
+            <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} data-tip-b="Up" style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, textAlign: "center", lineHeight: 1 }}>{i + 1}</div>
-            <button disabled={i === t - 1} onClick={e => { e.stopPropagation(); onMove(1); }} data-tip="Move Down" style={{ background: "none", border: "none", color: i === t - 1 ? C.border : C.textMuted, cursor: i === t - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
+            <button disabled={i === t - 1} onClick={e => { e.stopPropagation(); onMove(1); }} data-tip-b="Down" style={{ background: "none", border: "none", color: i === t - 1 ? C.border : C.textMuted, cursor: i === t - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
           </>
         )}
       </div>
       {isT ? (<>{I.clock(16)}<div style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 15, color: C.text }}>{s.duration}s</div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{pM(s.markers).length} cue{pM(s.markers).length !== 1 ? "s" : ""}</div></>) : (<>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center" }}><span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted, margin: "1px 0" }} /><span>{s.tsDen}</span></div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center" }}><span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted, margin: "1px 0" }} /><span>{s.tsDen}</span><div style={{ fontSize: 9, color: C.textMuted, fontWeight: 400, marginTop: 3 }}>{s.grouping}</div></div>
         <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.text, flex: 1 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={16} /><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.textMuted }}>=</span><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 15 }}>{s.tempo}</span>{s.curve !== "constant" && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.accent, marginLeft: 4 }}>{s.curve === "accel" ? "→" : "←"}{s.endTempo}</span>}</div>
-        <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: s.loop ? C.downbeat : C.text }}>{s.loop ? "∞" : `${s.bars} bar${s.bars !== 1 ? "s" : ""}`}</div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{s.grouping}</div></div>
+        <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: s.loop ? C.downbeat : C.text }}>{s.loop ? "∞" : `${s.bars} bar${s.bars !== 1 ? "s" : ""}`}</div></div>
       </>)}
-      <button onClick={e => { e.stopPropagation(); onStartHere(); }} data-tip="Play From Here" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
+      <button onClick={e => { e.stopPropagation(); onStartHere(); }} data-tip-b="Play here" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
     </div></div>);
-}
+});
 
 // ============ PLAY VIEW ============
 function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, tapBpm, tapFlash, settings, onSettings }) {
@@ -503,14 +515,15 @@ const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border
 
 // ============ SETTINGS / SAVE / LIBRARY ============
 function SetP({ settings: s, onChange, onClose }) {
-  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
     <SR l="Mode">{["basic", "default", "advanced"].map(v => <button key={v} onClick={() => u("appMode", v)} style={{ ...oB(s.appMode === v), textTransform: "capitalize" }}>{v}</button>)}</SR>
+    <div style={{ fontSize: 11, color: C.textMuted, marginTop: -8, marginBottom: 14, marginLeft: 82, fontFamily: "'Outfit',sans-serif", lineHeight: 1.5 }}>{s.appMode === "basic" ? "Tempo, time signature, bars, and loop only" : s.appMode === "advanced" ? "Per-beat tempo mapping, fermata, grouping builder" : "Grouping, curves, record, practice, library"}</div>
     <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR></div></div>);
 }
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved }) {
   const [t, sT] = useState(""), [c, sC] = useState(""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); p.push({ id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
     <input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
     <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 15 }} />
     <button onClick={go} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button>
@@ -548,14 +561,14 @@ function LibP({ onLoad, onClose }) {
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Library</div><div style={{ display: "flex", gap: 6 }}>
       <button onClick={importFile} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, padding: "4px 8px", cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Import</button>
       <button onClick={exportAll} disabled={p.length === 0} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: p.length > 0 ? C.textMuted : C.border, padding: "4px 8px", cursor: p.length > 0 ? "pointer" : "default", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Export</button>
-      <button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button>
+      <button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
     </div></div>
     <div style={{ position: "relative", marginBottom: 12 }}>
       <input value={s} onChange={e => sS(e.target.value)} placeholder="Search..." style={{ ...nI, width: "100%", textAlign: "left", padding: "0 36px", fontSize: 14 }} />
       <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
       {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
     </div>
-    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}><div style={{ opacity: 0.2 }}>{I.folder(48)}</div><div>{p.length === 0 ? "No saved pieces yet" : "No results"}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text }}>{x.title}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip="Delete" style={{ background: "none", border: "none", color: C.danger + "99", cursor: "pointer", padding: 4, display: "flex" }}>{I.trash(14)}</button></div>))}</div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}><div style={{ opacity: 0.2 }}>{I.folder(48)}</div><div>{p.length === 0 ? "No saved pieces yet" : "No results"}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text }}>{x.title}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b="Delete" style={{ background: "none", border: "none", color: C.danger + "99", cursor: "pointer", padding: 4, display: "flex" }}>{I.trash(14)}</button></div>))}</div>
   </div></div>);
 }
 
@@ -575,7 +588,7 @@ function PracSetup({ sections, onStart, onClose }) {
   };
   return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
     <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} Practice Mode</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} Practice Mode</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
       <Row label="Start">
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Stp value={startBpm} onChange={setStartBpm} min={10} max={refTempo} />
@@ -607,6 +620,7 @@ export default function Tempus() {
   const [sections, setSections] = useState(() => { try { const saved = _getLS("tempus_sections"); if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length > 0) return parsed; } } catch {} return [mkM()]; });
   useEffect(() => { _setLS("tempus_sections", JSON.stringify(sections)); }, [sections]);
   const [editId, setEditId] = useState(null);
+  const [editIsNew, setEditIsNew] = useState(false);
   const [showSet, setShowSet] = useState(false);
   const [showSave, setShowSave] = useState(false);
   const [showLib, setShowLib] = useState(false);
@@ -629,6 +643,53 @@ export default function Tempus() {
   useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
   const [dragIdx, setDragIdx] = useState(null);
   const [dropIdx, setDropIdx] = useState(null);
+  // Touch drag reorder
+  const [tDrag, setTDrag] = useState(null); // { idx, startY, offsetY }
+  const [tDropIdx, setTDropIdx] = useState(null);
+  const cardRefs = useRef([]);
+  const tDragTimer = useRef(null);
+  const onGripTouchStart = useCallback((idx, e) => {
+    const touch = e.touches[0];
+    const startY = touch.clientY;
+    tDragTimer.current = setTimeout(() => {
+      if (navigator.vibrate) try { navigator.vibrate(20); } catch {}
+      // Measure all card positions
+      const positions = cardRefs.current.map(el => el ? el.getBoundingClientRect() : null);
+      setTDrag({ idx, startY, offsetY: 0, positions });
+      setTDropIdx(idx);
+    }, 300);
+  }, []);
+  useEffect(() => {
+    if (!tDrag) return;
+    const onMove = e => {
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      const offsetY = y - tDrag.startY;
+      setTDrag(prev => prev ? { ...prev, offsetY } : null);
+      // Calculate drop index from card positions
+      const positions = tDrag.positions;
+      let newDrop = tDrag.idx;
+      for (let i = 0; i < positions.length; i++) {
+        if (!positions[i]) continue;
+        const midY = positions[i].top + positions[i].height / 2;
+        if (y < midY) { newDrop = i; break; }
+        newDrop = i + 1;
+      }
+      newDrop = Math.max(0, Math.min(sections.length - 1, newDrop));
+      setTDropIdx(newDrop);
+    };
+    const onEnd = () => {
+      if (tDrag && tDropIdx !== null && tDrag.idx !== tDropIdx) {
+        setSections(p => { const c = [...p]; const [m] = c.splice(tDrag.idx, 1); c.splice(tDropIdx, 0, m); return c; });
+      }
+      setTDrag(null); setTDropIdx(null);
+    };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+    return () => { document.removeEventListener("touchmove", onMove); document.removeEventListener("touchend", onEnd); document.removeEventListener("touchcancel", onEnd); };
+  }, [tDrag, tDropIdx, sections.length]);
+  const cancelTouchDrag = useCallback(() => { if (tDragTimer.current) { clearTimeout(tDragTimer.current); tDragTimer.current = null; } }, []);
 
   const activeSections = pracSections || sections;
   const tl = useMemo(() => buildTL(activeSections), [activeSections]);
@@ -710,17 +771,21 @@ export default function Tempus() {
     setPracPending(true);
   }, [sections, go]);
 
-  const addSec = () => { const ns = mkM(); if (sections.length > 0) { const l = sections[sections.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } } setSections(p => [...p, ns]); setEditId(ns.id); };
+  const addSec = () => { const ns = mkM(); if (sections.length > 0) { const l = sections[sections.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } } setSections(p => [...p, ns]); setEditIsNew(true); setEditId(ns.id); };
   const moveSec = (i, d) => { setSections(p => { const a = [...p]; if (i + d >= 0 && i + d < a.length) [a[i], a[i + d]] = [a[i + d], a[i]]; return a; }); };
   const editSec = sections.find(s => s.id === editId);
 
+  const [confirmClear, setConfirmClear] = useState(false);
+  const confirmTimer = useRef(null);
   const handleClear = () => {
     if (sections.length <= 1 && sections[0]?.tempo === 120 && sections[0]?.tsNum === 4) return;
+    if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
+    setConfirmClear(false);
     const backup = [...sections];
     setSections([mkM()]); setEditId(null);
     setUndoToast({ section: backup, index: -1 });
     if (undoTimer.current) clearTimeout(undoTimer.current);
-    undoTimer.current = setTimeout(() => setUndoToast(null), 5000);
+    undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
   };
 
   const handleDelete = id => {
@@ -731,7 +796,7 @@ export default function Tempus() {
     setSections(p => p.filter(s => s.id !== id));
     setUndoToast({ section: sec, index: idx });
     if (undoTimer.current) clearTimeout(undoTimer.current);
-    undoTimer.current = setTimeout(() => setUndoToast(null), 5000);
+    undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
   };
   const handleUndo = () => {
     if (!undoToast) return;
@@ -801,7 +866,7 @@ export default function Tempus() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
         <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={handleClear} data-tip-b="New" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.fileNew(18)}</button>
+          <button onClick={handleClear} data-tip-b={confirmClear ? "Tap again" : "New"} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{confirmClear ? "Clear?" : I.fileNew(18)}</button>
           {settings.appMode !== "basic" && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
           {settings.appMode !== "basic" && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
           <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
@@ -814,7 +879,7 @@ export default function Tempus() {
       </div>
 
       <div style={{ padding: "8px 16px 120px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
-        {sections.map((sec, i) => <SecCard key={sec.id} section={sec} index={i} total={sections.length} onClick={() => setEditId(sec.id)} onStartHere={() => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={d => moveSec(i, d)} onDelete={sections.length > 1 ? handleDelete : null} onDragStart={handleDragStart} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} />)}
+        {sections.map((sec, i) => <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={() => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={() => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={d => moveSec(i, d)} onDelete={sections.length > 1 ? handleDelete : null} onDragStart={handleDragStart} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={onGripTouchStart} cancelTouchDrag={cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} />)}
         <button onClick={addSec} style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(20)}</button>
       </div>
 
@@ -828,7 +893,7 @@ export default function Tempus() {
       </div>
 
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={(barNum) => { met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} />}
-      {editSec && <SecEd section={editSec} appMode={settings.appMode} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
+      {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} />}
       {showLib && <LibP onLoad={s => setSections(s)} onClose={() => setShowLib(false)} />}
