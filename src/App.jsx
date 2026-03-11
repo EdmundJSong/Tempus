@@ -49,15 +49,17 @@ function svP(p) { _setLS(SK, JSON.stringify(p)); try { const sec = JSON.parse(_g
 
 // ============ FIREBASE SILENT BACKUP ============
 // TODO: Replace with your Firebase config
+let _env = {};
+try { _env = import.meta.env || {}; } catch {}
 const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyA9LAg1iywIxG1KEbrwNQhrpfqELK3SOeY",
-  authDomain: "tempus-acc0e.firebaseapp.com",
-  projectId: "tempus-acc0e",
-  storageBucket: "tempus-acc0e.firebasestorage.app",
-  messagingSenderId: "290765368525",
-  appId: "1:290765368525:web:cc481f657d9e7ae7e18d84"
+  apiKey: _env.VITE_FIREBASE_API_KEY || "YOUR_API_KEY",
+  authDomain: _env.VITE_FIREBASE_AUTH_DOMAIN || "tempus-acc0e.firebaseapp.com",
+  projectId: _env.VITE_FIREBASE_PROJECT_ID || "tempus-acc0e",
+  storageBucket: _env.VITE_FIREBASE_STORAGE_BUCKET || "tempus-acc0e.firebasestorage.app",
+  messagingSenderId: _env.VITE_FIREBASE_MESSAGING_SENDER_ID || "290765368525",
+  appId: _env.VITE_FIREBASE_APP_ID || "1:290765368525:web:cc481f657d9e7ae7e18d84"
 };
-const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
+const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY" && FIREBASE_CONFIG.apiKey !== "disabled";
 
 let _fb = null, _fbDb = null;
 async function fbInit() {
@@ -126,6 +128,8 @@ function sG(n, d) { if (d >= 8 && n % 3 === 0 && n > 3) return Array(n / 3).fill
 function gBT(g) { const t = []; g.forEach((v, gi) => { for (let i = 0; i < v; i++)t.push(gi === 0 && i === 0 ? 0 : i === 0 ? 1 : 2); }); return t; }
 function pM(s) { if (!s || !s.trim()) return []; return s.split(",").map(x => parseFloat(x.trim())).filter(n => !isNaN(n) && n >= 0).sort((a, b) => a - b); }
 function mkBeatMap(n, tempo) { return Array.from({ length: n }, () => ({ tempo, fermata: false, fermataHold: 0, fermataUnit: "beats" })); }
+
+function isSafeUrl(url) { try { const u = new URL(url); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } }
 
 function getEmbedUrl(url) {
   if (!url) return null;
@@ -269,8 +273,8 @@ function useMetronome() {
 }
 
 // ============ STYLES ============
-const nI = { width: 56, height: 44, background: C.surface, border: `1px solid ${C.border}`, color: C.text, textAlign: "center", fontSize: 18, borderRadius: 8, fontFamily: "'DM Mono',monospace", outline: "none", margin: "0 4px" };
-const sB = { width: 44, height: 44, background: C.surface, border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" };
+const nI = { width: 62, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.text, textAlign: "center", fontSize: 18, borderRadius: 8, fontFamily: "'DM Mono',monospace", outline: "none", margin: "0 6px" };
+const sB = { width: 48, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" };
 const oB = on => ({ padding: "8px 16px", borderRadius: 8, border: `1px solid ${on ? C.downbeat : C.border}`, background: on ? C.downbeat + "15" : "transparent", color: on ? C.downbeat : C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" });
 
 // ============ INPUTS ============
@@ -304,9 +308,9 @@ function useTapTempo(onChange) {
   return { tap, tapBpm, tapFlash };
 }
 
-function TapBtn({ onTap, size = "sm" }) {
+function TapBtn({ onTap, size = "sm", flash = false }) {
   const isSm = size === "sm";
-  return (<button onClick={onTap} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: isSm ? 8 : 10, padding: isSm ? "6px 10px" : "8px 14px", cursor: "pointer", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: isSm ? 11 : 13, display: "flex", alignItems: "center", justifyContent: "center", userSelect: "none" }}>TAP</button>);
+  return (<button onClick={onTap} style={{ background: flash ? C.downbeat : C.surface, border: `1px solid ${C.border}`, borderRadius: isSm ? 8 : 10, padding: isSm ? "8px 12px" : "10px 16px", cursor: "pointer", color: flash ? "#000" : C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: isSm ? 12 : 14, display: "flex", alignItems: "center", justifyContent: "center", userSelect: "none", transition: "background 0.1s ease, color 0.1s ease" }}>TAP</button>);
 }
 
 // ============ BEAT UNIT PICKER ============
@@ -315,7 +319,7 @@ function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(
 // ============ SECTION EDITOR ============
 function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew = false, editIndex = 0 }) {
   const [s, setS] = useState({ ...section }); const upd = (k, v) => setS(p => ({ ...p, [k]: v })); const isMet = s.type === "metered";
-  const { tap: tapTempo } = useTapTempo(bpm => upd("tempo", bpm));
+  const { tap: tapTempo, tapFlash: secTapFlash } = useTapTempo(bpm => upd("tempo", bpm));
   const isAdv = appMode === "advanced", isBas = appMode === "basic";
   // Auto-enable expressive in advanced mode
   useEffect(() => { if (isAdv && isMet && !s.expressive) upd("expressive", true); }, [isAdv, isMet]);
@@ -341,7 +345,7 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew 
       <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{isNew ? "New Section" : `Edit Section ${editIndex}`}</div>
-          <button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+          <button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button>
         </div>
         {/* Type toggle - hidden in basic */}
         {!isBas && <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
@@ -359,7 +363,7 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew 
               <BUP beatUnit={s.beatUnit} dotted={s.dotted} onSelect={(id, d) => setS(p => ({ ...p, beatUnit: id, dotted: d }))} />
               <span style={{ color: C.textMuted, fontSize: 20, fontFamily: "'DM Mono',monospace" }}>=</span>
               <Stp value={s.tempo} onChange={v => upd("tempo", v)} min={10} max={400} />
-              <TapBtn onTap={tapTempo} />
+              <TapBtn onTap={tapTempo} flash={secTapFlash} />
             </div>
           </div>
           {/* Bars + Loop */}
@@ -551,7 +555,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
         </div>
         {/* Record hint - reserved height */}
         <div style={{ height: 20, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
-          {isRec && isP && !isEnded && <span style={{ fontSize: 12, color: C.record, fontFamily: "'Outfit',sans-serif", opacity: 0.7 }}>Tap anywhere to mark section</span>}
+          {isRec && isP && !isEnded && <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", opacity: 0.8, animation: "pulse 3s infinite" }}>Tap anywhere to mark section</span>}
         </div>
       </div>
 
@@ -594,7 +598,7 @@ const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border
 // ============ VIDEO VIEW ============
 function fmtTime(s) { if (s == null) return "--:--.-"; const m = Math.floor(s / 60), sec = s % 60; return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`; }
 
-function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, settings, muted, onUpdateSections, videoSync: initSync }) {
+function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, settings, muted, onUpdateSections, videoSync: initSync, onEditSection, onAddSection, onDeleteSection, onMoveSection }) {
   const containerRef = useRef(null);
   const playerRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -749,7 +753,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
         <div style={{ display: "flex", gap: 6 }}>
           {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Save</button>}
-          <button onClick={() => { if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); syncActiveRef.current = false; } onClose(); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+          <button className="close-btn" onClick={() => { if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); syncActiveRef.current = false; } onClose(); }}>{I.x(18)}</button>
         </div>
       </div>
 
@@ -758,7 +762,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         <div style={{ position: "relative", paddingBottom: "36%", borderRadius: 8, overflow: "hidden", background: "#000" }}>
           {isYT ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : embedUrl ? <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>Open in browser</a></div>}
+              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{isSafeUrl(videoUrl) ? <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>Open in browser</a> : <span style={{ color: C.danger, fontSize: 11 }}>Invalid URL Format</span>}</div>}
         </div>
       </div>
 
@@ -790,54 +794,71 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         </div>
       </div>}
 
-      {/* Metronome display */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
-        {syncBar ? (
-          <>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1 }}>
-                <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsN}</span>
-                <div style={{ height: 1, width: 24, background: C.textMuted }} />
-                <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsD}</span>
-              </div>
-              <div style={{ fontSize: 64, fontWeight: 400, color: syncEnded ? C.downbeat : C.text, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2, minWidth: 70, textAlign: "center" }}>{syncEnded ? "END" : syncBar.ab}</div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                <span style={{ fontSize: 24, color: C.downbeat, fontWeight: 700 }}>{syncBar.tempo}</span>
-                <span style={{ fontSize: 9, color: C.textMuted }}>BPM</span>
-              </div>
+      {/* Middle: Sections (stopped) or Metronome (playing/paused-with-bar) */}
+      {syncActive || (syncBar && !syncEnded) ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px", minHeight: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1 }}>
+              <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsN}</span>
+              <div style={{ height: 1, width: 24, background: C.textMuted }} />
+              <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsD}</span>
             </div>
-            {/* Beat dots */}
-            {syncBar.tsN > 0 && !syncEnded && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
-              {Array.from({ length: syncBar.tsN }).map((_, i) => {
-                const on = i === syncBar.bei, c = i === 0 ? C.downbeat : C.sub;
-                return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
-              })}
-            </div>}
-            {/* Section info */}
-            {!syncEnded && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>
-              Sec {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}
-            </div>}
-          </>
-        ) : (
-          <div style={{ fontSize: 13, color: C.textMuted, textAlign: "center" }}>
-            {startPt != null ? "Press play or tap the video to start sync" : "Set a start point, then play"}
-          </div>
-        )}
-
-        {/* Tempo adjustment (when paused) */}
-        {syncBar && !syncActive && !syncEnded && curSec && curSec.type === "metered" && (
-          <div style={{ background: C.surface, borderRadius: 10, padding: 10, marginTop: 12, border: `1px solid ${C.accent}44`, width: "100%", maxWidth: 280 }}>
-            <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>Section {syncBar.si + 1} Tempo</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-              <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-5</button>
-              <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-1</button>
-              <div style={{ fontSize: 22, color: C.text, fontWeight: 700, minWidth: 50, textAlign: "center" }}>{curSec.tempo}</div>
-              <button onClick={() => adjustTempo(1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+1</button>
-              <button onClick={() => adjustTempo(5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+5</button>
+            <div style={{ fontSize: 64, fontWeight: 400, color: C.text, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2, minWidth: 70, textAlign: "center" }}>{syncBar.ab}</div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <span style={{ fontSize: 24, color: C.downbeat, fontWeight: 700 }}>{syncBar.tempo}</span>
+              <span style={{ fontSize: 9, color: C.textMuted }}>BPM</span>
             </div>
           </div>
-        )}
-      </div>
+          {syncBar.tsN > 0 && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
+            {Array.from({ length: syncBar.tsN }).map((_, i) => {
+              const on = i === syncBar.bei, c = i === 0 ? C.downbeat : C.sub;
+              return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
+            })}
+          </div>}
+          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>Sec {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}</div>
+          {!syncActive && curSec && curSec.type === "metered" && (
+            <div style={{ background: C.surface, borderRadius: 10, padding: 10, marginTop: 12, border: `1px solid ${C.accent}44`, width: "100%", maxWidth: 280 }}>
+              <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>Section {syncBar.si + 1} Tempo</div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-5</button>
+                <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-1</button>
+                <div style={{ fontSize: 22, color: C.text, fontWeight: 700, minWidth: 50, textAlign: "center" }}>{curSec.tempo}</div>
+                <button onClick={() => adjustTempo(1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+1</button>
+                <button onClick={() => adjustTempo(5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+5</button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : syncEnded ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
+          <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>END</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>Tap restart or go back to sections</div>
+          <button onClick={() => { setSyncBar(null); setSyncEnded(false); }} style={{ marginTop: 12, padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>Back to sections</button>
+        </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 12px 16px", minHeight: 0 }}>
+          <div style={{ display: "flex", gap: 8, fontSize: 11, color: C.textMuted, marginBottom: 6 }}><span>{sections.length} sec</span></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {sections.map((sec, i) => {
+              const isT = sec.type === "timed";
+              return (<div key={sec.id} onClick={() => onEditSection && onEditSection(sec.id)} style={{ background: C.surface, borderRadius: 8, padding: "8px 10px", border: `1px solid ${C.border}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 20, alignItems: "center" }}>
+                  <button onClick={e => { e.stopPropagation(); onMoveSection && onMoveSection(i, -1); }} disabled={i === 0} style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 1, display: "flex", fontSize: 10 }}>▲</button>
+                  <span style={{ fontSize: 9, color: C.textMuted }}>{i + 1}</span>
+                  <button onClick={e => { e.stopPropagation(); onMoveSection && onMoveSection(i, 1); }} disabled={i === sections.length - 1} style={{ background: "none", border: "none", color: i === sections.length - 1 ? C.border : C.textMuted, cursor: i === sections.length - 1 ? "default" : "pointer", padding: 1, display: "flex", fontSize: 10 }}>▼</button>
+                </div>
+                {isT ? <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.duration}s free</div> : (<>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 24, textAlign: "center", lineHeight: 1 }}><div>{sec.tsNum}</div><div style={{ height: 1, background: C.textMuted, margin: "1px 0" }} /><div>{sec.tsDen}</div></div>
+                  <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.tempo} BPM</div>
+                  <div style={{ fontSize: 11, color: sec.loop ? C.downbeat : C.textMuted }}>{sec.loop ? "∞" : `${sec.bars}b`}</div>
+                </>)}
+                {onDeleteSection && sections.length > 1 && <button onClick={e => { e.stopPropagation(); onDeleteSection(sec.id); }} style={{ background: "none", border: "none", color: C.danger + "77", cursor: "pointer", padding: 2, display: "flex" }}>{I.trash(12)}</button>}
+              </div>);
+            })}
+            <button onClick={() => onAddSection && onAddSection()} style={{ width: "100%", padding: 10, borderRadius: 8, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(16)}</button>
+          </div>
+        </div>
+      )}
 
       {/* Transport with section navigation */}
       <div style={{ display: "flex", gap: 8, justifyContent: "center", alignItems: "center", padding: "8px 0 20px", flexShrink: 0 }}>
@@ -855,7 +876,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
 
 // ============ SETTINGS / SAVE / LIBRARY ============
 function SetP({ settings: s, onChange, onClose }) {
-  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
+  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
     <SR l="Mode">{["basic", "default", "advanced"].map(v => <button key={v} onClick={() => u("appMode", v)} style={{ ...oB(s.appMode === v), textTransform: "capitalize" }}>{v}</button>)}</SR>
     <div style={{ fontSize: 11, color: C.textMuted, marginTop: -8, marginBottom: 14, marginLeft: 82, fontFamily: "'Outfit',sans-serif", lineHeight: 1.5 }}>{s.appMode === "basic" ? "Tempo, time signature, bars, and loop only" : s.appMode === "advanced" ? "Per-beat tempo mapping, fermata, grouping builder" : "Grouping, curves, record, practice, library"}</div>
     <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR>
@@ -867,7 +888,7 @@ function SetP({ settings: s, onChange, onClose }) {
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved, videoUrl: savedVideoUrl, videoSync: savedVideoSync }) {
   const [t, sT] = useState(""), [c, sC] = useState(""), [perf, setPerf] = useState(""), [vUrl, setVUrl] = useState(savedVideoUrl || ""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); const profile = { id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (perf.trim()) profile.performer = perf.trim(); if (vUrl.trim()) profile.videoUrl = vUrl.trim(); if (savedVideoSync) profile.videoSync = savedVideoSync; p.push(profile); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
     <input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
     <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
     <input value={perf} onChange={e => setPerf(e.target.value)} placeholder="Performer / Ensemble (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 13, color: C.textMuted }} />
@@ -940,7 +961,7 @@ function PracSetup({ sections, onStart, onClose }) {
   };
   return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
     <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} Practice Mode</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} Practice Mode</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
       <Row label="Start">
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Stp value={startBpm} onChange={setStartBpm} min={10} max={refTempo} />
@@ -1208,14 +1229,16 @@ export default function Tempus() {
         [data-tip-b]::after { content: attr(data-tip-b); top: calc(100% + 8px); }
         [data-tip]:hover::after, [data-tip-b]:hover::after { opacity: 1; }
         @media (pointer: coarse) { [data-tip]::after, [data-tip-b]::after { display: none; } }
-        button { cursor: pointer; transition: transform 0.15s ease, opacity 0.15s ease; }
+        button { cursor: pointer; transition: transform 0.1s ease, background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease; }
         button:hover:not(:disabled) { opacity: 0.85; }
         button:active:not(:disabled) { opacity: 0.7; transform: scale(0.98); }
+        .close-btn { background: none; border: none; color: ${C.textMuted}; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
+        .close-btn:hover { background: ${C.surfaceHover}; color: ${C.text}; }
 
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.7) !important; }
-        .modal-content { animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(17, 17, 22, 0.97) !important; border: 1px solid rgba(255,255,255,0.06) !important; border-top: 1px solid rgba(255,255,255,0.12) !important; box-shadow: 0 -8px 30px rgba(0,0,0,0.5); }
+        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.6) !important; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+        .modal-content { animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(17, 17, 22, 0.85) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-top: 1px solid rgba(255,255,255,0.15) !important; box-shadow: 0 -16px 40px rgba(139, 124, 246, 0.05), 0 -8px 30px rgba(0,0,0,0.6); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
         .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
         @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -1257,7 +1280,7 @@ export default function Tempus() {
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} videoUrl={videoUrl} videoSync={videoSync} />}
       {showLib && <LibP onLoad={(s, v, vs) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); }} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
-      {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} />}
+      {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} onEditSection={id => { setEditIsNew(false); setEditId(id); }} onAddSection={addSec} onDeleteSection={handleDelete} onMoveSection={moveSec} />}
       {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
         <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
         <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
