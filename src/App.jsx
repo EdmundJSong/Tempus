@@ -608,7 +608,11 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   const [syncBar, setSyncBar] = useState(null);
   const [syncEnded, setSyncEnded] = useState(false);
   const syncCbRef = useRef(null);
-  const metStartedByVid = useRef(false);
+  // Refs for YouTube callback (avoids stale closures)
+  const syncActiveRef = useRef(false);
+  const syncBarRef = useRef(null);
+  useEffect(() => { syncActiveRef.current = syncActive; }, [syncActive]);
+  useEffect(() => { syncBarRef.current = syncBar; }, [syncBar]);
 
   const ytId = useMemo(() => {
     if (!videoUrl) return null;
@@ -621,8 +625,10 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   // Metronome callback
   useEffect(() => {
     syncCbRef.current = evt => {
-      if (evt.type === "beat") setSyncBar({ ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si });
-      else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); met.stop(); }
+      if (evt.type === "beat") {
+        const bar = { ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si };
+        setSyncBar(bar); syncBarRef.current = bar;
+      } else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); syncActiveRef.current = false; met.stop(); }
     };
   }, [met]);
 
@@ -644,14 +650,15 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
             const isPlay = e.data === window.YT.PlayerState.PLAYING;
             const isPause = e.data === window.YT.PlayerState.PAUSED;
             setVidPlaying(isPlay);
-            // Two-way sync: YouTube controls trigger metronome
-            if (isPlay && !syncActive && tl.length > 0 && startPt != null) {
+            // Two-way sync using refs for current values
+            if (isPlay && !syncActiveRef.current && tl.length > 0) {
               met.setCb(syncCbRef.current); met.tap();
-              const fromBar = syncBar ? tl.findIndex(b => b.ab === syncBar.ab) : 0;
+              const bar = syncBarRef.current;
+              const fromBar = bar ? tl.findIndex(b => b.ab === bar.ab) : 0;
               met.start(tl, Math.max(0, fromBar), 0, { accented: settings.accented, pitched: settings.pitched, muted });
-              setSyncActive(true); setSyncEnded(false); metStartedByVid.current = true;
-            } else if (isPause && syncActive) {
-              met.stop(); setSyncActive(false); metStartedByVid.current = false;
+              setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+            } else if (isPause && syncActiveRef.current) {
+              met.stop(); setSyncActive(false); syncActiveRef.current = false;
             }
           }
         }
@@ -671,30 +678,46 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
 
   const seekTo = useCallback(t => { if (playerRef.current?.seekTo) { playerRef.current.seekTo(t, true); setCurrentTime(t); } }, []);
 
-  // Sync play from start
+  // Sync play from start (restart)
   const syncPlayFromStart = () => {
     if (!isYT || !tl.length) return;
     met.setCb(syncCbRef.current);
     if (startPt != null) seekTo(startPt);
-    setSyncBar(null);
+    setSyncBar(null); syncBarRef.current = null;
     setTimeout(() => {
       if (playerRef.current) playerRef.current.playVideo();
       met.tap(); met.start(tl, 0, 0, { accented: settings.accented, pitched: settings.pitched, muted });
-      setSyncActive(true); setSyncEnded(false);
+      setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
     }, 200);
   };
 
+  // Toggle play/pause — resumes from current bar
   const syncToggle = () => {
     if (syncActive) {
       if (playerRef.current) playerRef.current.pauseVideo();
-      met.stop(); setSyncActive(false);
+      met.stop(); setSyncActive(false); syncActiveRef.current = false;
     } else {
       if (!tl.length) return;
       met.setCb(syncCbRef.current);
       const fromBar = syncBar ? tl.findIndex(b => b.ab === syncBar.ab) : 0;
       if (playerRef.current) playerRef.current.playVideo();
       met.tap(); met.start(tl, Math.max(0, fromBar), 0, { accented: settings.accented, pitched: settings.pitched, muted });
-      setSyncActive(true); setSyncEnded(false);
+      setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+    }
+  };
+
+  // Section navigation
+  const jumpSec = d => {
+    if (!syncBar) return;
+    const ns = Math.max(0, Math.min(sections.length - 1, syncBar.si + d));
+    const i = tl.findIndex(b => b.si === ns);
+    if (i >= 0) {
+      const b = tl[i];
+      const bar = { ab: b.ab, bei: 0, bt: 0, tsN: b.tsN, tsD: b.tsD, tempo: b.tempo, si: b.si };
+      setSyncBar(bar); syncBarRef.current = bar;
+      setSyncEnded(false);
+      // Stop if playing
+      if (syncActive) { met.stop(); if (playerRef.current) playerRef.current.pauseVideo(); setSyncActive(false); syncActiveRef.current = false; }
     }
   };
 
@@ -719,13 +742,14 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   const curSec = syncBar != null ? sections[syncBar.si] : null;
 
   return (
-    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", flexDirection: "column", fontFamily: "'DM Mono',monospace" }}>
+    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", justifyContent: "center", fontFamily: "'DM Mono',monospace" }}>
+      <div style={{ width: "100%", maxWidth: 540, display: "flex", flexDirection: "column", height: "100%" }}>
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px", flexShrink: 0 }}>
         <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
         <div style={{ display: "flex", gap: 6 }}>
           {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Save</button>}
-          <button onClick={() => { if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); } onClose(); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+          <button onClick={() => { if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); syncActiveRef.current = false; } onClose(); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
         </div>
       </div>
 
@@ -815,14 +839,16 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         )}
       </div>
 
-      {/* Transport */}
-      <div style={{ display: "flex", gap: 12, justifyContent: "center", alignItems: "center", padding: "12px 0 24px", flexShrink: 0 }}>
-        <button onClick={syncPlayFromStart} style={tS}>{I.restart(18)}</button>
-        <button onClick={syncToggle} style={{ width: 56, height: 56, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{syncActive ? I.pause(22) : I.play(22)}</button>
-        <div style={{ width: 44 }} />
+      {/* Transport with section navigation */}
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", alignItems: "center", padding: "8px 0 20px", flexShrink: 0 }}>
+        <button onClick={() => jumpSec(-1)} disabled={!syncBar || syncBar.si <= 0} style={{ ...tS, width: 36, height: 36, color: (!syncBar || syncBar.si <= 0) ? C.border : C.text }}>{I.chevL(16)}</button>
+        <button onClick={syncPlayFromStart} style={{ ...tS, width: 36, height: 36 }}>{I.restart(16)}</button>
+        <button onClick={syncToggle} style={{ width: 52, height: 52, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{syncActive ? I.pause(20) : I.play(20)}</button>
+        <button onClick={() => jumpSec(1)} disabled={!syncBar || syncBar.si >= sections.length - 1} style={{ ...tS, width: 36, height: 36, color: (!syncBar || syncBar.si >= sections.length - 1) ? C.border : C.text }}>{I.chevR(16)}</button>
       </div>
 
       {!isYT && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube videos only.</div></div>}
+      </div>
     </div>
   );
 }
