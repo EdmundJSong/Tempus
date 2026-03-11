@@ -635,10 +635,12 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   // Metronome callback
   useEffect(() => {
     syncCbRef.current = evt => {
-      if (evt.type === "beat") {
-        const bar = { ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si };
-        setSyncBar(bar); syncBarRef.current = bar;
-      } else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); syncActiveRef.current = false; met.stop(); }
+      try {
+        if (evt.type === "beat") {
+          const bar = { ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si };
+          setSyncBar(bar); syncBarRef.current = bar;
+        } else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); syncActiveRef.current = false; met.stop(); }
+      } catch {}
     };
   }, [met]);
 
@@ -660,17 +662,19 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
             const isPlay = e.data === window.YT.PlayerState.PLAYING;
             const isPause = e.data === window.YT.PlayerState.PAUSED;
             setVidPlaying(isPlay);
-            // Two-way sync using refs for current values
-            const m = metRef.current, t = tlRef.current, st = settingsRef.current;
-            if (isPlay && !syncActiveRef.current && t && t.length > 0) {
-              m.setCb(syncCbRef.current); m.tap();
-              const bar = syncBarRef.current;
-              const fromBar = bar ? t.findIndex(b => b.ab === bar.ab) : 0;
-              m.start(t, Math.max(0, fromBar), 0, { accented: st.accented, pitched: st.pitched, muted: mutedRef.current });
-              setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
-            } else if (isPause && syncActiveRef.current) {
-              m.stop(); setSyncActive(false); syncActiveRef.current = false;
-            }
+            try {
+              const m = metRef.current, t = tlRef.current, st = settingsRef.current;
+              if (!m || !t) return;
+              if (isPlay && !syncActiveRef.current && t.length > 0) {
+                m.setCb(syncCbRef.current); m.tap();
+                const bar = syncBarRef.current;
+                const fromBar = bar ? t.findIndex(b => b.ab === bar.ab) : 0;
+                m.start(t, Math.max(0, fromBar >= 0 ? fromBar : 0), 0, { accented: st.accented, pitched: st.pitched, muted: mutedRef.current });
+                setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+              } else if (isPause && syncActiveRef.current) {
+                m.stop(); setSyncActive(false); syncActiveRef.current = false;
+              }
+            } catch {}
           }
         }
       });
@@ -802,7 +806,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       </div>}
 
       {/* Middle: Sections (stopped) or Metronome (playing/paused-with-bar) */}
-      {syncActive || (syncBar && !syncEnded) ? (
+      {(syncActive || (syncBar && !syncEnded)) && syncBar ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px", minHeight: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1 }}>
@@ -835,6 +839,10 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
               </div>
             </div>
           )}
+        </div>
+      ) : syncActive && !syncBar ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ fontSize: 14, color: C.textMuted }}>Starting...</div>
         </div>
       ) : syncEnded ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
