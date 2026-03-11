@@ -604,13 +604,11 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   const [startPt, setStartPt] = useState(initSync?.start ?? null);
   const [endPt, setEndPt] = useState(initSync?.end ?? null);
   const pollRef = useRef(null);
-  const [tab, setTab] = useState("points"); // "points" | "sync"
-
-  // Sync mode state
   const [syncActive, setSyncActive] = useState(false);
-  const [syncBar, setSyncBar] = useState(null); // { ab, bei, bt, tsN, tsD, tempo, si, bts }
+  const [syncBar, setSyncBar] = useState(null);
   const [syncEnded, setSyncEnded] = useState(false);
   const syncCbRef = useRef(null);
+  const metStartedByVid = useRef(false);
 
   const ytId = useMemo(() => {
     if (!videoUrl) return null;
@@ -620,27 +618,42 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   const isYT = !!ytId;
   const embedUrl = useMemo(() => isYT ? null : getEmbedUrl(videoUrl), [videoUrl, isYT]);
 
+  // Metronome callback
+  useEffect(() => {
+    syncCbRef.current = evt => {
+      if (evt.type === "beat") setSyncBar({ ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si });
+      else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); met.stop(); }
+    };
+  }, [met]);
+
   // YouTube API
   useEffect(() => {
     if (!isYT) return;
     const loadApi = () => {
       if (window.YT && window.YT.Player) { initPlayer(); return; }
-      if (document.querySelector('script[src*="youtube.com/iframe_api"]')) {
-        window.onYouTubeIframeAPIReady = initPlayer; return;
-      }
-      const tag = document.createElement("script");
-      tag.src = "https://www.youtube.com/iframe_api";
-      document.head.appendChild(tag);
-      window.onYouTubeIframeAPIReady = initPlayer;
+      if (document.querySelector('script[src*="youtube.com/iframe_api"]')) { window.onYouTubeIframeAPIReady = initPlayer; return; }
+      const tag = document.createElement("script"); tag.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(tag); window.onYouTubeIframeAPIReady = initPlayer;
     };
     const initPlayer = () => {
       if (!containerRef.current || playerRef.current) return;
       playerRef.current = new window.YT.Player(containerRef.current, {
-        videoId: ytId,
-        playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+        videoId: ytId, playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
         events: {
           onReady: () => { setReady(true); setDuration(playerRef.current.getDuration() || 0); },
-          onStateChange: e => { setVidPlaying(e.data === window.YT.PlayerState.PLAYING); }
+          onStateChange: e => {
+            const isPlay = e.data === window.YT.PlayerState.PLAYING;
+            const isPause = e.data === window.YT.PlayerState.PAUSED;
+            setVidPlaying(isPlay);
+            // Two-way sync: YouTube controls trigger metronome
+            if (isPlay && !syncActive && tl.length > 0 && startPt != null) {
+              met.setCb(syncCbRef.current); met.tap();
+              const fromBar = syncBar ? tl.findIndex(b => b.ab === syncBar.ab) : 0;
+              met.start(tl, Math.max(0, fromBar), 0, { accented: settings.accented, pitched: settings.pitched, muted });
+              setSyncActive(true); setSyncEnded(false); metStartedByVid.current = true;
+            } else if (isPause && syncActive) {
+              met.stop(); setSyncActive(false); metStartedByVid.current = false;
+            }
+          }
         }
       });
     };
@@ -648,24 +661,41 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [isYT, ytId]);
 
+  // Poll time
   useEffect(() => {
     if (vidPlaying && playerRef.current) {
-      pollRef.current = setInterval(() => {
-        const t = playerRef.current.getCurrentTime();
-        if (typeof t === "number") setCurrentTime(t);
-      }, 100);
+      pollRef.current = setInterval(() => { const t = playerRef.current.getCurrentTime(); if (typeof t === "number") setCurrentTime(t); }, 100);
     } else { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [vidPlaying]);
 
-  const seekTo = useCallback(t => {
-    if (playerRef.current?.seekTo) { playerRef.current.seekTo(t, true); setCurrentTime(t); }
-  }, []);
+  const seekTo = useCallback(t => { if (playerRef.current?.seekTo) { playerRef.current.seekTo(t, true); setCurrentTime(t); } }, []);
 
-  const toggleVid = () => {
-    if (!playerRef.current) return;
-    if (vidPlaying) playerRef.current.pauseVideo();
-    else playerRef.current.playVideo();
+  // Sync play from start
+  const syncPlayFromStart = () => {
+    if (!isYT || !tl.length) return;
+    met.setCb(syncCbRef.current);
+    if (startPt != null) seekTo(startPt);
+    setSyncBar(null);
+    setTimeout(() => {
+      if (playerRef.current) playerRef.current.playVideo();
+      met.tap(); met.start(tl, 0, 0, { accented: settings.accented, pitched: settings.pitched, muted });
+      setSyncActive(true); setSyncEnded(false);
+    }, 200);
+  };
+
+  const syncToggle = () => {
+    if (syncActive) {
+      if (playerRef.current) playerRef.current.pauseVideo();
+      met.stop(); setSyncActive(false);
+    } else {
+      if (!tl.length) return;
+      met.setCb(syncCbRef.current);
+      const fromBar = syncBar ? tl.findIndex(b => b.ab === syncBar.ab) : 0;
+      if (playerRef.current) playerRef.current.playVideo();
+      met.tap(); met.start(tl, Math.max(0, fromBar), 0, { accented: settings.accented, pitched: settings.pitched, muted });
+      setSyncActive(true); setSyncEnded(false);
+    }
   };
 
   // Set points
@@ -678,179 +708,121 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   };
   const handleSave = () => { if (onSyncPoints) onSyncPoints({ start: startPt, end: endPt }); };
 
-  // Metronome callback for sync mode
-  useEffect(() => {
-    syncCbRef.current = evt => {
-      if (evt.type === "beat") {
-        setSyncBar({ ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si, bts: null });
-      } else if (evt.type === "ended") {
-        setSyncEnded(true); setSyncActive(false); met.stop();
-      }
-    };
-  }, [met]);
-
-  // Sync play/pause
-  const syncPlay = () => {
-    if (!isYT || startPt == null || !tl.length) return;
-    met.setCb(syncCbRef.current);
-    seekTo(startPt);
-    setTimeout(() => {
-      if (playerRef.current) playerRef.current.playVideo();
-      met.tap();
-      met.start(tl, 0, 0, { accented: settings.accented, pitched: settings.pitched, muted });
-      setSyncActive(true); setSyncEnded(false);
-    }, 200);
-  };
-
-  const syncPause = () => {
-    if (playerRef.current) playerRef.current.pauseVideo();
-    met.stop();
-    setSyncActive(false);
-  };
-
-  const syncResume = () => {
-    if (!syncBar || !tl.length) return;
-    const i = tl.findIndex(b => b.ab === syncBar.ab);
-    if (i < 0) return;
-    met.setCb(syncCbRef.current);
-    if (playerRef.current) playerRef.current.playVideo();
-    met.tap();
-    met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted });
-    setSyncActive(true);
-  };
-
-  // Tempo adjustment for current section
+  // Tempo adjust
   const adjustTempo = delta => {
     if (!syncBar || !onUpdateSections) return;
     const si = syncBar.si;
     onUpdateSections(prev => prev.map((s, i) => i === si && s.type === "metered" ? { ...s, tempo: Math.max(10, Math.min(400, s.tempo + delta)) } : s));
   };
 
-  // Cleanup metronome on unmount
   useEffect(() => () => { met.stop(); met.setCb(null); }, [met]);
-
   const curSec = syncBar != null ? sections[syncBar.si] : null;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", flexDirection: "column", fontFamily: "'DM Mono',monospace" }}>
       {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 16px", flexShrink: 0 }}>
-        <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 14, color: C.text, fontWeight: 600 }}>Video</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px", flexShrink: 0 }}>
+        <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {isYT && startPt != null && <button onClick={() => setTab(tab === "points" ? "sync" : "points")} style={{ padding: "4px 10px", borderRadius: 6, border: `1px solid ${tab === "sync" ? C.accent : C.border}`, background: tab === "sync" ? C.accent + "15" : "transparent", color: tab === "sync" ? C.accent : C.textMuted, fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{tab === "sync" ? "Sync" : "Points"}</button>}
-          <button onClick={() => { syncPause(); onClose(); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Save</button>}
+          <button onClick={() => { if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); } onClose(); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
         </div>
       </div>
 
-      {/* Video Player */}
-      <div style={{ flexShrink: 0, padding: "0 16px", marginBottom: 8 }}>
-        <div style={{ position: "relative", paddingBottom: tab === "sync" ? "42%" : "56.25%", borderRadius: 10, overflow: "hidden", background: "#000", transition: "padding-bottom 0.3s" }}>
+      {/* Video */}
+      <div style={{ flexShrink: 0, padding: "0 12px", marginBottom: 6 }}>
+        <div style={{ position: "relative", paddingBottom: "36%", borderRadius: 8, overflow: "hidden", background: "#000" }}>
           {isYT ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : embedUrl ? <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 12 }}>Open in browser</a></div>}
+              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}><a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>Open in browser</a></div>}
         </div>
       </div>
 
-      {/* Tab: Points */}
-      {tab === "points" && isYT && (
-        <div style={{ padding: "0 16px", flex: 1, overflowY: "auto" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 12 }}>
-            <button onClick={toggleVid} style={{ width: 40, height: 40, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{vidPlaying ? I.pause(16) : I.play(16)}</button>
-            <div style={{ fontSize: 16, color: C.text, minWidth: 70, textAlign: "center" }}>{fmtTime(currentTime)}</div>
-            <div style={{ fontSize: 10, color: C.textMuted }}>/ {fmtTime(duration)}</div>
+      {/* Start / End — side by side */}
+      {isYT && <div style={{ display: "flex", gap: 6, padding: "0 12px", marginBottom: 6, flexShrink: 0 }}>
+        {/* Start */}
+        <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${startPt != null ? C.practice + "44" : C.border}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: startPt != null ? 4 : 0 }}>
+            <span style={{ fontSize: 9, color: C.practice, fontWeight: 600 }}>START</span>
+            <button onClick={setStart} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.practice}44`, background: "transparent", color: C.practice, fontSize: 9, cursor: "pointer" }}>Set</button>
           </div>
-          <div style={{ background: C.surface, borderRadius: 10, padding: 10, marginBottom: 6, border: `1px solid ${startPt != null ? C.practice + "55" : C.border}` }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: startPt != null ? 6 : 0 }}>
-              <span style={{ fontSize: 10, color: C.practice, fontWeight: 600 }}>Start</span>
-              <button onClick={setStart} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.practice}55`, background: C.practice + "15", color: C.practice, fontSize: 10, cursor: "pointer" }}>Set {fmtTime(currentTime)}</button>
-            </div>
-            {startPt != null && <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button onClick={() => nudge("start", -NUDGE)} style={{ ...tS, width: 32, height: 32, fontSize: 11 }}>←</button>
-              <div style={{ fontSize: 14, color: C.text, flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => seekTo(startPt)}>{fmtTime(startPt)}</div>
-              <button onClick={() => nudge("start", NUDGE)} style={{ ...tS, width: 32, height: 32, fontSize: 11 }}>→</button>
-            </div>}
-          </div>
-          <div style={{ background: C.surface, borderRadius: 10, padding: 10, marginBottom: 8, border: `1px solid ${endPt != null ? C.record + "55" : C.border}` }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: endPt != null ? 6 : 0 }}>
-              <span style={{ fontSize: 10, color: C.record, fontWeight: 600 }}>End</span>
-              <button onClick={setEnd} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.record}55`, background: C.record + "15", color: C.record, fontSize: 10, cursor: "pointer" }}>Set {fmtTime(currentTime)}</button>
-            </div>
-            {endPt != null && <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <button onClick={() => nudge("end", -NUDGE)} style={{ ...tS, width: 32, height: 32, fontSize: 11 }}>←</button>
-              <div style={{ fontSize: 14, color: C.text, flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => seekTo(endPt)}>{fmtTime(endPt)}</div>
-              <button onClick={() => nudge("end", NUDGE)} style={{ ...tS, width: 32, height: 32, fontSize: 11 }}>→</button>
-            </div>}
-          </div>
-          {startPt != null && endPt != null && endPt > startPt && <div style={{ textAlign: "center", fontSize: 11, color: C.textMuted, marginBottom: 8 }}>Piece: {(endPt - startPt).toFixed(1)}s</div>}
-          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ width: "100%", padding: 10, borderRadius: 8, border: "none", background: C.downbeat, color: "#000", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Save Sync Points</button>}
+          {startPt != null && <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <button onClick={() => nudge("start", -NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>←</button>
+            <div style={{ fontSize: 12, color: C.text, flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => seekTo(startPt)}>{fmtTime(startPt)}</div>
+            <button onClick={() => nudge("start", NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>→</button>
+          </div>}
         </div>
-      )}
-
-      {/* Tab: Sync */}
-      {tab === "sync" && isYT && (
-        <div style={{ padding: "0 16px", flex: 1, display: "flex", flexDirection: "column" }}>
-          {/* Current bar display */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, padding: "12px 0" }}>
-            {syncBar ? (
-              <>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1 }}>
-                  <span style={{ fontSize: 14, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsN}</span>
-                  <div style={{ height: 1, width: 20, background: C.textMuted }} />
-                  <span style={{ fontSize: 14, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsD}</span>
-                </div>
-                <div style={{ fontSize: 48, fontWeight: 400, color: syncEnded ? C.downbeat : C.text, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2, minWidth: 60, textAlign: "center" }}>{syncEnded ? "END" : syncBar.ab}</div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                  <span style={{ fontSize: 20, color: C.downbeat, fontWeight: 700 }}>{syncBar.tempo}</span>
-                  <span style={{ fontSize: 9, color: C.textMuted }}>BPM</span>
-                </div>
-              </>
-            ) : (
-              <div style={{ fontSize: 14, color: C.textMuted }}>Ready to sync</div>
-            )}
+        {/* End */}
+        <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${endPt != null ? C.record + "44" : C.border}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: endPt != null ? 4 : 0 }}>
+            <span style={{ fontSize: 9, color: C.record, fontWeight: 600 }}>END</span>
+            <button onClick={setEnd} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.record}44`, background: "transparent", color: C.record, fontSize: 9, cursor: "pointer" }}>Set</button>
           </div>
+          {endPt != null && <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <button onClick={() => nudge("end", -NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>←</button>
+            <div style={{ fontSize: 12, color: C.text, flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => seekTo(endPt)}>{fmtTime(endPt)}</div>
+            <button onClick={() => nudge("end", NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>→</button>
+          </div>}
+        </div>
+      </div>}
 
-          {/* Beat dots */}
-          {syncBar && syncBar.tsN > 0 && !syncEnded && (
-            <div style={{ display: "flex", gap: 6, justifyContent: "center", marginBottom: 12 }}>
-              {Array.from({ length: syncBar.tsN }).map((_, i) => {
-                const on = i === syncBar.bei;
-                const c = i === 0 ? C.downbeat : C.sub;
-                return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
-              })}
-            </div>
-          )}
-
-          {/* Section info */}
-          {syncBar && curSec && !syncEnded && (
-            <div style={{ textAlign: "center", fontSize: 11, color: C.textMuted, marginBottom: 8 }}>
-              Section {syncBar.si + 1}/{sections.length} · Video: {fmtTime(currentTime)}
-            </div>
-          )}
-
-          {/* Tempo adjustment (when paused) */}
-          {syncBar && !syncActive && !syncEnded && curSec && curSec.type === "metered" && (
-            <div style={{ background: C.surface, borderRadius: 10, padding: 12, marginBottom: 12, border: `1px solid ${C.accent}55` }}>
-              <div style={{ fontSize: 10, color: C.accent, fontWeight: 600, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>Adjust Section {syncBar.si + 1} Tempo</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-                <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 36, height: 36, fontSize: 11 }}>-5</button>
-                <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 36, height: 36, fontSize: 11 }}>-1</button>
-                <div style={{ fontSize: 24, color: C.text, fontWeight: 700, minWidth: 60, textAlign: "center" }}>{curSec.tempo}</div>
-                <button onClick={() => adjustTempo(1)} style={{ ...tS, width: 36, height: 36, fontSize: 11 }}>+1</button>
-                <button onClick={() => adjustTempo(5)} style={{ ...tS, width: 36, height: 36, fontSize: 11 }}>+5</button>
+      {/* Metronome display */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
+        {syncBar ? (
+          <>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1 }}>
+                <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsN}</span>
+                <div style={{ height: 1, width: 24, background: C.textMuted }} />
+                <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsD}</span>
+              </div>
+              <div style={{ fontSize: 64, fontWeight: 400, color: syncEnded ? C.downbeat : C.text, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2, minWidth: 70, textAlign: "center" }}>{syncEnded ? "END" : syncBar.ab}</div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                <span style={{ fontSize: 24, color: C.downbeat, fontWeight: 700 }}>{syncBar.tempo}</span>
+                <span style={{ fontSize: 9, color: C.textMuted }}>BPM</span>
               </div>
             </div>
-          )}
-
-          {/* Sync transport */}
-          <div style={{ display: "flex", gap: 12, justifyContent: "center", alignItems: "center", marginTop: "auto", paddingBottom: 24 }}>
-            <button onClick={syncPlay} data-tip-b="From start" style={tS}>{I.restart(18)}</button>
-            <button onClick={syncActive ? syncPause : syncResume} style={{ width: 56, height: 56, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{syncActive ? I.pause(22) : I.play(22)}</button>
-            <div style={{ width: 44 }} />
+            {/* Beat dots */}
+            {syncBar.tsN > 0 && !syncEnded && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
+              {Array.from({ length: syncBar.tsN }).map((_, i) => {
+                const on = i === syncBar.bei, c = i === 0 ? C.downbeat : C.sub;
+                return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
+              })}
+            </div>}
+            {/* Section info */}
+            {!syncEnded && <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>
+              Sec {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}
+            </div>}
+          </>
+        ) : (
+          <div style={{ fontSize: 13, color: C.textMuted, textAlign: "center" }}>
+            {startPt != null ? "Press play or tap the video to start sync" : "Set a start point, then play"}
           </div>
-        </div>
-      )}
+        )}
 
-      {!isYT && <div style={{ padding: "0 16px", textAlign: "center" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube videos only.</div></div>}
+        {/* Tempo adjustment (when paused) */}
+        {syncBar && !syncActive && !syncEnded && curSec && curSec.type === "metered" && (
+          <div style={{ background: C.surface, borderRadius: 10, padding: 10, marginTop: 12, border: `1px solid ${C.accent}44`, width: "100%", maxWidth: 280 }}>
+            <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>Section {syncBar.si + 1} Tempo</div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+              <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-5</button>
+              <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-1</button>
+              <div style={{ fontSize: 22, color: C.text, fontWeight: 700, minWidth: 50, textAlign: "center" }}>{curSec.tempo}</div>
+              <button onClick={() => adjustTempo(1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+1</button>
+              <button onClick={() => adjustTempo(5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+5</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Transport */}
+      <div style={{ display: "flex", gap: 12, justifyContent: "center", alignItems: "center", padding: "12px 0 24px", flexShrink: 0 }}>
+        <button onClick={syncPlayFromStart} style={tS}>{I.restart(18)}</button>
+        <button onClick={syncToggle} style={{ width: 56, height: 56, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{syncActive ? I.pause(22) : I.play(22)}</button>
+        <div style={{ width: 44 }} />
+      </div>
+
+      {!isYT && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube videos only.</div></div>}
     </div>
   );
 }
