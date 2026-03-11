@@ -72,9 +72,12 @@ async function fbInit() {
   } catch { return null; }
 }
 
+function _getCookie(k) { const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : null; }
+function _setCookie(k, v) { const d = new Date(); d.setFullYear(d.getFullYear() + 2); document.cookie = k + "=" + encodeURIComponent(v) + ";expires=" + d.toUTCString() + ";path=/;SameSite=Lax"; }
 function getDeviceId() {
-  let id = _getLS("tempus_device_id");
-  if (!id) { id = "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8); _setLS("tempus_device_id", id); }
+  let id = _getLS("tempus_device_id") || _getCookie("tempus_device_id");
+  if (!id) { id = "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8); }
+  _setLS("tempus_device_id", id); _setCookie("tempus_device_id", id);
   return id;
 }
 
@@ -121,6 +124,24 @@ function sG(n, d) { if (d >= 8 && n % 3 === 0 && n > 3) return Array(n / 3).fill
 function gBT(g) { const t = []; g.forEach((v, gi) => { for (let i = 0; i < v; i++)t.push(gi === 0 && i === 0 ? 0 : i === 0 ? 1 : 2); }); return t; }
 function pM(s) { if (!s || !s.trim()) return []; return s.split(",").map(x => parseFloat(x.trim())).filter(n => !isNaN(n) && n >= 0).sort((a, b) => a - b); }
 function mkBeatMap(n, tempo) { return Array.from({ length: n }, () => ({ tempo, fermata: false, fermataHold: 0, fermataUnit: "beats" })); }
+
+function getEmbedUrl(url) {
+  if (!url) return null;
+  try {
+    // YouTube
+    let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+    if (m) return `https://www.youtube.com/embed/${m[1]}?rel=0`;
+    // Vimeo
+    m = url.match(/vimeo\.com\/(\d+)/);
+    if (m) return `https://player.vimeo.com/video/${m[1]}`;
+    // Bilibili
+    m = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/);
+    if (m) return `https://player.bilibili.com/player.html?bvid=${m[1]}&high_quality=1`;
+    // Fallback - try as direct embed
+    if (url.startsWith("http")) return url;
+  } catch {}
+  return null;
+}
 
 function buildTL(sections) {
   const bars = []; let at = 0, ab = 1;
@@ -581,17 +602,24 @@ function SetP({ settings: s, onChange, onClose }) {
 }
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved }) {
-  const [t, sT] = useState(""), [c, sC] = useState(""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); p.push({ id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
+  const [t, sT] = useState(""), [c, sC] = useState(""), [vUrl, setVUrl] = useState(""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); const profile = { id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (vUrl.trim()) profile.videoUrl = vUrl.trim(); p.push(profile); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
     <input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
-    <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 15 }} />
+    <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
+    <input value={vUrl} onChange={e => setVUrl(e.target.value)} placeholder="Video URL (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 13, color: C.textMuted }} />
     <button onClick={go} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button>
   </div></div>);
 }
 function LibP({ onLoad, onClose }) {
   const [p, sP] = useState(ldP()), [s, sS] = useState("");
   const f = p.filter(x => x.title.toLowerCase().includes(s.toLowerCase()) || x.composer.toLowerCase().includes(s.toLowerCase()));
-  const del = id => { const u = p.filter(x => x.id !== id); svP(u); sP(u); };
+  const [confirmDelId, setConfirmDelId] = useState(null);
+  const confirmDelTimer = useRef(null);
+  const del = id => {
+    if (confirmDelId !== id) { setConfirmDelId(id); if (confirmDelTimer.current) clearTimeout(confirmDelTimer.current); confirmDelTimer.current = setTimeout(() => setConfirmDelId(null), 3000); return; }
+    setConfirmDelId(null);
+    const u = p.filter(x => x.id !== id); svP(u); sP(u);
+  };
   const exportAll = () => {
     try {
       const json = JSON.stringify(p, null, 2);
@@ -627,7 +655,7 @@ function LibP({ onLoad, onClose }) {
       <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
       {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
     </div>
-    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}><div style={{ opacity: 0.2 }}>{I.folder(48)}</div><div>{p.length === 0 ? "No saved pieces yet" : "No results"}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text }}>{x.title}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b="Delete" style={{ background: "none", border: "none", color: C.danger + "99", cursor: "pointer", padding: 4, display: "flex" }}>{I.trash(14)}</button></div>))}</div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}><div style={{ opacity: 0.2 }}>{I.folder(48)}</div><div>{p.length === 0 ? "No saved pieces yet" : "No results"}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
   </div></div>);
 }
 
@@ -683,6 +711,8 @@ export default function Tempus() {
   const [showSet, setShowSet] = useState(false);
   const [showSave, setShowSave] = useState(false);
   const [showLib, setShowLib] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(null);
+  const [showVideo, setShowVideo] = useState(false);
   const [showPrac, setShowPrac] = useState(false);
   const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default" }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
@@ -842,7 +872,7 @@ export default function Tempus() {
     if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
     setConfirmClear(false);
     const backup = [...sections];
-    setSections([mkM()]); setEditId(null);
+    setSections([mkM()]); setEditId(null); setVideoUrl(null);
     setUndoToast({ section: backup, index: -1 });
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
@@ -927,6 +957,7 @@ export default function Tempus() {
         <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={handleClear} data-tip-b={confirmClear ? "Tap again" : "New"} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{confirmClear ? "Clear?" : I.fileNew(18)}</button>
+          {videoUrl && <button onClick={() => setShowVideo(true)} data-tip-b="Video" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
           {settings.appMode !== "basic" && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
           {settings.appMode !== "basic" && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
           <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
@@ -956,8 +987,28 @@ export default function Tempus() {
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} />}
-      {showLib && <LibP onLoad={s => setSections(s)} onClose={() => setShowLib(false)} />}
+      {showLib && <LibP onLoad={(s, v) => { setSections(s); setVideoUrl(v || null); }} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
+      {showVideo && videoUrl && (() => { const embedUrl = getEmbedUrl(videoUrl); return (
+        <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }} onClick={() => setShowVideo(false)}>
+          <div className="modal-content" style={{ width: "100%", maxWidth: 640, background: C.bg, borderRadius: 16, padding: 16, margin: 16 }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 14, color: C.text, fontWeight: 600 }}>Video Reference</div>
+              <button onClick={() => setShowVideo(false)} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+            </div>
+            {embedUrl ? (
+              <div style={{ position: "relative", paddingBottom: "56.25%", borderRadius: 10, overflow: "hidden", background: "#000" }}>
+                <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+              </div>
+            ) : (
+              <div style={{ padding: 20, textAlign: "center" }}>
+                <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12 }}>Could not embed this URL</div>
+                <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 13, fontFamily: "'DM Mono',monospace", wordBreak: "break-all" }}>{videoUrl}</a>
+              </div>
+            )}
+          </div>
+        </div>
+      ); })()}
       {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
         <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
         <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
