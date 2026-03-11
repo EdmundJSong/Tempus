@@ -608,7 +608,9 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   const [syncActive, setSyncActive] = useState(false);
   const [syncBar, setSyncBar] = useState(null);
   const [syncEnded, setSyncEnded] = useState(false);
+  const [syncCountIn, setSyncCountIn] = useState(false); // true during count-in
   const syncCbRef = useRef(null);
+  const [vidCountIn, setVidCountIn] = useState(settings.countIn || 1); // 0, 1, 2 bars
   // Refs for YouTube callback (avoids stale closures)
   const syncActiveRef = useRef(false);
   const syncBarRef = useRef(null);
@@ -628,14 +630,36 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
     const m = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
     return m ? m[1] : null;
   }, [videoUrl]);
+  const vimeoId = useMemo(() => {
+    if (!videoUrl || ytId) return null;
+    const m = videoUrl.match(/vimeo\.com\/(\d+)/);
+    return m ? m[1] : null;
+  }, [videoUrl, ytId]);
+  const isSC = useMemo(() => {
+    if (!videoUrl || ytId) return false;
+    return /soundcloud\.com\/[^/]+\/[^/]+/.test(videoUrl);
+  }, [videoUrl, ytId]);
   const isYT = !!ytId;
-  const embedUrl = useMemo(() => isYT ? null : getEmbedUrl(videoUrl), [videoUrl, isYT]);
+  const isVimeo = !!vimeoId;
+  const hasSync = isYT || isVimeo || isSC;
+  const embedUrl = useMemo(() => hasSync ? null : getEmbedUrl(videoUrl), [videoUrl, hasSync]);
 
   // Metronome callback
+  const countingInRef = useRef(false);
   useEffect(() => {
     syncCbRef.current = evt => {
       try {
-        if (evt.type === "beat") {
+        if (evt.type === "countIn") {
+          countingInRef.current = true;
+          setSyncCountIn(true);
+          setSyncBar({ ab: 0, bei: evt.beatInBar - 1, bt: evt.beatInBar === 1 ? 0 : 2, tsN: evt.totalBeats, tsD: 0, tempo: 0, si: 0, countIn: true, beatsLeft: evt.beatsLeft });
+        } else if (evt.type === "beat") {
+          // First beat after count-in → start video
+          if (countingInRef.current) {
+            countingInRef.current = false;
+            setSyncCountIn(false);
+            try { if (playerRef.current?.playVideo) playerRef.current.playVideo(); } catch {}
+          }
           const bar = { ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si };
           setSyncBar(bar); syncBarRef.current = bar;
         } else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); syncActiveRef.current = false; met.stop(); try { if (playerRef.current?.pauseVideo) playerRef.current.pauseVideo(); } catch {} }
@@ -661,20 +685,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
             const isPlay = e.data === window.YT.PlayerState.PLAYING;
             const isPause = e.data === window.YT.PlayerState.PAUSED;
             setVidPlaying(isPlay);
-            try {
-              const m = metRef.current, t = tlRef.current, st = settingsRef.current;
-              if (!m || !t) return;
-              if (isPlay && !syncActiveRef.current && t.length > 0) {
-                m.setCb(syncCbRef.current); m.tap();
-                const bar = syncBarRef.current;
-                const fromBar = bar ? t.findIndex(b => b.ab === bar.ab) : 0;
-                m.start(t, Math.max(0, fromBar >= 0 ? fromBar : 0), 0, { accented: st.accented, pitched: st.pitched, muted: mutedRef.current });
-                setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
-              } else if (isPause && syncActiveRef.current) {
-                m.stop(); setSyncActive(false); syncActiveRef.current = false;
-                setSyncBar(null); syncBarRef.current = null;
-              }
-            } catch {}
+            handleVidStateChange(isPlay, isPause);
           }
         }
       });
@@ -683,15 +694,104 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [isYT, ytId]);
 
-  // Poll time
+  // Vimeo API
   useEffect(() => {
+    if (!isVimeo) return;
+    const loadApi = () => {
+      if (window.Vimeo && window.Vimeo.Player) { initPlayer(); return; }
+      if (document.querySelector('script[src*="player.vimeo.com/api"]')) { const check = setInterval(() => { if (window.Vimeo?.Player) { clearInterval(check); initPlayer(); } }, 100); return; }
+      const tag = document.createElement("script"); tag.src = "https://player.vimeo.com/api/player.js"; tag.onload = () => initPlayer(); document.head.appendChild(tag);
+    };
+    const initPlayer = () => {
+      if (!containerRef.current || playerRef.current) return;
+      const vp = new window.Vimeo.Player(containerRef.current, { id: parseInt(vimeoId), responsive: true });
+      playerRef.current = vp;
+      // Adapt Vimeo API to match our interface
+      vp.playVideo = () => vp.play();
+      vp.pauseVideo = () => vp.pause();
+      vp.seekTo = (t) => vp.setCurrentTime(t);
+      vp.getCurrentTime = () => vp._lastTime || 0;
+      vp.getDuration = () => vp._dur || 0;
+      vp.on("loaded", () => { vp.getDuration().then(d => { vp._dur = d; setDuration(d); }); setReady(true); });
+      vp.on("timeupdate", data => { vp._lastTime = data.seconds; setCurrentTime(data.seconds); });
+      vp.on("play", () => { setVidPlaying(true); handleVidStateChange(true, false); });
+      vp.on("pause", () => { setVidPlaying(false); handleVidStateChange(false, true); });
+    };
+    loadApi();
+    return () => { if (playerRef.current && isVimeo) { try { playerRef.current.destroy(); } catch {} playerRef.current = null; } };
+  }, [isVimeo, vimeoId]);
+
+  // SoundCloud Widget API
+  useEffect(() => {
+    if (!isSC) return;
+    const loadApi = () => {
+      if (window.SC && window.SC.Widget) { initWidget(); return; }
+      if (document.querySelector('script[src*="api.soundcloud.com/sdk"]') || document.querySelector('script[src*="w.soundcloud.com/player/api"]')) {
+        const check = setInterval(() => { if (window.SC?.Widget) { clearInterval(check); initWidget(); } }, 100); return;
+      }
+      const tag = document.createElement("script"); tag.src = "https://w.soundcloud.com/player/api.js"; tag.onload = () => initWidget(); document.head.appendChild(tag);
+    };
+    const initWidget = () => {
+      if (!containerRef.current || playerRef.current) return;
+      // Create iframe for SC widget
+      const iframe = document.createElement("iframe");
+      iframe.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(videoUrl)}&color=%23f0a030&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=true`;
+      iframe.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;border:none;";
+      iframe.allow = "autoplay";
+      containerRef.current.innerHTML = "";
+      containerRef.current.appendChild(iframe);
+      const widget = window.SC.Widget(iframe);
+      playerRef.current = widget;
+      // Adapt SC Widget API to match our interface
+      widget.playVideo = () => widget.play();
+      widget.pauseVideo = () => widget.pause();
+      const scSeek = widget.seekTo.bind(widget);
+      widget.seekTo = (t) => scSeek(t * 1000); // SC uses milliseconds
+      widget._lastTime = 0;
+      widget.bind(window.SC.Widget.Events.READY, () => {
+        widget.getDuration(d => { widget._dur = d / 1000; setDuration(d / 1000); });
+        setReady(true);
+      });
+      widget.bind(window.SC.Widget.Events.PLAY_PROGRESS, data => {
+        widget._lastTime = data.currentPosition / 1000;
+        setCurrentTime(data.currentPosition / 1000);
+      });
+      widget.bind(window.SC.Widget.Events.PLAY, () => { setVidPlaying(true); handleVidStateChange(true, false); });
+      widget.bind(window.SC.Widget.Events.PAUSE, () => { setVidPlaying(false); handleVidStateChange(false, true); });
+      widget.bind(window.SC.Widget.Events.FINISH, () => { setVidPlaying(false); handleVidStateChange(false, true); });
+    };
+    loadApi();
+    return () => { if (playerRef.current && isSC) { try { playerRef.current.unbind(window.SC.Widget.Events.PLAY); playerRef.current.unbind(window.SC.Widget.Events.PAUSE); playerRef.current.unbind(window.SC.Widget.Events.PLAY_PROGRESS); } catch {} playerRef.current = null; } };
+  }, [isSC, videoUrl]);
+
+  // Shared video state change handler (two-way sync)
+  const handleVidStateChange = (isPlay, isPause) => {
+    try {
+      const m = metRef.current, t = tlRef.current, st = settingsRef.current;
+      if (!m || !t) return;
+      if (isPlay && !syncActiveRef.current && !countingInRef.current && t.length > 0) {
+        m.setCb(syncCbRef.current); m.tap();
+        const bar = syncBarRef.current;
+        const fromBar = bar ? t.findIndex(b => b.ab === bar.ab) : 0;
+        m.start(t, Math.max(0, fromBar >= 0 ? fromBar : 0), 0, { accented: st.accented, pitched: st.pitched, muted: mutedRef.current });
+        setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+      } else if (isPause && syncActiveRef.current && !countingInRef.current) {
+        m.stop(); setSyncActive(false); syncActiveRef.current = false;
+        setSyncBar(null); syncBarRef.current = null;
+      }
+    } catch {}
+  };
+
+  // Poll time (YouTube only — Vimeo uses timeupdate event)
+  useEffect(() => {
+    if (!isYT) return;
     if (vidPlaying && playerRef.current) {
-      pollRef.current = setInterval(() => { const t = playerRef.current.getCurrentTime(); if (typeof t === "number") setCurrentTime(t); }, 100);
+      pollRef.current = setInterval(() => { try { const t = playerRef.current.getCurrentTime(); if (typeof t === "number") setCurrentTime(t); } catch {} }, 100);
     } else { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [vidPlaying]);
+  }, [vidPlaying, isYT]);
 
-  const seekTo = useCallback(t => { if (playerRef.current?.seekTo) { playerRef.current.seekTo(t, true); setCurrentTime(t); } }, []);
+  const seekTo = useCallback(t => { try { if (playerRef.current?.seekTo) { playerRef.current.seekTo(t, true); setCurrentTime(t); } else if (playerRef.current?.setCurrentTime) { playerRef.current.setCurrentTime(t); setCurrentTime(t); } } catch {} }, []);
 
   // Calculate elapsed time to a given bar index from tl
   const getElapsedToBar = useCallback((tlArr, barIdx) => {
@@ -715,15 +815,18 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
     setCurrentTime(videoTime);
   }, [tl, startPt, getElapsedToBar]);
 
-  // Sync play from start (restart) — Fix 3: reset video too
+  // Sync play from start (restart) — count-in then video
   const syncPlayFromStart = () => {
-    if (!isYT || !tl.length) return;
+    if (!hasSync || !tl.length) return;
     met.setCb(syncCbRef.current);
     seekTo(startPt || 0);
     setSyncBar(null); syncBarRef.current = null;
+    countingInRef.current = vidCountIn > 0;
+    setSyncCountIn(vidCountIn > 0);
     setTimeout(() => {
-      if (playerRef.current) playerRef.current.playVideo();
-      met.tap(); met.start(tl, 0, 0, { accented: settings.accented, pitched: settings.pitched, muted });
+      // Don't start video yet — callback will start it after count-in
+      if (vidCountIn === 0 && playerRef.current) playerRef.current.playVideo();
+      met.tap(); met.start(tl, 0, vidCountIn, { accented: settings.accented, pitched: settings.pitched, muted });
       setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
     }, 200);
   };
@@ -734,6 +837,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       if (playerRef.current) playerRef.current.pauseVideo();
       met.stop(); setSyncActive(false); syncActiveRef.current = false;
       setSyncBar(null); syncBarRef.current = null;
+      countingInRef.current = false; setSyncCountIn(false);
     } else {
       if (!tl.length) return;
       met.setCb(syncCbRef.current);
@@ -817,6 +921,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px", flexShrink: 0 }}>
         <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
         <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setVidCountIn(v => (v + 1) % 3)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${vidCountIn > 0 ? C.accent + "55" : C.border}`, background: "transparent", color: vidCountIn > 0 ? C.accent : C.textMuted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{vidCountIn === 0 ? "No CI" : `${vidCountIn} CI`}</button>
           {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Save</button>}
           <button className="close-btn" onClick={() => { if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); syncActiveRef.current = false; } onClose(); }}>{I.x(18)}</button>
         </div>
@@ -826,13 +931,15 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       <div style={{ flexShrink: 0, padding: "0 12px", marginBottom: 6 }}>
         <div style={{ position: "relative", paddingBottom: "36%", borderRadius: 8, overflow: "hidden", background: "#000" }}>
           {isYT ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
+            : isVimeo ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
+            : isSC ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : embedUrl ? <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
               : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{isSafeUrl(videoUrl) ? <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>Open in browser</a> : <span style={{ color: C.danger, fontSize: 11 }}>Invalid URL Format</span>}</div>}
         </div>
       </div>
 
       {/* Start / End — side by side */}
-      {isYT && <div style={{ display: "flex", gap: 6, padding: "0 12px", marginBottom: 6, flexShrink: 0 }}>
+      {hasSync && <div style={{ display: "flex", gap: 6, padding: "0 12px", marginBottom: 6, flexShrink: 0 }}>
         {/* Start */}
         <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${startPt != null ? C.practice + "44" : C.border}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: startPt != null ? 4 : 0 }}>
@@ -860,7 +967,18 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       </div>}
 
       {/* Middle: Sections (stopped) or Metronome (playing/paused-with-bar) */}
-      {(syncActive || (syncBar && !syncEnded)) && syncBar ? (
+      {syncCountIn && syncBar ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>Count-in</div>
+          <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>{syncBar.beatsLeft || ""}</div>
+          {syncBar.tsN > 0 && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
+            {Array.from({ length: syncBar.tsN }).map((_, i) => {
+              const on = i === syncBar.bei, c = i === 0 ? C.downbeat : C.sub;
+              return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
+            })}
+          </div>}
+        </div>
+      ) : (syncActive || (syncBar && !syncEnded)) && syncBar ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px", minHeight: 0, position: "relative" }}>
           {/* Edit toggle */}
           <button onClick={() => setEditMode(e => !e)} style={{ position: "absolute", top: 4, right: 16, background: "none", border: `1px solid ${editMode ? C.accent + "55" : C.border}`, borderRadius: 6, color: editMode ? C.accent : C.textMuted, cursor: "pointer", padding: "3px 8px", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>{editMode ? "🔓" : "🔒"}</button>
@@ -956,7 +1074,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         <button onClick={syncToggle} style={{ width: 52, height: 52, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{syncActive ? I.pause(20) : I.play(20)}</button>
       </div>
 
-      {!isYT && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube videos only.</div></div>}
+      {!hasSync && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube, Vimeo, and SoundCloud.</div></div>}
       </div>
     </div>
   );
@@ -1181,7 +1299,7 @@ export default function Tempus() {
   const go = useCallback((fi = 0) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
   const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
   useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
-  const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); if (prePlayTempos.current) { setSections(prev => prev.map((s, i) => ({ ...s, tempo: prePlayTempos.current[i] ?? s.tempo }))); prePlayTempos.current = null; } }, [met]);
+  const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => { if (prev.length !== saved.length) return prev; return prev.map((s, i) => ({ ...s, tempo: saved[i] ?? s.tempo })); }); } } catch {} prePlayTempos.current = null; }, [met]);
   const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
