@@ -1,4734 +1,1507 @@
-<!DOCTYPE html>
-<html lang="en">
-
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0, minimum-scale=1.0, viewport-fit=cover">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>五行 Five Elements</title>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@300;600;900&family=Cormorant+Garamond:ital,wght@0,300;0,500;1,300&display=swap');
-
-    :root {
-      --safe-top: env(safe-area-inset-top, 0px);
-      --safe-bottom: env(safe-area-inset-bottom, 0px);
-      --metal: #d4af37;
-      --wood: #4c994c;
-      --water: #4682c8;
-      --fire: #dc3c28;
-      --earth: #8B5E3C;
-    }
-
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-      touch-action: manipulation;
-    }
-
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-      height: -webkit-fill-available;
-      overflow: hidden;
-      font-family: 'Cormorant Garamond', serif;
-      background: #0a0a0a;
-      color: #fff;
-    }
-
-    /* ═══════════════════════════════════
-     PERMISSION OVERLAY
-     ═══════════════════════════════════ */
-    .permission-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 1);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      padding: 40px;
-      padding-top: calc(40px + var(--safe-top));
-      text-align: center;
-    }
-
-    .permission-overlay.hidden {
-      display: none;
-    }
-
-    .permission-overlay h2 {
-      font-family: 'Noto Serif SC', serif;
-      font-weight: 300;
-      font-size: clamp(1.2rem, 5vw, 1.5rem);
-      margin-bottom: 12px;
-    }
-
-    .permission-overlay p {
-      font-weight: 300;
-      font-style: italic;
-      opacity: 0.6;
-      margin-bottom: 20px;
-      line-height: 1.6;
-      font-size: clamp(0.75rem, 3vw, 0.9rem);
-    }
-
-    .setup-hint {
-      font-weight: 300;
-      font-style: italic;
-      opacity: 0.35;
-      margin-bottom: 24px;
-      font-size: clamp(1rem, 4vw, 1.2rem);
-      letter-spacing: 0.08em;
-    }
-
-    .permission-btn {
-      padding: 14px 40px;
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.08);
-      color: #fff;
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 1rem;
-      letter-spacing: 0.1em;
-      cursor: pointer;
-      transition: transform 0.2s ease, background 0.2s ease;
-    }
-
-    .permission-btn:active {
-      background: rgba(255, 255, 255, 0.15);
-      transform: scale(0.95);
-    }
-
-    .permission-status {
-      margin-top: 16px;
-      font-size: 0.7rem;
-      opacity: 0.35;
-      font-style: italic;
-    }
-
-    /* ═══════════════════════════════════
-     LANDING
-     ═══════════════════════════════════ */
-    #landing {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      height: -webkit-fill-available;
-      padding: 20px;
-      background: #0a0a0a;
-      position: relative;
-    }
-
-    .circle-layout {
-      position: relative;
-      width: min(80vw, 80vh, 360px);
-      height: min(80vw, 80vh, 360px);
-    }
-
-    .circle-ring {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 85%;
-      height: 85%;
-      transform: translate(-50%, -50%);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 50%;
-      pointer-events: none;
-    }
-
-    .energy-canvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    .circle-center {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-      z-index: 5;
-      cursor: pointer;
-      padding: 16px;
-    }
-
-    .circle-center h1 {
-      font-family: 'Noto Serif SC', serif;
-      font-weight: 300;
-      font-size: clamp(1.4rem, 5vw, 2rem);
-      letter-spacing: 0.25em;
-      opacity: 0;
-      animation: fadeIn 1s ease 0.2s forwards;
-      transition: opacity 0.3s ease;
-    }
-
-    .circle-center .subtitle {
-      font-family: 'Cormorant Garamond', serif;
-      font-weight: 300;
-      font-style: italic;
-      font-size: clamp(0.65rem, 2.5vw, 0.85rem);
-      letter-spacing: 0.12em;
-      color: rgba(255, 255, 255, 0.4);
-      margin-top: 2px;
-      opacity: 0;
-      animation: fadeIn 1s ease 0.5s forwards;
-    }
-
-    .circle-el {
-      position: absolute;
-      width: clamp(52px, 16vw, 68px);
-      height: clamp(52px, 16vw, 68px);
-      border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      background: rgba(255, 255, 255, 0.03);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      transform: translate(-50%, -50%);
-      opacity: 0;
-      animation: fadeIn 0.6s ease forwards;
-      gap: 1px;
-      z-index: 10;
-      transition: top 0.7s cubic-bezier(0.4, 0, 0.2, 1), left 0.7s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-
-    .circle-el:active {
-      filter: brightness(1.3);
-    }
-
-    .circle-el .char {
-      font-family: 'Noto Serif SC', serif;
-      font-size: clamp(1.1rem, 4vw, 1.5rem);
-      font-weight: 900;
-      line-height: 1;
-    }
-
-    .circle-el .elname {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(0.45rem, 1.8vw, 0.55rem);
-      font-weight: 300;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      opacity: 0.5;
-    }
-
-    .circle-el:nth-child(1) {
-      animation-delay: 0.4s;
-    }
-
-    .circle-el:nth-child(2) {
-      animation-delay: 0.5s;
-    }
-
-    .circle-el:nth-child(3) {
-      animation-delay: 0.6s;
-    }
-
-    .circle-el:nth-child(4) {
-      animation-delay: 0.7s;
-    }
-
-    .circle-el:nth-child(5) {
-      animation-delay: 0.8s;
-    }
-
-    .circle-el.c-metal {
-      border-color: rgba(212, 175, 55, 0.3);
-      animation: fadeIn 0.6s ease forwards, breatheMetal 4s ease-in-out infinite alternate;
-    }
-
-    @keyframes breatheMetal {
-      from {
-        box-shadow: 0 0 4px rgba(212, 175, 55, 0.05);
-      }
-
-      to {
-        box-shadow: 0 0 16px rgba(212, 175, 55, 0.25);
-      }
-    }
-
-    .circle-el.c-metal .char {
-      color: var(--metal);
-    }
-
-    .circle-el.c-wood {
-      border-color: rgba(76, 153, 76, 0.3);
-      animation: fadeIn 0.6s ease forwards, breatheWood 4s ease-in-out infinite alternate 0.5s;
-    }
-
-    @keyframes breatheWood {
-      from {
-        box-shadow: 0 0 4px rgba(76, 153, 76, 0.05);
-      }
-
-      to {
-        box-shadow: 0 0 16px rgba(76, 153, 76, 0.25);
-      }
-    }
-
-    .circle-el.c-wood .char {
-      color: var(--wood);
-    }
-
-    .circle-el.c-water {
-      border-color: rgba(70, 130, 200, 0.3);
-      animation: fadeIn 0.6s ease forwards, breatheWater 4s ease-in-out infinite alternate 1s;
-    }
-
-    @keyframes breatheWater {
-      from {
-        box-shadow: 0 0 4px rgba(70, 130, 200, 0.05);
-      }
-
-      to {
-        box-shadow: 0 0 16px rgba(70, 130, 200, 0.25);
-      }
-    }
-
-    .circle-el.c-water .char {
-      color: var(--water);
-    }
-
-    .circle-el.c-fire {
-      border-color: rgba(220, 60, 40, 0.3);
-      animation: fadeIn 0.6s ease forwards, breatheFire 4s ease-in-out infinite alternate 1.5s;
-    }
-
-    @keyframes breatheFire {
-      from {
-        box-shadow: 0 0 4px rgba(220, 60, 40, 0.05);
-      }
-
-      to {
-        box-shadow: 0 0 16px rgba(220, 60, 40, 0.25);
-      }
-    }
-
-    .circle-el.c-fire .char {
-      color: var(--fire);
-    }
-
-    .circle-el.c-earth {
-      border-color: rgba(139, 94, 60, 0.3);
-      animation: fadeIn 0.6s ease forwards, breatheEarth 4s ease-in-out infinite alternate 2s;
-    }
-
-    @keyframes breatheEarth {
-      from {
-        box-shadow: 0 0 4px rgba(139, 94, 60, 0.05);
-      }
-
-      to {
-        box-shadow: 0 0 16px rgba(139, 94, 60, 0.25);
-      }
-    }
-
-    .circle-el.c-earth .char {
-      color: var(--earth);
-    }
-
-    /* ═══════════════════════════════════
-     SHARED
-     ═══════════════════════════════════ */
-    .element-page {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      flex-direction: column;
-      overflow: hidden;
-      touch-action: none;
-    }
-
-    .element-page.active {
-      display: flex;
-    }
-
-    .bg-char {
-      position: absolute;
-      top: 46%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-family: 'Noto Serif SC', serif;
-      font-weight: 900;
-      font-size: min(70vw, 60vh);
-      opacity: 0.06;
-      pointer-events: none;
-      user-select: none;
-      z-index: 0;
-    }
-
-    .interaction-area {
-      flex: 1;
-      position: relative;
-      z-index: 10;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding-top: var(--safe-top);
-      padding-bottom: calc(60px + var(--safe-bottom));
-    }
-
-    .bottom-nav {
-      position: fixed;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: calc(56px + var(--safe-bottom));
-      padding-bottom: var(--safe-bottom);
-      display: flex;
-      z-index: 200;
-      background: rgba(0, 0, 0, 0.8);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
-      border-top: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .nav-item {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 2px;
-      cursor: pointer;
-      border: none;
-      background: none;
-      color: rgba(255, 255, 255, 0.25);
-      font-family: 'Noto Serif SC', serif;
-      font-size: clamp(1rem, 5vw, 1.3rem);
-      font-weight: 900;
-      transition: all 0.25s ease;
-      position: relative;
-    }
-
-    .nav-item .nav-label {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(0.4rem, 1.8vw, 0.5rem);
-      font-weight: 300;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-      opacity: 0.5;
-    }
-
-    .nav-item.active {
-      color: rgba(255, 255, 255, 0.9);
-    }
-
-    .nav-item.active::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 25%;
-      right: 25%;
-      height: 2px;
-      border-radius: 1px;
-    }
-
-    .nav-item.metal.active {
-      color: var(--metal);
-    }
-
-    .nav-item.metal.active::before {
-      background: var(--metal);
-    }
-
-    .nav-item.wood.active {
-      color: var(--wood);
-    }
-
-    .nav-item.wood.active::before {
-      background: var(--wood);
-    }
-
-    .nav-item.water.active {
-      color: var(--water);
-    }
-
-    .nav-item.water.active::before {
-      background: var(--water);
-    }
-
-    .nav-item.fire.active {
-      color: var(--fire);
-    }
-
-    .nav-item.fire.active::before {
-      background: var(--fire);
-    }
-
-    .nav-item.earth.active {
-      color: var(--earth);
-    }
-
-    .nav-item.earth.active::before {
-      background: var(--earth);
-    }
-
-    .home-btn {
-      position: absolute;
-      top: calc(12px + var(--safe-top));
-      left: 12px;
-      z-index: 100;
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.12);
-      border-radius: 50%;
-      width: 34px;
-      height: 34px;
-      color: rgba(255, 255, 255, 0.4);
-      font-size: 0.85rem;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      backdrop-filter: blur(8px);
-      transition: transform 0.2s ease, background 0.2s ease;
-    }
-
-    .home-btn:active {
-      transform: scale(0.9);
-      background: rgba(0, 0, 0, 0.6);
-    }
-
-    .cue-visible {
-      opacity: 0.45;
-      transition: opacity 0.8s ease;
-    }
-
-    .cue-hidden {
-      opacity: 0 !important;
-      transition: opacity 0.5s ease;
-      pointer-events: none;
-    }
-
-    /* ═══════════════════════════════════
-     METAL
-     ═══════════════════════════════════ */
-    #metal-page {
-      background: radial-gradient(ellipse at 50% 40%, #1a1812 0%, #0d0c08 100%);
-    }
-
-    #metal-page .bg-char {
-      color: var(--metal);
-    }
-
-    .metal-ring-visual {
-      width: clamp(140px, 40vw, 180px);
-      height: clamp(140px, 40vw, 180px);
-      border: 2.5px solid rgba(212, 175, 55, 0.45);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.15s;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .metal-ring-visual.shaking {
-      border-color: rgba(212, 175, 55, 0.8);
-      box-shadow: 0 0 40px rgba(212, 175, 55, 0.3);
-    }
-
-    .metal-shake-icon {
-      opacity: 0.7;
-      animation: shakeCueAnim 1.2s ease-in-out infinite;
-      transition: opacity 0.5s ease;
-    }
-
-    .metal-shake-icon svg {
-      width: 70px;
-      height: 70px;
-    }
-
-    .metal-spark {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 2px;
-      height: 15px;
-      background: #fff;
-      border-radius: 2px;
-      pointer-events: none;
-      box-shadow: 0 0 6px #d4af37, 0 0 12px #d4af37;
-      animation: metalSparkAnim 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-      z-index: 5;
-    }
-
-    @keyframes metalSparkAnim {
-      0% {
-        transform: translate(calc(-50% + var(--sx)), calc(-50% + var(--sy))) rotate(var(--rot)) scaleY(1);
-        opacity: 1;
-      }
-
-      100% {
-        transform: translate(calc(-50% + var(--ex)), calc(-50% + var(--ey))) rotate(var(--rot)) scaleY(0.2);
-        opacity: 0;
-      }
-    }
-
-    @keyframes shakeCueAnim {
-
-      0%,
-      100% {
-        transform: translateX(0) rotate(0deg);
-      }
-
-      12% {
-        transform: translateX(-10px) rotate(-12deg);
-      }
-
-      24% {
-        transform: translateX(10px) rotate(12deg);
-      }
-
-      36% {
-        transform: translateX(-8px) rotate(-8deg);
-      }
-
-      48% {
-        transform: translateX(8px) rotate(8deg);
-      }
-
-      60% {
-        transform: translateX(-4px) rotate(-3deg);
-      }
-
-      72% {
-        transform: translateX(4px) rotate(3deg);
-      }
-    }
-
-    /* ═══════════════════════════════════
-     WOOD
-     ═══════════════════════════════════ */
-    #wood-page {
-      background: radial-gradient(ellipse at 50% 40%, #0f1a0f 0%, #080d08 100%);
-    }
-
-    #wood-page .bg-char {
-      color: var(--wood);
-    }
-
-    .xy-pad {
-      position: relative;
-      width: min(75vw, 260px);
-      aspect-ratio: 1;
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      border-radius: 12px;
-      overflow: hidden;
-      touch-action: none;
-    }
-
-    .xy-pad .crosshair {
-      position: absolute;
-      width: 22px;
-      height: 22px;
-      border: 2px solid rgba(255, 255, 255, 0.6);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      left: 50%;
-      top: 50%;
-      z-index: 2;
-    }
-
-    .xy-pad .ghost-cursor {
-      position: absolute;
-      width: 22px;
-      height: 22px;
-      border: 1.5px solid rgba(255, 255, 255, 0.25);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 1;
-      transition: opacity 0.5s ease;
-    }
-
-    /* Tree of life */
-    .tree-container {
-      position: relative;
-      width: 100%;
-      flex: 1;
-      max-width: 340px;
-      max-height: 520px;
-    }
-
-    .tree-branches {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 1;
-    }
-
-    .tree-leaf-layer {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      z-index: 5;
-      overflow: hidden;
-    }
-
-    .tree-node {
-      position: absolute;
-      width: clamp(42px, 12vw, 52px);
-      height: clamp(42px, 12vw, 52px);
-      border: 1px solid rgba(76, 153, 76, 0.25);
-      border-radius: 4px;
-      background: rgba(76, 153, 76, 0.06);
-      color: rgba(255, 255, 255, 0.6);
-      font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(0.6rem, 2.5vw, 0.72rem);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transform: translate(-50%, -50%);
-      z-index: 10;
-      transition: all 1.5s cubic-bezier(0.1, 0.9, 0.2, 1);
-    }
-
-    .tree-node.actively-playing {
-      border-color: rgba(76, 153, 76, 0.9);
-      background: rgba(76, 153, 76, 0.2);
-      box-shadow: 0 0 12px rgba(76, 153, 76, 0.8), inset 0 0 4px rgba(76, 153, 76, 0.4);
-      color: rgba(255, 255, 255, 0.9);
-      transform: translate(-50%, -50%) scale(0.95);
-      transition: all 0.05s ease-out;
-      /* snap fast */
-    }
-
-    .tree-node:active {
-      background: rgba(76, 153, 76, 0.3);
-      border-color: rgba(76, 153, 76, 0.7);
-      transform: translate(-50%, -50%) scale(0.92);
-    }
-
-    .tree-node.invite-glow {
-      border-color: rgba(76, 153, 76, 0.4);
-      box-shadow: 0 0 12px rgba(76, 153, 76, 0.15);
-      color: rgba(255, 255, 255, 0.7);
-      transition: all 0.6s ease;
-    }
-
-    .tree-root {
-      position: absolute;
-      bottom: 4%;
-      left: 50%;
-      transform: translateX(-50%);
-      width: clamp(72px, 20vw, 88px);
-      height: clamp(72px, 20vw, 88px);
-      border: 2px solid rgba(76, 153, 76, 0.25);
-      border-radius: 6px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 10;
-      cursor: pointer;
-      transition: all 0.3s ease;
-    }
-
-    .tree-root.active {
-      border-color: rgba(76, 153, 76, 0.6);
-      box-shadow: 0 0 40px rgba(76, 153, 76, 0.2);
-      background: rgba(76, 153, 76, 0.08);
-    }
-
-    .tree-root-cue {
-      opacity: 0.35;
-      animation: thumbPulse 2.5s ease-in-out infinite;
-      transition: opacity 0.4s ease;
-    }
-
-    .tree-root-cue svg {
-      width: clamp(40px, 12vw, 52px);
-      height: clamp(50px, 15vw, 65px);
-    }
-
-    .tree-leaf {
-      position: absolute;
-      pointer-events: none;
-      z-index: 5;
-    }
-
-    .tree-leaf svg {
-      width: 14px;
-      height: 14px;
-    }
-
-    /* ═══════════════════════════════════
-     WATER
-     ═══════════════════════════════════ */
-    #water-page {
-      background: radial-gradient(ellipse at 50% 40%, #0a1220 0%, #060a10 100%);
-    }
-
-    #water-page .bg-char {
-      color: var(--water);
-    }
-
-    .water-tilt-hint {
-      margin-bottom: clamp(8px, 1.5vh, 16px);
-      opacity: 0.6;
-      animation: tiltCueAnim 3s ease-in-out infinite;
-    }
-
-    .water-tilt-hint svg {
-      width: 56px;
-      height: 56px;
-    }
-
-    @keyframes tiltCueAnim {
-
-      0%,
-      100% {
-        transform: rotate(0deg);
-      }
-
-      20% {
-        transform: rotate(18deg);
-      }
-
-      40% {
-        transform: rotate(-3deg);
-      }
-
-      60% {
-        transform: rotate(-18deg);
-      }
-
-      80% {
-        transform: rotate(3deg);
-      }
-    }
-
-    .water-stroke-area {
-      width: min(75vw, 280px);
-      height: min(75vw, 280px);
-      position: relative;
-      touch-action: none;
-    }
-
-    .water-char-svg {
-      width: 100%;
-      height: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
-    }
-
-    .water-stroke {
-      transition: stroke 0.3s ease;
-    }
-
-    .water-bubble {
-      position: absolute;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 5;
-      transition: left 0.15s ease-out, top 0.15s ease-out;
-    }
-
-    .water-bubble-inner {
-      width: 100%;
-      height: 100%;
-      border-radius: 50%;
-      background: radial-gradient(circle at 35% 35%,
-          rgba(130, 185, 240, 0.55) 0%, rgba(70, 130, 200, 0.35) 40%,
-          rgba(50, 100, 180, 0.15) 70%, rgba(40, 80, 160, 0.05) 100%);
-      box-shadow: 0 0 12px rgba(70, 130, 200, 0.3), inset 0 0 6px rgba(130, 185, 240, 0.2);
-      position: relative;
-      animation: waterWobble 4s ease-in-out infinite alternate;
-    }
-
-    @keyframes waterWobble {
-      0% {
-        border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
-      }
-
-      33% {
-        border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%;
-      }
-
-      66% {
-        border-radius: 50% 60% 60% 40% / 40% 60% 50% 60%;
-      }
-
-      100% {
-        border-radius: 40% 60% 70% 30% / 40% 50% 60% 50%;
-      }
-    }
-
-    .water-bubble-inner::before {
-      content: '';
-      position: absolute;
-      top: 20%;
-      left: 25%;
-      width: 35%;
-      height: 25%;
-      border-radius: 50%;
-      background: rgba(200, 225, 255, 0.3);
-      filter: blur(2px);
-    }
-
-    .water-tilt-readout {
-      position: absolute;
-      bottom: calc(80px + var(--safe-bottom));
-      left: 0;
-      right: 0;
-      z-index: 20;
-      display: flex;
-      justify-content: center;
-      gap: clamp(16px, 5vw, 30px);
-      pointer-events: none;
-      transition: opacity 0.5s ease;
-    }
-
-    .tilt-axis {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 2px;
-    }
-
-    .tilt-axis .tilt-label {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: clamp(0.6rem, 2.5vw, 0.75rem);
-      font-weight: 300;
-      font-style: italic;
-      opacity: 0.4;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-    }
-
-    .tilt-axis .tilt-value {
-      font-family: 'Noto Serif SC', serif;
-      font-size: clamp(1.8rem, 8vw, 2.8rem);
-      font-weight: 300;
-      color: rgba(255, 255, 255, 0.7);
-      line-height: 1;
-    }
-
-    /* ═══════════════════════════════════
-     FIRE
-     ═══════════════════════════════════ */
-    #fire-page {
-      background: radial-gradient(ellipse at 50% 60%, #1a0a08 0%, #0d0604 100%);
-    }
-
-    #fire-page .bg-char {
-      color: var(--fire);
-    }
-
-    .fire-layout {
-      justify-content: flex-start;
-      padding-top: clamp(20px, 5vh, 40px);
-    }
-
-    .fire-stroke-area {
-      width: min(88vw, 340px);
-      height: min(88vw, 340px);
-      position: relative;
-      touch-action: none;
-      margin-top: clamp(8px, 1.5vh, 16px);
-    }
-
-    .fire-char-svg {
-      width: 100%;
-      height: 100%;
-      position: absolute;
-      top: 0;
-      left: 0;
-      z-index: 1;
-    }
-
-    .fire-stroke {
-      transition: stroke 0.2s ease, stroke-width 0.2s ease;
-    }
-
-    .fire-flame-layer {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-      overflow: hidden;
-      z-index: 2;
-      filter: url('#goo');
-    }
-
-    .fire-trace-ghost {
-      position: absolute;
-      width: 14px;
-      height: 14px;
-      border-radius: 50%;
-      background: rgba(220, 60, 40, 0.35);
-      pointer-events: none;
-      z-index: 3;
-      transform: translate(-50%, -50%);
-      transition: opacity 0.5s ease;
-      box-shadow: 0 0 8px rgba(220, 60, 40, 0.3);
-    }
-
-    .flame-particle {
-      position: absolute;
-      border-radius: 50%;
-      pointer-events: none;
-      animation: flameRise 0.8s ease-out forwards;
-    }
-
-    @keyframes flameRise {
-      0% {
-        opacity: 1;
-        transform: scale(1) translateY(0);
-      }
-
-      100% {
-        opacity: 0;
-        transform: scale(0.2) translateY(-80px);
-      }
-    }
-
-    .fire-xy-container {
-      margin-bottom: 0;
-    }
-
-    .fire-ghost {
-      animation: fireGhostMove 3s ease-in-out infinite;
-    }
-
-    @keyframes fireGhostMove {
-      0% {
-        left: 50%;
-        top: 50%;
-      }
-
-      20% {
-        left: 30%;
-        top: 30%;
-      }
-
-      40% {
-        left: 70%;
-        top: 40%;
-      }
-
-      60% {
-        left: 60%;
-        top: 70%;
-      }
-
-      80% {
-        left: 35%;
-        top: 55%;
-      }
-
-      100% {
-        left: 50%;
-        top: 50%;
-      }
-    }
-
-
-    /* ═══════════════════════════════════
-     EARTH
-     ═══════════════════════════════════ */
-    #earth-page {
-      background: radial-gradient(ellipse at 50% 50%, #1a1008 0%, #0d0904 100%);
-    }
-
-    #earth-page::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: radial-gradient(circle, transparent 40%, rgba(0, 0, 0, 0.8) 100%);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.5s ease;
-      z-index: 100;
-    }
-
-    #earth-page.quaking::after {
-      opacity: 1;
-      transition: opacity 0.1s ease;
-    }
-
-    #earth-page .bg-char {
-      color: var(--earth);
-    }
-
-    .earth-touch-area {
-      width: clamp(160px, 42vw, 210px);
-      height: clamp(160px, 42vw, 210px);
-      border: 2.5px solid rgba(139, 94, 60, 0.35);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      position: relative;
-    }
-
-    .earth-thumbprint {
-      opacity: 0.55;
-      transition: opacity 0.4s ease;
-      animation: thumbPulse 2.5s ease-in-out infinite;
-    }
-
-    .earth-thumbprint svg {
-      width: clamp(56px, 16vw, 72px);
-      height: clamp(70px, 20vw, 90px);
-    }
-
-    @keyframes thumbPulse {
-
-      0%,
-      100% {
-        transform: scale(1);
-        opacity: 0.55;
-      }
-
-      50% {
-        transform: scale(1.06);
-        opacity: 0.8;
-      }
-    }
-
-    .earth-pulse {
-      position: absolute;
-      border: 1px solid rgba(139, 94, 60, 0.3);
-      border-radius: 50%;
-      animation: earthPulse 1s ease-out forwards;
-      pointer-events: none;
-    }
-
-    @keyframes earthPulse {
-      0% {
-        transform: scale(1);
-        opacity: 0.5;
-      }
-
-      100% {
-        transform: scale(2);
-        opacity: 0;
-      }
-    }
-
-    @keyframes screenShake {
-
-      0%,
-      100% {
-        transform: translate(0, 0);
-      }
-
-      10% {
-        transform: translate(-5px, -3px);
-      }
-
-      20% {
-        transform: translate(5px, 3px);
-      }
-
-      30% {
-        transform: translate(-4px, 4px);
-      }
-
-      40% {
-        transform: translate(4px, -4px);
-      }
-
-      50% {
-        transform: translate(-3px, 2px);
-      }
-
-      60% {
-        transform: translate(3px, -2px);
-      }
-
-      70% {
-        transform: translate(-2px, 3px);
-      }
-
-      80% {
-        transform: translate(2px, -1px);
-      }
-
-      90% {
-        transform: translate(-1px, 1px);
-      }
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-      }
-
-      to {
-        opacity: 1;
-      }
-    }
-
-    /* Status screens */
-    .status-screen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: #0a0a0a;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 2000;
-      text-align: center;
-      padding: 40px;
-      animation: fadeIn 1s ease;
-    }
-
-    .status-screen.hidden {
-      display: none;
-    }
-
-    .status-screen h1 {
-      font-family: 'Noto Serif SC', serif;
-      font-weight: 300;
-      font-size: clamp(2rem, 8vw, 3rem);
-      margin-bottom: 16px;
-      opacity: 0.9;
-    }
-
-    .status-screen .sub {
-      font-family: 'Cormorant Garamond', serif;
-      font-weight: 300;
-      font-style: italic;
-      font-size: clamp(0.85rem, 3.5vw, 1.1rem);
-      opacity: 0.5;
-      line-height: 1.8;
-    }
-
-    .status-screen .reminder {
-      margin-top: 40px;
-      font-weight: 300;
-      font-style: italic;
-      font-size: clamp(0.75rem, 3vw, 0.95rem);
-      opacity: 0.4;
-      line-height: 1.7;
-    }
-
-    /* ═══════════════════════════════════
-       DESTRUCTION SYSTEM
-       ═══════════════════════════════════ */
-
-    /* Global destruction wrapper shake */
-    body.destruction-mode .element-page.active {
-      animation: destructGlobalShake 0.15s infinite;
-    }
-
-    @keyframes destructGlobalShake {
-      0% {
-        transform: translate(0, 0) rotate(0deg) skew(0deg);
-      }
-
-      20% {
-        transform: translate(var(--d-tx1, -3px), var(--d-ty1, 2px)) rotate(var(--d-rot, 0.3deg)) skew(var(--d-skew, 0.5deg));
-      }
-
-      40% {
-        transform: translate(var(--d-tx2, 4px), var(--d-ty2, -3px)) rotate(calc(var(--d-rot, 0.3deg) * -1)) skew(calc(var(--d-skew, 0.5deg) * -1));
-      }
-
-      60% {
-        transform: translate(var(--d-tx3, -2px), var(--d-ty3, 4px)) rotate(var(--d-rot, 0.3deg)) skew(var(--d-skew, 0.5deg));
-      }
-
-      80% {
-        transform: translate(var(--d-tx4, 3px), var(--d-ty4, -1px)) rotate(calc(var(--d-rot, 0.3deg) * -0.5)) skew(0deg);
-      }
-
-      100% {
-        transform: translate(0, 0) rotate(0deg) skew(0deg);
-      }
-    }
-
-    /* Bg-char flicker in destruction */
-    body.destruction-mode .bg-char {
-      animation: destructCharFlicker 0.3s infinite steps(2);
-    }
-
-    @keyframes destructCharFlicker {
-
-      0%,
-      100% {
-        opacity: 1;
-      }
-
-      50% {
-        opacity: 0.4;
-      }
-    }
-
-    /* Invert flash removed — epilepsy risk */
-
-    /* ── Wood destruction ── */
-    body.destruction-mode #wood-page .tree-node {
-      border-color: var(--d-wood-border, rgba(76, 153, 76, 0.3));
-      background: var(--d-wood-node-bg, transparent);
-      box-shadow: none;
-    }
-
-    body.destruction-mode #wood-page .bg-char {
-      color: var(--d-wood-char-color, rgba(76, 153, 76, 0.06));
-    }
-
-    body.destruction-mode #wood-page svg path {
-      stroke: var(--d-wood-branch, rgba(76, 153, 76, 0.12));
-    }
-
-    /* ── Fire destruction ── */
-    body.destruction-mode #fire-page .fire-stroke {
-      stroke: var(--d-fire-stroke, rgba(220, 60, 40, 0.18)) !important;
-      stroke-dasharray: none !important;
-      opacity: var(--d-fire-stroke-op, 0.18);
-    }
-
-    body.destruction-mode #fire-page {
-      filter: brightness(var(--d-fire-bright, 1)) contrast(var(--d-fire-contrast, 1));
-    }
-
-    /* ── Earth destruction ── */
-    body.destruction-mode #earth-page {
-      animation: destructGlobalShake 0.08s infinite, destructEarthExtra 0.1s infinite;
-    }
-
-    @keyframes destructEarthExtra {
-
-      0%,
-      100% {
-        transform: translate(0, 0);
-      }
-
-      25% {
-        transform: translate(var(--d-earth-shake, 2px), calc(var(--d-earth-shake, 2px) * -1));
-      }
-
-      75% {
-        transform: translate(calc(var(--d-earth-shake, 2px) * -1), var(--d-earth-shake, 2px));
-      }
-    }
-
-    /* ── Metal destruction ── */
-    body.destruction-mode #metal-page .metal-ring {
-      border-color: var(--d-metal-color, rgba(212, 175, 55, 0.3));
-    }
-
-    body.destruction-mode #metal-page .metal-char {
-      color: var(--d-metal-color, rgba(212, 175, 55, 0.45));
-    }
-
-    body.destruction-mode #metal-page .bg-char {
-      color: var(--d-metal-color, rgba(212, 175, 55, 0.06));
-    }
-
-    /* ── Water destruction ── */
-    body.destruction-mode #water-page .water-stroke {
-      stroke: var(--d-water-stroke, rgba(70, 130, 200, 0.15));
-    }
-
-    body.destruction-mode #water-page .water-bubble {
-      width: var(--d-water-bubble-size, 28px);
-      height: var(--d-water-bubble-size, 28px);
-    }
-
-    /* ═══════════════════════════════════
-       AFTERMATH
-       ═══════════════════════════════════ */
-    #aftermathScreen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #000;
-      z-index: 9000;
-      display: none;
-      pointer-events: none;
-      overflow: hidden;
-    }
-
-    /* Vignette and distant fires overlay */
-    #aftermathScreen::before {
-      content: '';
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      height: 60%;
-      background: linear-gradient(to top, rgba(220, 60, 40, 0.15) 0%, transparent 100%);
-      pointer-events: none;
-      z-index: 1;
-      animation: aftermathFireBreathe 8s ease-in-out infinite alternate;
-    }
-
-    /* "Cracked" gritty texture overlay */
-    #aftermathScreen::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-image:
-        radial-gradient(ellipse at center, transparent 20%, rgba(0, 0, 0, 0.8) 100%),
-        repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(255, 255, 255, 0.01) 2px, rgba(255, 255, 255, 0.01) 4px);
-      pointer-events: none;
-      z-index: 2;
-      opacity: 0.6;
-    }
-
-    @keyframes aftermathFireBreathe {
-      0% {
-        opacity: 0.5;
-        transform: scaleY(1);
-      }
-
-      100% {
-        opacity: 1;
-        transform: scaleY(1.1);
-      }
-    }
-
-    /* Wreckage Floating Animation */
-    @keyframes wreckageDrift {
-      0% {
-        transform: translate(0, 0) rotate(var(--rot)) scale(1);
-      }
-
-      33% {
-        transform: translate(3px, -5px) rotate(calc(var(--rot) + 2deg)) scale(0.98);
-      }
-
-      66% {
-        transform: translate(-2px, 4px) rotate(calc(var(--rot) - 1deg)) scale(1.02);
-      }
-
-      100% {
-        transform: translate(0, 0) rotate(var(--rot)) scale(1);
-      }
-    }
-
-    /* Fade flicker for ruin characters (Increased base brightness for mobile) */
-    @keyframes ruinFlicker {
-
-      0%,
-      100% {
-        opacity: 0.6;
-      }
-
-      50% {
-        opacity: 0.4;
-      }
-
-      80% {
-        opacity: 0.8;
-      }
-    }
-
-    /* 3D SVG Ruin Elements */
-    #aftermathScreen .ruin-svg-container {
-      position: absolute;
-      width: clamp(60px, 15vw, 100px);
-      height: clamp(60px, 15vw, 100px);
-      z-index: 5;
-      animation:
-        wreckageDrift 15s ease-in-out infinite alternate,
-        ruinFlicker 6s ease-in-out infinite;
-      filter: drop-shadow(4px 10px 4px rgba(0,0,0,0.8)) drop-shadow(0px 0px 15px var(--glow-color));
-      pointer-events: auto;
-      cursor: pointer;
-    }
-
-    #aftermathScreen .ruin-svg-container svg {
-      width: 100%;
-      height: 100%;
-      overflow: visible;
-    }
-
-    #aftermathScreen .ruin-svg-container path.stone-base {
-      fill: #222;
-      stroke: #111;
-      stroke-width: 2;
-    }
-
-    #aftermathScreen .ruin-svg-container path.stone-face {
-      fill: #4a4a4a;
-    }
-
-    #aftermathScreen .ruin-svg-container path.stone-highlight {
-      fill: #8a8a8a;
-    }
-
-    /* Interactive States */
-    #aftermathScreen.interactive {
-      pointer-events: auto;
-    }
-
-    #aftermathScreen .ruin-svg-container.brightening {
-      animation: none;
-      transition: filter 0.3s, transform 0.3s;
-      transform: scale(1.2);
-      filter: drop-shadow(0px 20px 10px rgba(0,0,0,0.6)) drop-shadow(0px 0px 40px var(--glow-color));
-    }
-
-    #aftermathScreen .ruin-svg-container.brightening path.stone-face {
-      transition: fill 0.3s;
-      fill: var(--glow-color-solid);
-    }
-    
-    #aftermathScreen .ruin-svg-container.brightening path.stone-highlight {
-      transition: fill 0.3s;
-      fill: #fff;
-    }
-
-    /* ── Aftermath interaction ── */
-    #aftermathScreen.interactive {
-      pointer-events: auto;
-    }
-
-    #aftermathScreen.interactive .ruin-char {
-      pointer-events: auto;
-      cursor: pointer;
-    }
-
-    #aftermathScreen .ruin-char.brightening {
-      animation: none;
-      transition: color 0.3s, text-shadow 0.3s, transform 0.3s;
-      transform: scale(1.2);
-    }
-
-    #aftermathFlash {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 9999;
-      pointer-events: none;
-      opacity: 0;
-    }
-
-    #aftermathEmber {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 30px;
-      height: 30px;
-      margin-top: -15px;
-      margin-left: -15px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(200,120,40,0.8) 0%, rgba(200,120,40,0) 70%);
-      z-index: 10;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 2s;
-    }
-
-    /* Center ember SVG */
-    #aftermathEmber svg {
-      width: 100%;
-      height: 100%;
-      overflow: visible;
-      filter: drop-shadow(0 0 15px rgba(200,120,40,0.8));
-    }
-    #aftermathEmber path {
-      fill: none;
-      stroke: rgba(255,180,100,0.9);
-      stroke-width: 2;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    #aftermathEmber.visible {
-      opacity: 1;
-      pointer-events: auto;
-      animation: emberBreatheSVG 4s ease-in-out infinite alternate;
-      transition: opacity 3s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-
-    @keyframes emberBreatheSVG {
-      0% { transform: scale(0.9); filter: drop-shadow(0 0 10px rgba(200,120,40,0.5)); }
-      100% { transform: scale(1.15); filter: drop-shadow(0 0 25px rgba(255,160,60,0.9)); }
-    }
-
-    .ember-tap-burst {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 200px;
-      height: 200px;
-      margin-top: -100px;
-      margin-left: -100px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(255,200,150,0.8) 0%, rgba(200,100,20,0.4) 30%, transparent 70%);
-      pointer-events: none;
-      animation: emberBurstAnim 1.2s cubic-bezier(0.1, 0.8, 0.2, 1) forwards;
-      mix-blend-mode: screen;
-    }
-
-    @keyframes emberBurstAnim {
-      0% { transform: scale(0.2); opacity: 1; }
-      100% { transform: scale(3); opacity: 0; }
-    }
-
-    .ember-tap-glow {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 80px;
-      height: 80px;
-      margin-top: -40px;
-      margin-left: -40px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(200,120,40,0.6) 0%, transparent 70%);
-      pointer-events: none;
-      animation: emberTapFade 1s ease-out forwards;
-    }
-
-    @keyframes emberTapFade {
-      0% { transform: scale(0.5); opacity: 1; }
-      100% { transform: scale(2.5); opacity: 0; }
-    }
-
-    /* Falling Ash Particles System */
-    .ash-layer {
-      position: absolute;
-      top: -100%;
-      /* Start above screen */
-      left: 0;
-      width: 100%;
-      height: 200%;
-      /* Double height for seamless scrolling */
-      z-index: 6; /* Bring above ruin characters to look more immersive */
-      pointer-events: none;
-    }
-
-    /* Larger, more obvious ash flakes */
-    .ash-layer-1 {
-      /* Box shadow trick: x y blur color */
-      box-shadow:
-        10vw 10vh 2px rgba(200, 200, 200, 0.6),
-        30vw 30vh 4px rgba(220, 60, 40, 0.5),
-        50vw 5vh 3px rgba(180, 180, 180, 0.7),
-        70vw 50vh 5px rgba(255, 255, 255, 0.4),
-        90vw 20vh 2px rgba(220, 80, 40, 0.6),
-        20vw 80vh 3px rgba(200, 200, 200, 0.5),
-        80vw 90vh 4px rgba(150, 150, 150, 0.8),
-        40vw 60vh 6px rgba(240, 60, 40, 0.5),
-        60vw 10vh 2px rgba(220, 220, 220, 0.6);
-      width: 4px;
-      height: 4px;
-      border-radius: 50%;
-      animation: ashFall 12s linear infinite;
-    }
-
-    .ash-layer-2 {
-      box-shadow:
-        15vw 5vh 3px rgba(180, 180, 180, 0.5),
-        35vw 45vh 5px rgba(255, 100, 40, 0.4),
-        55vw 25vh 2px rgba(220, 220, 220, 0.7),
-        75vw 65vh 6px rgba(200, 200, 200, 0.4),
-        95vw 85vh 3px rgba(220, 60, 40, 0.6),
-        25vw 35vh 4px rgba(255, 255, 255, 0.5),
-        85vw 15vh 2px rgba(150, 150, 150, 0.6),
-        45vw 75vh 5px rgba(240, 80, 40, 0.4),
-        65vw 95vh 3px rgba(220, 220, 220, 0.5);
-      width: 6px;
-      height: 6px;
-      border-radius: 30% 70% 70% 40% / 50% 50% 60% 50%; /* Irregular flake shape */
-      animation: ashFall 18s linear infinite;
-      animation-delay: -5s;
-    }
-
-    .ash-layer-3 {
-      box-shadow:
-        5vw 90vh 4px rgba(200, 200, 200, 0.4),
-        25vw 10vh 2px rgba(255, 80, 40, 0.6),
-        45vw 40vh 6px rgba(180, 180, 180, 0.5),
-        65vw 20vh 3px rgba(255, 255, 255, 0.6),
-        85vw 50vh 5px rgba(220, 60, 40, 0.4),
-        15vw 60vh 2px rgba(220, 220, 220, 0.7),
-        75vw 30vh 4px rgba(150, 150, 150, 0.6),
-        35vw 80vh 3px rgba(240, 60, 40, 0.5),
-        95vw 70vh 5px rgba(200, 200, 200, 0.4);
-      width: 8px;
-      height: 8px;
-      border-radius: 60% 40% 50% 50% / 40% 60% 50% 50%;
-      animation: ashFall 24s linear infinite;
-      animation-delay: -12s;
-    }
-
-    @keyframes ashFall {
-      0% {
-        transform: translateY(0) translateX(0) rotate(0deg);
-      }
-
-      100% {
-        transform: translateY(100vh) translateX(-10vw) rotate(360deg);
-      }
-    }
-
-    /* ═══════════════════════════════════
-       HARMONY
-       ═══════════════════════════════════ */
-    #harmonyScreen {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: #000;
-      z-index: 9000;
-      /* Reverted to #000 as canvas covers it */
-      display: none;
-      pointer-events: auto;
-      justify-content: center;
-      align-items: center;
-      overflow: hidden;
-      /* Ensure nothing spills out */
-    }
-
-    /* Low GPU Living Background Canvas */
-    #harmonyBgCanvas {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      z-index: 0;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 2s ease-in-out;
-    }
-
-    .harmony-layout {
-      pointer-events: auto;
-      z-index: 10;
-    }
-
-    .harmony-el {
-      position: absolute;
-      /* Add absolute positioning so Top/Left works */
-      cursor: pointer;
-      pointer-events: auto;
-      /* Ensure base styles are ready for entrance animation */
-      opacity: 0;
-      transform: translate(-50%, -50%) scale(0.5);
-      transition: opacity 1.5s ease-out, transform 1.5s cubic-bezier(0.2, 0.8, 0.2, 1);
-    }
-
-    /* Position elements in a circle (pentagon shape) around the center */
-    /* Exact angles matching the r=0.72 pentagram on the canvas */
-    .harmony-el[data-el="water"] {
-      top: 14.0%;
-      left: 50.0%;
-    }
-
-    .harmony-el[data-el="wood"] {
-      top: 38.9%;
-      left: 84.2%;
-    }
-
-    .harmony-el[data-el="fire"] {
-      top: 79.1%;
-      left: 71.2%;
-    }
-
-    .harmony-el[data-el="earth"] {
-      top: 79.1%;
-      left: 28.8%;
-    }
-
-    .harmony-el[data-el="metal"] {
-      top: 38.9%;
-      left: 15.8%;
-    }
-
-    /* Entrance Animation Classes Addded via JS */
-    .harmony-el.entered {
-      opacity: 1;
-      transform: translate(-50%, -50%) scale(1);
-    }
-
-    /* Harmony tap ripple */
-    .harmony-ripple {
-      position: absolute;
-      border-radius: 50%;
-      width: 80px;
-      height: 80px;
-      transform: translate(-50%, -50%) scale(0);
-      opacity: 0.6;
-      pointer-events: none;
-      animation: harmonyRippleOut 0.7s ease-out forwards;
-    }
-
-    @keyframes harmonyRippleOut {
-      0% {
-        transform: translate(-50%, -50%) scale(0);
-        opacity: 0.6;
-      }
-
-      100% {
-        transform: translate(-50%, -50%) scale(3);
-        opacity: 0;
-      }
-    }
-
-    /* Harmony center glow */
-    #harmonyCenter {
-      transition: text-shadow 0.3s, box-shadow 0.3s;
-    }
-
-    #harmonyCenter.glowing {
-      box-shadow: 0 0 30px rgba(255, 255, 255, 0.2), 0 0 60px rgba(255, 255, 255, 0.1);
-    }
-
-    /* ═══════════════════════════════════
-       ADMIN PANEL
-       ═══════════════════════════════════ */
-    #adminPanel {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 9999;
-      background: rgba(10, 10, 15, 0.7);
-      backdrop-filter: blur(25px);
-      -webkit-backdrop-filter: blur(25px);
-      font-family: -apple-system, system-ui, sans-serif;
-      padding: 16px;
-      padding-top: calc(16px + var(--safe-top));
-      padding-bottom: calc(16px + var(--safe-bottom));
-      overflow-y: auto;
-      -webkit-overflow-scrolling: touch;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .admin-container {
-      width: 100%;
-      max-width: 600px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 20px;
-      padding: 24px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-    }
-
-    .admin-header {
-      text-align: center;
-      margin-bottom: 24px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      padding-bottom: 20px;
-    }
-
-    .admin-title {
-      font-family: 'Noto Serif SC', serif;
-      font-size: 28px;
-      font-weight: 600;
-      color: #fff;
-      letter-spacing: 0.15em;
-      margin-bottom: 12px;
-      text-shadow: 0 2px 10px rgba(255, 255, 255, 0.2);
-    }
-
-    .admin-info {
-      display: flex;
-      justify-content: center;
-      gap: 20px;
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 15px;
-      color: rgba(255, 255, 255, 0.6);
-      letter-spacing: 0.05em;
-    }
-
-    .admin-info span {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(0, 0, 0, 0.3);
-      padding: 6px 14px;
-      border-radius: 30px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    .admin-info strong {
-      color: #fff;
-      font-weight: 500;
-    }
-
-    #adminTimer {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-family: monospace;
-      font-size: 28px;
-      font-weight: 700;
-      color: #ff3366;
-      background: rgba(40, 0, 10, 0.4);
-      padding: 10px 24px;
-      border-radius: 12px;
-      border: 1px solid rgba(255, 50, 100, 0.3);
-      box-shadow: 0 0 20px rgba(255, 50, 100, 0.15) inset, 0 4px 12px rgba(0, 0, 0, 0.5);
-      margin: 16px auto;
-      letter-spacing: 0.1em;
-      text-shadow: 0 0 10px rgba(255, 50, 100, 0.5);
-      width: max-content;
-    }
-
-    .admin-section {
-      margin-bottom: 24px;
-    }
-
-    .admin-label {
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 13px;
-      color: rgba(255, 255, 255, 0.4);
-      letter-spacing: 0.2em;
-      margin-bottom: 12px;
-      padding-left: 4px;
-      text-transform: uppercase;
-    }
-
-    .admin-row {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      margin-bottom: 12px;
-    }
-
-    .admin-btn {
-      position: relative;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      padding: 16px 8px;
-      font-family: 'Cormorant Garamond', serif;
-      font-size: 16px;
-      font-weight: 500;
-      letter-spacing: 0.05em;
-      cursor: pointer;
-      color: rgba(255, 255, 255, 0.8);
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
-      transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-      overflow: hidden;
-      -webkit-tap-highlight-color: transparent;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-    }
-
-    .admin-btn::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      border-radius: inherit;
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.05);
-      pointer-events: none;
-    }
-
-    .admin-btn:active {
-      transform: scale(0.96) translateY(2px);
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
-      filter: brightness(1.2);
-    }
-
-    /* System buttons */
-    .admin-btn.sys {
-      background: linear-gradient(180deg, rgba(60, 60, 65, 0.5) 0%, rgba(40, 40, 45, 0.5) 100%);
-      border-color: rgba(255, 255, 255, 0.15);
-      color: #fff;
-    }
-
-    /* Element Colors */
-    .admin-btn.create.wood {
-      background: linear-gradient(180deg, rgba(76, 153, 76, 0.15) 0%, rgba(76, 153, 76, 0.05) 100%);
-      border-color: rgba(76, 153, 76, 0.3);
-      color: #9dfcb6;
-    }
-    .admin-btn.create.wood:active {
-      box-shadow: 0 0 15px rgba(76, 153, 76, 0.4);
-    }
-
-    .admin-btn.create.fire {
-      background: linear-gradient(180deg, rgba(240, 90, 20, 0.15) 0%, rgba(240, 90, 20, 0.05) 100%);
-      border-color: rgba(240, 90, 20, 0.3);
-      color: #ffb585;
-    }
-    .admin-btn.create.fire:active {
-      box-shadow: 0 0 15px rgba(240, 90, 20, 0.4);
-    }
-
-    .admin-btn.create.earth {
-      background: linear-gradient(180deg, rgba(139, 94, 60, 0.15) 0%, rgba(139, 94, 60, 0.05) 100%);
-      border-color: rgba(139, 94, 60, 0.3);
-      color: #ffcf9e;
-    }
-    .admin-btn.create.earth:active {
-      box-shadow: 0 0 15px rgba(139, 94, 60, 0.4);
-    }
-
-    .admin-btn.create.metal {
-      background: linear-gradient(180deg, rgba(212, 175, 55, 0.15) 0%, rgba(212, 175, 55, 0.05) 100%);
-      border-color: rgba(212, 175, 55, 0.3);
-      color: #ffe694;
-    }
-    .admin-btn.create.metal:active {
-      box-shadow: 0 0 15px rgba(212, 175, 55, 0.4);
-    }
-
-    .admin-btn.create.water {
-      background: linear-gradient(180deg, rgba(70, 130, 200, 0.15) 0%, rgba(70, 130, 200, 0.05) 100%);
-      border-color: rgba(70, 130, 200, 0.3);
-      color: #a3daff;
-    }
-    .admin-btn.create.water:active {
-      box-shadow: 0 0 15px rgba(70, 130, 200, 0.4);
-    }
-
-    .admin-btn.create.harmony {
-      background: linear-gradient(180deg, rgba(170, 102, 204, 0.15) 0%, rgba(170, 102, 204, 0.05) 100%);
-      border-color: rgba(170, 102, 204, 0.3);
-      color: #eeddff;
-    }
-    .admin-btn.create.harmony:active {
-      box-shadow: 0 0 15px rgba(170, 102, 204, 0.4);
-    }
-
-    /* Destruction buttons */
-    .admin-btn.destroy {
-      background: repeating-linear-gradient(
-        -45deg,
-        rgba(30, 0, 0, 0.6) 0,
-        rgba(30, 0, 0, 0.6) 8px,
-        rgba(80, 0, 0, 0.6) 8px,
-        rgba(80, 0, 0, 0.6) 16px
-      );
-      border: 1.5px dashed rgba(255, 30, 30, 0.8);
-      border-radius: 2px;
-      color: #ff3333;
-      font-family: inherit;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: -0.05em;
-      text-shadow: 1px 1px 0 #000;
-    }
-    
-    .admin-btn.destroy::after {
-      display: none;
-    }
-
-    .admin-btn.destroy:active {
-      transform: scale(0.95);
-      background: rgba(255, 0, 0, 0.3);
-      border-style: solid;
-      box-shadow: 0 0 15px rgba(255, 30, 30, 0.7) inset;
-    }
-
-    .admin-btn.destroy.aftermath {
-      background: repeating-linear-gradient(
-        45deg,
-        rgba(30, 0, 40, 0.6) 0,
-        rgba(30, 0, 40, 0.6) 8px,
-        rgba(70, 0, 90, 0.6) 8px,
-        rgba(70, 0, 90, 0.6) 16px
-      );
-      border: 1.5px dashed rgba(200, 40, 255, 0.8);
-      color: #e59dfc;
-    }
-    
-    .admin-btn.destroy.aftermath:active {
-      background: rgba(140, 0, 255, 0.3);
-      box-shadow: 0 0 15px rgba(200, 40, 255, 0.7) inset;
-    }
-
-    /* End button */
-    .admin-btn.end {
-      grid-column: 1 / -1;
-      background: linear-gradient(180deg, rgba(30, 30, 30, 0.8) 0%, rgba(15, 15, 15, 0.9) 100%);
-      color: #ff5555;
-      border: 1px solid rgba(255, 85, 85, 0.3);
-      padding: 18px;
-      font-weight: 600;
-      letter-spacing: 0.1em;
-      margin-top: 12px;
-      text-transform: uppercase;
-    }
-    .admin-btn.end:active {
-      box-shadow: 0 0 20px rgba(255, 85, 85, 0.4);
-    }
-
-    /* Active state highlight */
-    .admin-btn.admin-active {
-      box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.8), 0 0 16px rgba(255, 255, 255, 0.2);
-    }
-  </style>
-</head>
-
-<body>
-
-  <div id="adminPanel" style="display:none;">
-    <div class="admin-container">
-      <div class="admin-header">
-        <div class="admin-title">五行 ADMIN</div>
-        <div class="admin-info">
-          <span>Users: <strong id="adminUserCount">0</strong></span>
-          <span>Status: <strong id="adminCurrentStatus">loading...</strong></span>
-        </div>
-        <div id="adminTimer">00:00</div>
-      </div>
-      <div class="admin-section">
-        <div class="admin-label">SYSTEM</div>
-        <div class="admin-row">
-          <button class="admin-btn sys" onclick="setAdminStatus('locked')">🔒 Locked</button>
-          <button class="admin-btn sys" onclick="setAdminStatus('live')">▶ Live</button>
-          <button class="admin-btn sys" onclick="setAdminStatus('live_all')">⊞ All</button>
-        </div>
-      </div>
-      <div class="admin-section">
-        <div class="admin-label">CREATION</div>
-        <div class="admin-row">
-          <button class="admin-btn create wood" onclick="setAdminStatus('live_wood')">木 Wood</button>
-          <button class="admin-btn create fire" onclick="setAdminStatus('live_fire')">火 Fire</button>
-          <button class="admin-btn create earth" onclick="setAdminStatus('live_earth')">土 Earth</button>
-        </div>
-        <div class="admin-row">
-          <button class="admin-btn create metal" onclick="setAdminStatus('live_metal')">金 Metal</button>
-          <button class="admin-btn create water" onclick="setAdminStatus('live_water')">水 Water</button>
-          <button class="admin-btn create harmony" onclick="setAdminStatus('live_harmony')">✦ Harmony</button>
-        </div>
-      </div>
-      <div class="admin-section">
-        <div class="admin-label">DESTRUCTION</div>
-        <div class="admin-row">
-          <button class="admin-btn destroy" onclick="setAdminStatus('destroy_water')">水 Tsunami</button>
-          <button class="admin-btn destroy" onclick="setAdminStatus('destroy_fire')">火 Inferno</button>
-          <button class="admin-btn destroy" onclick="setAdminStatus('destroy_metal')">金 Rust</button>
-        </div>
-        <div class="admin-row">
-          <button class="admin-btn destroy" onclick="setAdminStatus('destroy_wood')">木 Ashes</button>
-          <button class="admin-btn destroy" onclick="setAdminStatus('destroy_earth')">土 Quake</button>
-          <button class="admin-btn destroy aftermath" onclick="setAdminStatus('live_aftermath')">☠ Aftermath</button>
-        </div>
-      </div>
-      <div class="admin-section">
-        <div class="admin-row">
-          <button class="admin-btn end" onclick="setAdminStatus('ended')">⏹ END SHOW</button>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- SVG Filters -->
-  <svg width="0" height="0" style="position:absolute; pointer-events:none;">
-    <filter id="goo">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur" />
-      <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 18 -7" result="goo" />
-    </filter>
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+
+// ============ ICONS ============
+const Icon = ({ d, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 24 24" }) => (
+  <svg width={size} height={size} viewBox={viewBox} fill={fill} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {Array.isArray(d) ? d.map((p, i) => React.isValidElement(p) ? React.cloneElement(p, { key: i }) : <path key={i} d={p} vectorEffect="non-scaling-stroke" />)
+      : React.isValidElement(d) ? d : <path d={d} vectorEffect="non-scaling-stroke" />}
   </svg>
+);
+const I = {
+  play: s => <Icon size={s || 18} d="M5 3l14 9-14 9V3z" fill="none" strokeWidth={1.5} />,
+  pause: s => <Icon size={s || 18} d={[<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />, <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />]} />,
+  chevL: s => <Icon size={s || 18} d="M15 18l-6-6 6-6" />,
+  chevR: s => <Icon size={s || 18} d="M9 18l6-6-6-6" />,
+  plus: s => <Icon size={s || 20} d={["M12 5v14", "M5 12h14"]} />,
+  trash: s => <Icon size={s || 16} d={["M3 6h18", "M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2", "M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"]} />,
+  copy: s => <Icon size={s || 16} d={["M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2", "M12 8h6a2 2 0 012 2v8a2 2 0 01-2 2h-6a2 2 0 01-2-2v-8a2 2 0 012-2z"]} />,
+  arrowUp: s => <Icon size={s || 16} d="M12 19V5M5 12l7-7 7 7" />,
+  arrowDown: s => <Icon size={s || 16} d="M12 5v14M5 12l7 7 7-7" />,
+  x: s => <Icon size={s || 18} d={["M18 6L6 18", "M6 6l12 12"]} />,
+  volOn: s => <Icon size={s || 18} d={["M11 5L6 9H2v6h4l5 4V5z", "M19.07 4.93a10 10 0 010 14.14", "M15.54 8.46a5 5 0 010 7.07"]} />,
+  volOff: s => <Icon size={s || 18} d={["M11 5L6 9H2v6h4l5 4V5z", "M23 9l-6 6", "M17 9l6 6"]} />,
+  clock: s => (<svg width={s || 18} height={s || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>),
+  music: s => <Icon size={s || 14} d={["M9 18V5l12-2v13", "M9 18a3 3 0 11-6 0 3 3 0 016 0z", "M21 16a3 3 0 11-6 0 3 3 0 016 0z"]} />,
+  gear: s => (<svg width={s || 18} height={s || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></svg>),
+  arrow: s => <Icon size={s || 14} d="M5 12h14m-7-7l7 7-7 7" />,
+  restart: s => <Icon size={s || 18} d={["M1 4v6h6", "M3.51 15a9 9 0 102.13-9.36L1 10"]} />,
+  save: s => <Icon size={s || 18} d={["M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z", "M17 21v-8H7v8", "M7 3v5h8"]} />,
+  folder: s => <Icon size={s || 18} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />,
+  search: s => <Icon size={s || 18} d={["M11 17a6 6 0 100-12 6 6 0 000 12z", "M21 21l-4.35-4.35"]} />,
+  rec: s => (<svg width={s || 18} height={s || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" /></svg>),
+  target: s => <Icon size={s || 18} d={["M12 22a10 10 0 100-20 10 10 0 000 20z", "M12 18a6 6 0 100-12 6 6 0 000 12z", "M12 14a2 2 0 100-4 2 2 0 000 4z"]} strokeWidth={1.5} />,
+  loop: s => <Icon size={s || 16} d={["M17 1l4 4-4 4", "M3 11V9a4 4 0 014-4h14", "M7 23l-4-4 4-4", "M21 13v2a4 4 0 01-4 4H3"]} />,
+  fileNew: s => <Icon size={s || 18} d={["M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z", "M14 2v6h6", "M12 18v-6", "M9 15h6"]} />,
+};
 
-  <!-- Locked screen -->
-  <div class="status-screen" id="lockedScreen">
-    <h1>五行</h1>
-    <p class="sub">Performance has not yet begun.</p>
-  </div>
+// ============ CONSTANTS ============
+const BU = [{ id: "w", q: 4 }, { id: "h", q: 2 }, { id: "q", q: 1 }, { id: "e", q: 0.5 }, { id: "16", q: 0.25 }, { id: "32", q: 0.125 }];
+const D2Q = { 1: 4, 2: 2, 4: 1, 8: 0.5, 16: 0.25, 32: 0.125 };
+const C = { bg: "#07070a", surface: "#111116", surfaceHover: "#1a1a22", border: "#25252e", text: "#eeeef0", textMuted: "#848492", downbeat: "#f0a030", accent: "#8b7cf6", sub: "#3a3a45", danger: "#ef4444", record: "#ef4444", practice: "#22c55e", glowDownbeat: "rgba(240, 160, 48, 0.4)", glowPractice: "rgba(34, 197, 94, 0.4)", glowRecord: "rgba(239, 68, 68, 0.4)" };
+const mkM = () => ({ id: Date.now() + Math.random(), type: "metered", tsNum: 4, tsDen: 4, beatUnit: "q", dotted: false, tempo: 120, bars: 8, grouping: "1+1+1+1", curve: "constant", endTempo: 120, loop: false, expressive: false, beatMap: null });
+const mkT = () => ({ id: Date.now() + Math.random(), type: "timed", duration: 10, markers: "" });
+const SK = "tempus_profiles";
+const _memStore = {};
+function _getLS(k) { try { return localStorage.getItem(k); } catch { return _memStore[k] || null; } }
+function _setLS(k, v) { try { localStorage.setItem(k, v); } catch { _memStore[k] = v; } }
+function ldP() { try { return JSON.parse(_getLS(SK)) || []; } catch { return []; } }
+function svP(p) { _setLS(SK, JSON.stringify(p)); try { const sec = JSON.parse(_getLS("tempus_sections")) || []; fbSyncDebounced(sec, p); } catch {} }
 
-  <!-- End screen -->
-  <div class="status-screen hidden" id="endScreen">
-    <h1>五行</h1>
-    <div class="reminder">
-      please return your phone to silent mode<br>
-      thank you
-    </div>
-  </div>
+// ============ FIREBASE SILENT BACKUP ============
+// TODO: Replace with your Firebase config
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA9LAg1iywIxG1KEbrwNQhrpfqELK3SOeY",
+  authDomain: "tempus-acc0e.firebaseapp.com",
+  projectId: "tempus-acc0e",
+  storageBucket: "tempus-acc0e.firebasestorage.app",
+  messagingSenderId: "290765368525",
+  appId: "1:290765368525:web:cc481f657d9e7ae7e18d84"
+};
+const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY" && FIREBASE_CONFIG.apiKey !== "disabled";
 
-  <!-- Permission -->
-  <div class="permission-overlay hidden" id="permissionOverlay">
-    <h2>五行</h2>
-    <p>This experience uses your device's<br>motion sensors, audio, and haptics.</p>
-    <div class="setup-hint">unmute · volume up · brightness up</div>
-    <button class="permission-btn" id="startBtn">Enter</button>
-    <div class="permission-status" id="permStatus"></div>
-  </div>
+let _fb = null, _fbDb = null;
+async function fbInit() {
+  if (_fb) return _fbDb;
+  if (!FB_ENABLED) return null;
+  try {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js");
+    const { getFirestore } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    _fb = initializeApp(FIREBASE_CONFIG);
+    _fbDb = getFirestore(_fb);
+    return _fbDb;
+  } catch { return null; }
+}
 
-  <!-- Landing -->
-  <div id="landing">
-    <div class="circle-layout" id="circleLayout">
-      <div class="circle-ring"></div>
-      <canvas class="energy-canvas" id="energyCanvas"></canvas>
-      <div class="circle-el c-metal" id="el-metal" onclick="openElement('metal')"><span class="char">金</span><span
-          class="elname">Metal</span></div>
-      <div class="circle-el c-wood" id="el-wood" onclick="openElement('wood')"><span class="char">木</span><span
-          class="elname">Wood</span></div>
-      <div class="circle-el c-water" id="el-water" onclick="openElement('water')"><span class="char">水</span><span
-          class="elname">Water</span></div>
-      <div class="circle-el c-fire" id="el-fire" onclick="openElement('fire')"><span class="char">火</span><span
-          class="elname">Fire</span></div>
-      <div class="circle-el c-earth" id="el-earth" onclick="openElement('earth')"><span class="char">土</span><span
-          class="elname">Earth</span></div>
-      <div class="circle-center" id="circleCenter" onclick="cycleLandingState()">
-        <h1 id="centerTitle">五行</h1>
-        <div class="subtitle" id="centerSub">Five Elements</div>
-      </div>
-    </div>
-  </div>
+function _getCookie(k) { const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : null; }
+function _setCookie(k, v) { const d = new Date(); d.setFullYear(d.getFullYear() + 2); document.cookie = k + "=" + encodeURIComponent(v) + ";expires=" + d.toUTCString() + ";path=/;SameSite=Lax"; }
+function getDeviceId() {
+  let id = _getLS("tempus_device_id") || _getCookie("tempus_device_id");
+  if (!id) { id = "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8); }
+  _setLS("tempus_device_id", id); _setCookie("tempus_device_id", id);
+  return id;
+}
 
-  <!-- Metal -->
-  <div class="element-page" id="metal-page">
-    <button class="home-btn" onclick="goHome()">⌂</button>
-    <div class="bg-char">金</div>
-    <div class="interaction-area">
-      <div class="metal-ring-visual" id="metalRing">
-        <div class="metal-shake-icon cue-visible" id="metalCue">
-          <svg viewBox="0 0 40 40" fill="none" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" stroke-linecap="round">
-            <rect x="13" y="7" width="14" height="26" rx="3" />
-            <line x1="5" y1="13" x2="9" y2="10" />
-            <line x1="4" y1="20" x2="9" y2="20" />
-            <line x1="5" y1="27" x2="9" y2="30" />
-            <line x1="35" y1="13" x2="31" y2="10" />
-            <line x1="36" y1="20" x2="31" y2="20" />
-            <line x1="35" y1="27" x2="31" y2="30" />
-          </svg>
+let _fbSyncTimer = null;
+function fbSyncDebounced(sections, profiles) {
+  if (!FB_ENABLED) return;
+  if (_fbSyncTimer) clearTimeout(_fbSyncTimer);
+  _fbSyncTimer = setTimeout(async () => {
+    try {
+      const db = await fbInit();
+      if (!db) return;
+      const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+      const deviceId = getDeviceId();
+      await setDoc(doc(db, "tempus_backups", deviceId), {
+        deviceId,
+        sections,
+        profiles: profiles || ldP(),
+        settings: (() => { try { return JSON.parse(_getLS("tempus_settings")) || {}; } catch { return {}; } })(),
+        videoUrl: (() => { try { return _getLS("tempus_videoUrl") || null; } catch { return null; } })(),
+        videoSync: (() => { try { return JSON.parse(_getLS("tempus_videoSync")) || null; } catch { return null; } })(),
+        lastUpdated: new Date().toISOString(),
+        userAgent: navigator.userAgent || ""
+      }, { merge: true });
+    } catch {}
+  }, 5000);
+}
+
+// ============ SVG NOTE ============
+function NoteSVG({ type, dotted, size = 24 }) {
+  const w = size, h = size * 1.6, hY = h * 0.72, hX = w * 0.38, sT = h * 0.15, sX = hX + 3.8;
+  const op = type === "w" || type === "h", hs = type !== "w", uf = type === "e", bm = type === "16" ? 2 : type === "32" ? 3 : 0;
+  const np = `M${hX - 4.5},${hY + 1} C${hX - 4.5},${hY + 3.5} ${hX - 1},${hY + 4} ${hX + 1.5},${hY + 2.5} C${hX + 4},${hY + 1} ${hX + 4.5},${hY - 1.5} ${hX + 4.5},${hY - 3.5} C${hX + 4.5},${hY - 6} ${hX + 1},${hY - 6.5} ${hX - 1.5},${hY - 5} C${hX - 4},${hY - 3.5} ${hX - 4.5},${hY - 1} ${hX - 4.5},${hY + 1} Z`;
+  return (<svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }} aria-hidden="true">
+    {op ? <path d={np} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" transform={`rotate(-15,${hX},${hY})`} /> : <path d={np} fill="currentColor" stroke="currentColor" strokeWidth={0.5} strokeLinejoin="round" strokeLinecap="round" transform={`rotate(-15,${hX},${hY})`} />}
+    {hs && <line x1={sX} y1={hY} x2={sX} y2={sT} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />}
+    {uf && <path d={`M${sX},${sT} C${sX + 4},${sT + 2} ${sX + 7},${sT + 8} ${sX + 5},${sT + 14} C${sX + 5},${sT + 12} ${sX + 3},${sT + 8} ${sX},${sT + 6}`} fill="currentColor" />}
+    {bm > 0 && Array.from({ length: bm }).map((_, i) => <line key={i} x1={sX} y1={sT + i * 4} x2={sX + 8} y2={sT + i * 4 + 2} stroke="currentColor" strokeWidth={2} strokeLinecap="round" />)}
+    {dotted && <circle cx={hX + 8.5} cy={hY} r={1.5} fill="currentColor" />}
+  </svg>);
+}
+
+// ============ UTILITIES ============
+function gCD(tempo, bu, dot, den) { const t = Math.max(1, tempo || 120); const b = BU.find(x => x.id === bu); if (!b) return 0.5; let q = b.q; if (dot) q *= 1.5; return (60 / t) * ((D2Q[den] || 1) / q); }
+function pG(s) { if (!s || !s.trim()) return [1]; return s.split("+").map(x => parseInt(x.trim())).filter(n => !isNaN(n) && n > 0); }
+function sG(n, d) { if (d >= 8 && n % 3 === 0 && n > 3) return Array(n / 3).fill(3).join("+"); return Array(n).fill(1).join("+"); }
+function gBT(g) { const t = []; g.forEach((v, gi) => { for (let i = 0; i < v; i++)t.push(gi === 0 && i === 0 ? 0 : i === 0 ? 1 : 2); }); return t; }
+function pM(s) { if (!s || !s.trim()) return []; return s.split(",").map(x => parseFloat(x.trim())).filter(n => !isNaN(n) && n >= 0).sort((a, b) => a - b); }
+function mkBeatMap(n, tempo) { return Array.from({ length: n }, () => ({ tempo, fermata: false, fermataHold: 0, fermataUnit: "beats" })); }
+
+function isSafeUrl(url) { try { const u = new URL(url); return u.protocol === 'http:' || u.protocol === 'https:'; } catch { return false; } }
+
+function getEmbedUrl(url) {
+  if (!url) return null;
+  try {
+    // YouTube
+    let m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+    if (m) return `https://www.youtube.com/embed/${m[1]}?rel=0`;
+    // Vimeo
+    m = url.match(/vimeo\.com\/(\d+)/);
+    if (m) return `https://player.vimeo.com/video/${m[1]}`;
+    // Bilibili
+    m = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)/);
+    if (m) return `https://player.bilibili.com/player.html?bvid=${m[1]}&high_quality=1`;
+    // Fallback - try as direct embed
+    if (url.startsWith("http")) return url;
+  } catch {}
+  return null;
+}
+
+function buildTL(sections) {
+  const bars = []; let at = 0, ab = 1;
+  sections.forEach((s, si) => {
+    if (s.type === "timed") { bars.push({ si, bin: 1, ab: ab, st: at, dur: s.duration, cd: s.duration, tempo: 0, tsN: 0, tsD: 0, bts: [0], cpb: 1, isT: true, tDur: s.duration, mk: pM(s.markers) }); at += s.duration; ab++; return; }
+    const grp = pG(s.grouping), cpb = s.tsNum;
+    const loopFirstIdx = bars.length;
+    const totalBeats = s.bars * cpb;
+    for (let b = 0; b < s.bars; b++) {
+      const bm = s.expressive && s.beatMap && s.beatMap.length === cpb ? s.beatMap : null;
+      let perBeatCd = null, totalDur = 0;
+      if (bm) {
+        perBeatCd = bm.map(beat => {
+          const cd = gCD(beat.tempo, s.beatUnit, s.dotted, s.tsDen);
+          const hold = beat.fermata ? (beat.fermataUnit === "sec" ? beat.fermataHold : beat.fermataHold * cd) : 0;
+          return { cd, hold, fermata: beat.fermata };
+        });
+        totalDur = perBeatCd.reduce((sum, x) => sum + x.cd + x.hold, 0);
+      } else if (s.curve !== "constant" && totalBeats > 1) {
+        // Per-beat staircase interpolation
+        perBeatCd = [];
+        for (let i = 0; i < cpb; i++) {
+          const beatNum = b * cpb + i;
+          const t = beatNum / (totalBeats - 1);
+          const tempo = s.tempo + (s.endTempo - s.tempo) * t;
+          const cd = gCD(tempo, s.beatUnit, s.dotted, s.tsDen);
+          perBeatCd.push({ cd, hold: 0, fermata: false });
+        }
+        totalDur = perBeatCd.reduce((sum, x) => sum + x.cd, 0);
+      } else {
+        const cd = gCD(s.tempo, s.beatUnit, s.dotted, s.tsDen);
+        totalDur = cpb * cd;
+      }
+      const barTempo = s.curve !== "constant" && totalBeats > 1 ? s.tempo + (s.endTempo - s.tempo) * (b * cpb / Math.max(1, totalBeats - 1)) : s.tempo;
+      bars.push({ si, bin: b + 1, ab, st: at, dur: totalDur, cd: perBeatCd ? null : gCD(s.tempo, s.beatUnit, s.dotted, s.tsDen), tempo: barTempo, tsN: s.tsNum, tsD: s.tsDen, bts: gBT(grp), cpb, isT: false, loop: !!s.loop, loopTo: loopFirstIdx, perBeatCd });
+      at += totalDur; ab++;
+    }
+  }); return bars;
+}
+
+// Scale sections for practice mode
+function scaleSections(sections, pct) {
+  return sections.map(s => {
+    if (s.type === "timed") return { ...s, id: Date.now() + Math.random() };
+    const ratio = pct / 100;
+    const scaled = { ...s, id: Date.now() + Math.random(), tempo: Math.round(s.tempo * ratio), endTempo: Math.round(s.endTempo * ratio) };
+    if (s.beatMap) scaled.beatMap = s.beatMap.map(b => ({ ...b, tempo: Math.round(b.tempo * ratio) }));
+    return scaled;
+  });
+}
+
+// ============ AUDIO ENGINE ============
+function useMetronome() {
+  const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, pitched: true, muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false);
+  const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false);
+  const init = useCallback(() => { if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, []);
+  const rwl = useCallback(async () => { try { if ("wakeLock" in navigator) wl.current = await navigator.wakeLock.request("screen"); } catch { } if (sa.current && sa.current.paused) { try { await sa.current.play(); } catch { } } }, []);
+  const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) { sa.current.pause(); sa.current.currentTime = 0; } }, []);
+  const prime = useCallback(async () => { const ctx = init(); if (ctx.state === "suspended") await ctx.resume(); return ctx; }, [init]);
+  const clk = useCallback((ctx, time, bt) => {
+    const { accented, pitched, muted } = sR.current; if (muted) return; const e = accented ? bt : 2;
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
+    if (pitched) { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.08); }
+    else { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++)d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(time); src.stop(time + 0.06); }
+  }, []);
+  const sched = useCallback(() => {
+    const ctx = actx.current; if (!ctx || !pl.current) return; const tl = tlR.current;
+    let _guard = 0;
+    while (nb.current < ctx.currentTime + 0.12 && _guard++ < 200) {
+      if (ciL.current > 0) { const bar = tl[bi.current]; if (!bar || bar.isT) { ciL.current = 0; continue; } const ciCd = bar.cd ?? (bar.perBeatCd?.[0]?.cd ?? 0.5); clk(ctx, nb.current, ciL.current % bar.cpb === 0 ? 0 : 2); if (cbR.current) cbR.current({ type: "countIn", beatsLeft: ciL.current, beatInBar: bar.cpb - ((ciL.current - 1) % bar.cpb), totalBeats: bar.cpb }); nb.current += ciCd; ciL.current--; continue; }
+      const bar = tl[bi.current]; if (!bar) { if (cbR.current) cbR.current({ type: "ended" }); stop(); return; }
+      if (bar.isT) {
+        if (tsS.current === 0) { tsS.current = nb.current; tsF.current = false; } const el = nb.current - tsS.current;
+        if (!tsF.current) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedStart", ab: bar.ab, si: bar.si, dur: bar.tDur }); tsF.current = true; }
+        if (bar.mk && tsM.current < bar.mk.length && el >= bar.mk[tsM.current] - 0.02) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedMarker", ab: bar.ab, si: bar.si, el, dur: bar.tDur, mt: bar.mk[tsM.current], mi: tsM.current, tm: bar.mk.length }); tsM.current++; }
+        if (cbR.current) cbR.current({ type: "timedTick", ab: bar.ab, si: bar.si, el, rem: Math.max(0, bar.tDur - el), dur: bar.tDur });
+        if (el >= bar.tDur) { tsS.current = 0; tsM.current = 0; tsF.current = false; bi.current++; continue; } nb.current += 0.05; return;
+      }
+      // Fermata hold in progress
+      if (inFerm.current) {
+        const el = nb.current - fermS.current;
+        if (cbR.current) cbR.current({ type: "fermataHold", ab: bar.ab, si: bar.si, rem: Math.max(0, fermD.current - el), dur: fermD.current, beatIdx: bei.current });
+        if (el >= fermD.current) {
+          inFerm.current = false; bei.current++; if (bei.current >= bar.cpb) {
+            bei.current = 0; bi.current++;
+            const nextBar = tl[bi.current]; if (!nextBar || (nextBar.si !== bar.si)) { if (bar.loop && bar.loopTo != null) { bi.current = bar.loopTo; } }
+          }
+          continue;
+        }
+        nb.current += 0.05; return;
+      }
+      const pbc = bar.perBeatCd;
+      const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
+      const beatCd = Math.max(0.01, pbc ? (pbc[bei.current]?.cd ?? pbc[0]?.cd ?? 0.5) : (bar.cd ?? 0.5));
+      const beatTempo = pbc ? pbc[bei.current]?.cd ? Math.round(60 / (pbc[bei.current].cd / ((D2Q[bar.tsD] || 1) / (BU.find(x => x.id === "q")?.q || 1)))) : bar.tempo : bar.tempo;
+      if (cbR.current) cbR.current({ type: "beat", barIdx: bi.current, beatIdx: bei.current, bt, ab: bar.ab, tsN: bar.tsN, tsD: bar.tsD, tempo: beatTempo, si: bar.si });
+      nb.current += beatCd;
+      // Check for fermata on this beat
+      if (pbc && pbc[bei.current]?.fermata && pbc[bei.current]?.hold > 0) {
+        inFerm.current = true; fermS.current = nb.current; fermD.current = pbc[bei.current].hold;
+        continue;
+      }
+      bei.current++; if (bei.current >= bar.cpb) {
+        bei.current = 0; bi.current++;
+        const nextBar = tl[bi.current];
+        if (!nextBar || (nextBar.si !== bar.si)) { if (bar.loop && bar.loopTo != null) { bi.current = bar.loopTo; } }
+      }
+    }
+  }, [clk]);
+  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; rlwl(); }, [rlwl]);
+  const start = useCallback((tl, from = 0, ci = 0, s = {}) => {
+    stop(); sR.current = { accented: true, pitched: true, muted: false, ...s }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false;
+    const ctx = init(); if (ctx.state === "suspended") ctx.resume();
+    if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { sa.current.play().catch(() => {}); } catch {}
+    try { if ("wakeLock" in navigator) navigator.wakeLock.request("screen").then(l => { wl.current = l; }).catch(() => {}); } catch {}
+    const bar = tl[from]; if (!bar) return; ciL.current = bar.isT ? 0 : ci * bar.cpb; pl.current = true; nb.current = ctx.currentTime + 0.1; tmr.current = setInterval(sched, 20);
+  }, [stop, init, sched]);
+  const updS = useCallback(s => { sR.current = { ...sR.current, ...s }; }, []);
+  const setCb = useCallback(cb => { cbR.current = cb; }, []);
+  useEffect(() => () => { stop(); if (actx.current) actx.current.close().catch(() => { }); }, [stop]);
+  const tap = useCallback(() => { const ctx = init(); if (ctx.state === "suspended") ctx.resume(); const buf = ctx.createBuffer(1, 1, ctx.sampleRate), src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start(0); if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { sa.current.play().catch(() => {}); } catch {} return ctx; }, [init]);
+  return { start, stop, setCb, pl, updS, tap };
+}
+
+// ============ STYLES ============
+const nI = { width: 62, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.text, textAlign: "center", fontSize: 18, borderRadius: 8, fontFamily: "'DM Mono',monospace", outline: "none", margin: "0 6px" };
+const sB = { width: 48, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" };
+const oB = on => ({ padding: "8px 16px", borderRadius: 8, border: `1px solid ${on ? C.downbeat : C.border}`, background: on ? C.downbeat + "15" : "transparent", color: on ? C.downbeat : C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" });
+
+// ============ INPUTS ============
+function NI({ value, onChange, min, max, style = {}, step = 1, validate }) { const [d, setD] = useState(String(value)); const drg = useRef({ on: false, active: false, stY: 0, stV: 0 }); useEffect(() => setD(String(value)), [value]); const cm = v => { const n = typeof v === "number" ? v : parseFloat(d); if (!isNaN(n) && n >= min && n <= max) { if (validate && !validate(n)) { setD(String(value)); return; } onChange(n); setD(String(n)); } else setD(String(value)); }; const pD = e => { drg.current = { on: true, active: false, stY: e.clientY, stV: value }; }; const pM = e => { if (!drg.current.on) return; const dY = drg.current.stY - e.clientY; if (!drg.current.active && Math.abs(dY) < 8) return; if (!drg.current.active) { drg.current.active = true; e.target.setPointerCapture(e.pointerId); } const nv = Math.min(max, Math.max(min, drg.current.stV + Math.round(dY / 5) * step)); setD(String(nv)); }; const pU = e => { if (drg.current.active) { drg.current.on = false; drg.current.active = false; try { e.target.releasePointerCapture(e.pointerId); } catch { } cm(parseFloat(d)); } else { drg.current.on = false; } }; return <input type="text" inputMode="decimal" value={d} onChange={e => setD(e.target.value)} onBlur={() => cm()} onKeyDown={e => { if (e.key === "Enter") { cm(); e.target.blur(); } }} onPointerDown={pD} onPointerMove={pM} onPointerUp={pU} onPointerCancel={pU} style={{ ...nI, cursor: "ns-resize", ...style }} />; }
+function Stp({ value, onChange, min = 1, max = 999 }) { return (<div style={{ display: "flex", alignItems: "center" }}><button onClick={() => onChange(Math.max(min, value - 1))} style={sB}>{I.chevL(16)}</button><NI value={value} onChange={onChange} min={min} max={max} /><button onClick={() => onChange(Math.min(max, value + 1))} style={sB}>{I.chevR(16)}</button></div>); }
+function StpF({ value, onChange, min = 0, max = 999, step = 0.5 }) { return (<div style={{ display: "flex", alignItems: "center" }}><button onClick={() => onChange(Math.max(min, +(value - step).toFixed(1)))} style={sB}>{I.chevL(16)}</button><NI value={value} onChange={onChange} min={min} max={max} step={step} style={{ width: 72 }} /><button onClick={() => onChange(Math.min(max, +(value + step).toFixed(1)))} style={sB}>{I.chevR(16)}</button></div>); }
+function Row({ label, children }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}><span style={{ color: C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", width: 70, flexShrink: 0, display: "flex", alignItems: "center" }}>{label}</span><div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>{children}</div></div>); }
+
+// ============ TAP TEMPO ============
+function useTapTempo(onChange) {
+  const taps = useRef([]);
+  const resetTimer = useRef(null);
+  const [tapBpm, setTapBpm] = useState(null);
+  const [tapFlash, setTapFlash] = useState(false);
+  const tap = useCallback(() => {
+    const now = performance.now();
+    taps.current.push(now);
+    const cutoff = now - 4000;
+    taps.current = taps.current.filter(t => t > cutoff).slice(-8);
+    setTapFlash(true); setTimeout(() => setTapFlash(false), 150);
+    if (taps.current.length >= 3) {
+      const intervals = [];
+      for (let i = 1; i < taps.current.length; i++) intervals.push(taps.current[i] - taps.current[i - 1]);
+      const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+      const bpm = Math.round(60000 / avg);
+      if (bpm >= 10 && bpm <= 400) { onChange(bpm); setTapBpm(bpm); }
+    }
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => { taps.current = []; setTapBpm(null); }, 2000);
+  }, [onChange]);
+  return { tap, tapBpm, tapFlash };
+}
+
+function TapBtn({ onTap, size = "sm", flash = false }) {
+  const isSm = size === "sm";
+  return (<button onClick={onTap} style={{ background: flash ? C.downbeat : C.surface, border: `1px solid ${C.border}`, borderRadius: isSm ? 8 : 10, padding: isSm ? "8px 12px" : "10px 16px", cursor: "pointer", color: flash ? "#000" : C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: isSm ? 12 : 14, display: "flex", alignItems: "center", justifyContent: "center", userSelect: "none", transition: "background 0.1s ease, color 0.1s ease" }}>TAP</button>);
+}
+
+// ============ BEAT UNIT PICKER ============
+function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip="Beat Unit" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
+
+// ============ SECTION EDITOR ============
+function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew = false, editIndex = 0 }) {
+  const [s, setS] = useState({ ...section }); const upd = (k, v) => setS(p => ({ ...p, [k]: v })); const isMet = s.type === "metered";
+  const { tap: tapTempo, tapFlash: secTapFlash } = useTapTempo(bpm => upd("tempo", bpm));
+  const isAdv = appMode === "advanced", isBas = appMode === "basic";
+  // Auto-enable expressive in advanced mode
+  useEffect(() => { if (isAdv && isMet && !s.expressive) upd("expressive", true); }, [isAdv, isMet]);
+  useEffect(() => { if (!isMet) return; const sum = pG(s.grouping).reduce((a, b) => a + b, 0); if (sum !== s.tsNum) upd("grouping", sG(s.tsNum, s.tsDen)); }, [s.tsNum, s.tsDen]);
+  const gV = useMemo(() => { if (!isMet) return true; return pG(s.grouping).reduce((a, b) => a + b, 0) === s.tsNum; }, [s.grouping, s.tsNum, isMet]);
+  useEffect(() => { if (s.curve === "accel" && s.endTempo <= s.tempo) upd("endTempo", s.tempo + 1); if (s.curve === "rit" && s.endTempo >= s.tempo) upd("endTempo", Math.max(10, s.tempo - 1)); }, [s.curve, s.tempo]);
+  const sET = v => { if (s.curve === "accel") upd("endTempo", Math.max(s.tempo + 1, v)); else if (s.curve === "rit") upd("endTempo", Math.min(s.tempo - 1, Math.max(10, v))); else upd("endTempo", v); };
+  const swT = t => { if (t === s.type) return; setS(p => (t === "timed" ? { ...mkT(), id: p.id } : { ...mkM(), id: p.id })); };
+  // Expressive: init/update beatMap when toggled or tsNum changes
+  useEffect(() => { if (s.expressive && (!s.beatMap || s.beatMap.length !== s.tsNum)) upd("beatMap", mkBeatMap(s.tsNum, s.tempo)); }, [s.expressive, s.tsNum]);
+  const updBeat = (idx, k, v) => { if (!s.beatMap) return; const bm = [...s.beatMap]; bm[idx] = { ...bm[idx], [k]: v }; upd("beatMap", bm); };
+
+  // Grouping presets
+  const gPresets = useMemo(() => { const n = s.tsNum, d = s.tsDen, p = []; if (n <= 6) p.push(Array(n).fill(1).join("+")); if (n > 1 && n % 2 === 0) p.push(Array(n / 2).fill(2).join("+")); if (n >= 6 && n % 3 === 0) p.push(Array(n / 3).fill(3).join("+")); if (n === 5) { p.push("2+3", "3+2"); } if (n === 7) { p.push("2+2+3", "3+2+2", "2+3+2"); } if (n === 8 && d >= 8) { p.push("3+3+2", "3+2+3"); } return [...new Set(p)]; }, [s.tsNum, s.tsDen]);
+
+  useEffect(() => {
+    const hk = e => { if (e.key === "Enter") { e.preventDefault(); if (gV) { onSave(s); onClose(); } } };
+    window.addEventListener("keydown", hk); return () => window.removeEventListener("keydown", hk);
+  }, [s, gV, onSave, onClose]);
+
+  return (
+    <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{isNew ? "New Section" : `Edit Section ${editIndex}`}</div>
+          <button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button>
+        </div>
+        {/* Type toggle - hidden in basic */}
+        {!isBas && <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
+          <button onClick={() => swT("metered")} style={{ ...oB(isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.music(14)} Metered</button>
+          <button onClick={() => swT("timed")} style={{ ...oB(!isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.clock(14)} Timed</button>
+        </div>}
+        {isMet ? (<>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+              <NI value={s.tsNum} onChange={v => upd("tsNum", v)} min={1} max={32} style={{ width: 56, height: 48, fontSize: 24, fontWeight: 700 }} />
+              <div style={{ height: 1, width: 44, background: C.textMuted }} />
+              <NI value={s.tsDen} onChange={v => upd("tsDen", v)} min={1} max={32} validate={v => [1, 2, 4, 8, 16, 32].includes(v)} style={{ width: 56, height: 48, fontSize: 24, fontWeight: 700 }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>
+              <BUP beatUnit={s.beatUnit} dotted={s.dotted} onSelect={(id, d) => setS(p => ({ ...p, beatUnit: id, dotted: d }))} />
+              <span style={{ color: C.textMuted, fontSize: 20, fontFamily: "'DM Mono',monospace" }}>=</span>
+              <Stp value={s.tempo} onChange={v => upd("tempo", v)} min={10} max={400} />
+              <TapBtn onTap={tapTempo} flash={secTapFlash} />
+            </div>
+          </div>
+          {/* Bars + Loop */}
+          <Row label="Bars">
+            <button onClick={() => upd("loop", !s.loop)} data-tip="Loop" style={{ background: s.loop ? C.downbeat + "22" : "transparent", border: `1px solid ${s.loop ? C.downbeat : C.border}`, borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: s.loop ? C.downbeat : C.textMuted, display: "flex", alignItems: "center" }}>{I.loop(16)}</button>
+            {!s.loop && <Stp value={s.bars} onChange={v => upd("bars", v)} min={1} max={999} />}
+            {s.loop && <span style={{ color: C.downbeat, fontSize: 13, fontFamily: "'DM Mono',monospace" }}>∞</span>}
+          </Row>
+
+          {/* Grouping - pills always, number builder in advanced */}
+          {!isBas && <Row label="Grouping">
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {gPresets.map(p => <button key={p} onClick={() => upd("grouping", p)} style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${s.grouping === p ? C.downbeat : C.border}`, background: s.grouping === p ? C.downbeat + "22" : "transparent", color: s.grouping === p ? C.downbeat : C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace", cursor: "pointer" }}>{p}</button>)}
+              </div>
+              {isAdv && <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                {[1, 2, 3, 4, 5].map(n => { const cur = pG(s.grouping); const sum = cur.reduce((a, b) => a + b, 0); const canAdd = sum + n <= s.tsNum; return <button key={n} disabled={!canAdd} onClick={() => { if (!s.grouping || s.grouping.trim() === "" || sum === 0) upd("grouping", String(n)); else upd("grouping", s.grouping + "+" + n); }} style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: canAdd ? C.surface : "transparent", color: canAdd ? C.text : C.border, fontSize: 15, fontFamily: "'DM Mono',monospace", cursor: canAdd ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center" }}>{n}</button>; })}
+                <button onClick={() => { const cur = pG(s.grouping); if (cur.length > 1) { cur.pop(); upd("grouping", cur.join("+")); } else { upd("grouping", ""); } }} style={{ width: 36, height: 36, borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.textMuted, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>⌫</button>
+              </div>}
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: gV ? C.text : C.danger }}>{s.grouping || "—"}</span>
+                {!gV && <span style={{ color: C.danger, fontSize: 12 }}>({pG(s.grouping).reduce((a, b) => a + b, 0)}/{s.tsNum})</span>}
+                {gV && <span style={{ color: C.practice, fontSize: 11 }}>✓</span>}
+              </div>
+            </div>
+          </Row>}
+
+          {/* Curve - hidden in basic */}
+          {!isBas && <Row label="Curve">{["constant", "accel", "rit"].map(c => <button key={c} onClick={() => upd("curve", c)} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`, background: s.curve === c ? C.downbeat + "22" : "transparent", color: s.curve === c ? C.downbeat : C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", cursor: "pointer" }}>{c === "constant" ? "—" : c === "accel" ? "accel." : "rit."}</button>)}</Row>}
+          {!isBas && s.curve !== "constant" && <Row label={I.arrow(14)}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ color: C.text, display: "flex", alignItems: "center", minWidth: 30 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={18} /></div><span style={{ color: C.textMuted, fontSize: 18, fontFamily: "'DM Mono',monospace" }}>=</span><Stp value={s.endTempo} onChange={sET} min={10} max={400} /></div></Row>}
+
+          {/* Expressive - advanced only */}
+          {isAdv && <Row label="Expressive">
+            <button onClick={() => upd("expressive", !s.expressive)} style={{ background: s.expressive ? C.accent + "22" : "transparent", border: `1px solid ${s.expressive ? C.accent : C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: s.expressive ? C.accent : C.textMuted, fontSize: 12, fontFamily: "'Outfit',sans-serif" }}>{s.expressive ? "On" : "Off"}</button>
+          </Row>}
+          {isAdv && s.expressive && s.beatMap && <div style={{ marginBottom: 14, padding: 12, background: C.surface, borderRadius: 10, border: `1px solid ${C.accent}33` }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {s.beatMap.map((b, idx) => (
+                <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 56, marginBottom: 6 }}>
+                  <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{idx + 1}</div>
+                  <NI value={b.tempo} onChange={v => updBeat(idx, "tempo", v)} min={10} max={400} step={1} style={{ width: 52, height: 36, fontSize: 14 }} />
+                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} data-tip="Fermata" style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14 }}>𝄐</button>
+                  {b.fermata && <>
+                    <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
+                      <NI value={b.fermataHold} onChange={v => updBeat(idx, "fermataHold", v)} min={0} max={16} step={0.5} style={{ width: 40, height: 24, fontSize: 11 }} />
+                      <span style={{ color: C.textMuted + "55", fontSize: 9, fontFamily: "'DM Mono',monospace" }}>{b.fermataUnit || "beats"}</span>
+                    </div>
+                    <button onClick={() => updBeat(idx, "fermataUnit", (b.fermataUnit || "beats") === "beats" ? "sec" : "beats")} style={{ background: "transparent", border: `1px solid ${C.border}`, borderRadius: 4, padding: "1px 4px", cursor: "pointer", color: C.textMuted, fontSize: 8, fontFamily: "'DM Mono',monospace" }}>{(b.fermataUnit || "beats") === "beats" ? "→sec" : "→beats"}</button>
+                  </>}
+                </div>
+              ))}
+            </div>
+          </div>}
+        </>) : (<>
+          <Row label="Duration"><StpF value={s.duration} onChange={v => upd("duration", v)} min={0.5} max={600} /><span style={{ color: C.textMuted, fontSize: 15, fontFamily: "'DM Mono',monospace", marginLeft: 6 }}>s</span></Row>
+          <Row label="Markers"><input inputMode="decimal" value={s.markers} onChange={e => upd("markers", e.target.value)} style={{ ...nI, width: 200, textAlign: "left", padding: "0 12px", fontSize: 14 }} placeholder="e.g. 3, 7.5, 12" /></Row>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14, marginLeft: 82, fontFamily: "'DM Mono',monospace" }}>{pM(s.markers).length} cue{pM(s.markers).length !== 1 ? "s" : ""}</div>
+        </>)}
+        <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
+          {onDelete && <button onClick={() => { onDelete(s.id); onClose(); }} data-tip="Delete" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`, background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.trash(16)}</button>}
+          <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }} data-tip="Duplicate" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.copy(16)}</button>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => { if (gV) { onSave(s); onClose(); } }} style={{ flex: 0, padding: "12px 24px", borderRadius: 8, border: "none", background: gV ? C.downbeat : C.sub, color: gV ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: gV ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>{isNew ? "Add" : "Save"}</button>
         </div>
       </div>
-    </div>
-  </div>
+    </div>);
+}
 
-  <!-- Wood -->
-  <div class="element-page" id="wood-page">
-    <button class="home-btn" onclick="goHome()">⌂</button>
-    <div class="bg-char">木</div>
-    <div class="interaction-area">
-      <div class="tree-container" id="treeContainer">
-        <!-- Branches SVG drawn by JS -->
-        <svg class="tree-branches" id="treeBranches" viewBox="0 0 300 500" preserveAspectRatio="xMidYMid meet"></svg>
-        <!-- Leaf container -->
-        <div class="tree-leaf-layer" id="treeLeafLayer"></div>
-        <!-- Marimba nodes -->
-        <button class="tree-node" id="tn0" style="left:22%;top:62%;" data-note="0">C</button>
-        <button class="tree-node" id="tn1" style="left:72%;top:57%;" data-note="1">D♭</button>
-        <button class="tree-node" id="tn2" style="left:12%;top:38%;" data-note="2">F</button>
-        <button class="tree-node" id="tn3" style="left:82%;top:34%;" data-note="3">G</button>
-        <button class="tree-node" id="tn4" style="left:32%;top:14%;" data-note="4">A♭</button>
-        <button class="tree-node" id="tn5" style="left:68%;top:18%;" data-note="5">WB</button>
-        <!-- Root -->
-        <div class="tree-root" id="woodRoot">
-          <div class="tree-root-cue cue-visible" id="woodCue">
-            <svg viewBox="0 0 64 80" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.1"
-              stroke-linecap="round">
-              <path d="M18 70 C12 62 10 52 10 42 C10 22 18 10 32 8 C46 10 54 22 54 42 C54 52 52 62 46 70"
-                stroke="rgba(255,255,255,0.25)" stroke-width="1.5" />
-              <path d="M20 60 C24 54 28 52 32 52 C36 52 40 54 44 60" />
-              <path d="M18 56 C23 48 27 46 32 46 C37 46 41 48 46 56" />
-              <path d="M17 51 C22 43 27 40 32 40 C37 40 42 43 47 51" />
-              <path d="M17 46 C22 38 27 35 32 35 C37 35 42 38 47 46" />
-              <path d="M24 40 C24 34 27 30 32 30 C37 30 40 34 40 40 C40 44 37 47 32 47 C27 47 24 44 24 40" />
-              <path d="M27 39 C27 36 29 33 32 33 C35 33 37 36 37 39 C37 42 35 44 32 44 C29 44 27 42 27 39" />
-              <path d="M18 40 C20 30 25 24 32 24 C39 24 44 30 46 40" />
-              <path d="M16 36 C19 24 25 18 32 18 C39 18 45 24 48 36" />
-              <path d="M15 32 C18 20 24 14 32 14 C40 14 46 20 49 32" />
-              <path d="M16 28 C19 18 24 12 32 12 C40 12 45 18 48 28" />
-              <path d="M32 68 L32 76" stroke="rgba(255,255,255,0.3)" stroke-width="1.3" />
-              <path d="M28 73 L32 77 L36 73" stroke="rgba(255,255,255,0.3)" stroke-width="1.3" fill="none" />
-            </svg>
+// ============ SECTION CARD ============
+const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx, onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx }, ref) {
+  const isT = s.type === "timed";
+  const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
+  const [revealed, setRevealed] = useState(false);
+  const [showReorder, setShowReorder] = useState(false);
+  const [swX, setSwX] = useState(0);
+  const swRef = useRef({ startX: 0, swiping: false });
+  const isDragged = tDrag && tDrag.idx === i;
+  const onTouchStart = e => { if (e.target.closest && e.target.closest("button")) return; if (tDrag) return; swRef.current = { startX: e.touches[0].clientX, swiping: true }; };
+  const onTouchMove = e => { if (tDrag) return; if (!swRef.current.swiping) return; const dx = e.touches[0].clientX - swRef.current.startX; if (revealed) { setSwX(Math.min(0, Math.max(-80, dx - 80))); } else { setSwX(Math.min(0, dx)); } };
+  const onTouchEnd = () => { if (tDrag) return; if (!swRef.current.swiping) return; swRef.current.swiping = false; if (swX < -40) { setSwX(-80); setRevealed(true); } else { setSwX(0); setRevealed(false); } };
+  const handleCardClick = () => { if (tDrag) return; if (revealed) { setSwX(0); setRevealed(false); } else if (showReorder) { setShowReorder(false); } else { onClick(); } };
+  const handleDelete = e => { e.stopPropagation(); if (onDelete) onDelete(s.id); };
+  // Calculate shift for non-dragged cards during touch drag
+  let shiftY = 0;
+  if (tDrag && !isDragged && tDropIdx !== null) {
+    const from = tDrag.idx, to = tDropIdx;
+    const cardH = tDrag.positions?.[tDrag.idx]?.height || 60;
+    if (from < to && i > from && i <= to) shiftY = -(cardH + 6);
+    else if (from > to && i < from && i >= to) shiftY = cardH + 6;
+  }
+  return (<div ref={ref} style={{ position: "relative", overflow: isDragged ? "visible" : "hidden", borderRadius: 10 }}>
+    {(revealed || swX < 0) && <div onClick={handleDelete} data-tip="Delete" style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 80, background: C.danger, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "0 10px 10px 0", cursor: "pointer", color: "#fff" }}>{I.trash(20)}</div>}
+    <div className="sec-card" draggable={!isTouch} onDragStart={!isTouch && onDragStart ? e => onDragStart(e, i) : undefined} onDragEnter={!isTouch && onDragEnter ? e => onDragEnter(e, i) : undefined} onDragOver={!isTouch ? onDragOver : undefined} onDragEnd={!isTouch ? onDragEnd : undefined} onDrop={!isTouch && onDrop ? e => onDrop(e, i) : undefined} onClick={handleCardClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.surface, borderRadius: 10, padding: "12px 14px", border: `1px solid ${(tDropIdx === i && tDrag && tDrag.idx !== i) ? C.accent : dropIdx === i ? C.accent : (s.capturedDuration ? C.record + "44" : C.border)}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, transform: isDragged ? `translateY(${tDrag.offsetY}px)` : `translateX(${swX}px) translateY(${shiftY}px)`, transition: isDragged ? "box-shadow 0.2s" : (swRef.current.swiping ? "none" : "transform 0.25s ease, border 0.15s"), position: "relative", zIndex: isDragged ? 10 : 1, opacity: dragIdx === i ? 0.5 : 1, boxShadow: isDragged ? "0 8px 30px rgba(0,0,0,0.5)" : undefined }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 24, alignItems: "center" }}>
+        {isTouch && !showReorder ? (
+          <button onTouchStart={e => { e.stopPropagation(); onGripTouchStart(i, e); }} onTouchEnd={e => { e.stopPropagation(); if (!tDrag) cancelTouchDrag(); }} onTouchMove={e => { if (!tDrag) cancelTouchDrag(); }} onClick={e => { e.stopPropagation(); if (!tDrag) setShowReorder(true); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex", flexDirection: "column", gap: 1, touchAction: "none" }}>
+            <span style={{ fontSize: 14, lineHeight: 1, letterSpacing: 2 }}>☰</span>
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted, lineHeight: 1 }}>{i + 1}</span>
+          </button>
+        ) : (
+          <>
+            <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} data-tip-b="Up" style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
+            <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, textAlign: "center", lineHeight: 1 }}>{i + 1}</div>
+            <button disabled={i === t - 1} onClick={e => { e.stopPropagation(); onMove(1); }} data-tip-b="Down" style={{ background: "none", border: "none", color: i === t - 1 ? C.border : C.textMuted, cursor: i === t - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
+          </>
+        )}
+      </div>
+      {isT ? (<>{I.clock(16)}<div style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 15, color: C.text }}>{s.duration}s</div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{pM(s.markers).length} cue{pM(s.markers).length !== 1 ? "s" : ""}</div></>) : (<>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center" }}><span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted, margin: "1px 0" }} /><span>{s.tsDen}</span><div style={{ fontSize: 9, color: C.textMuted, fontWeight: 400, marginTop: 3 }}>{s.grouping}</div></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.text, flex: 1 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={16} /><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.textMuted }}>=</span><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 15 }}>{s.tempo}</span>{s.curve !== "constant" && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.accent, marginLeft: 4 }}>{s.curve === "accel" ? "→" : "←"}{s.endTempo}</span>}</div>
+        <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: s.loop ? C.downbeat : C.text }}>{s.loop ? "∞" : `${s.bars} bar${s.bars !== 1 ? "s" : ""}`}</div></div>
+      </>)}
+      <button onClick={e => { e.stopPropagation(); onStartHere(); }} data-tip-b="Play here" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
+    </div></div>);
+});
+
+// ============ PLAY VIEW ============
+function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, tapBpm, tapFlash, settings, onSettings }) {
+  const { absoluteBar: ab, beatIndex: bei, beatType: bt, tsNum: tsN, tsDen: tsD, sectionIndex: si, flash, isTimed: isT, countIn: isCI, ended: isEnded } = ps;
+  const fc = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.text, fo = flash ? (bt === 0 ? 0.35 : bt === 1 ? 0.2 : 0.08) : 0;
+  const [goBar, setGoBar] = useState("");
+  const [splitMsg, setSplitMsg] = useState(null);
+  const splitMsgTimer = useRef(null);
+  const mountReady = useRef(false);
+  useEffect(() => { const t = setTimeout(() => { mountReady.current = true; }, 600); return () => clearTimeout(t); }, []);
+  const lastAction = useRef(0);
+  const guardedAction = fn => () => { const now = Date.now(); if (!mountReady.current || now - lastAction.current < 250) return; lastAction.current = now; fn(); };
+  useEffect(() => () => { if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); }, []);
+  const showF = vis === "flash" || vis === "dots+flash", showD = vis === "dots" || vis === "dots+flash";
+  const borderColor = mode === "record" ? C.record : mode === "practice" ? C.practice : null;
+  const nxt = sections[si + 1]; let upN = null;
+  if (nxt && !isCI) { if (isT) { if (ps.remaining != null && ps.remaining <= 10) upN = nxt.type === "timed" ? `${nxt.duration}s Free` : `${nxt.tsNum}/${nxt.tsDen} at ${nxt.tempo}`; } else { const bis = tl.filter(b => b.si === si); if (bis.length > 0 && bis[bis.length - 1].ab - ab <= 1) upN = nxt.type === "timed" ? `${nxt.duration}s Free` : `${nxt.tsNum}/${nxt.tsDen} at ${nxt.tempo}`; } }
+  const isRec = mode === "record";
+
+  const handleTap = e => { if (isRec && onSplit) { const t = e.target; if (t.closest && (t.closest("button") || t.closest("input"))) return; onSplit(ab); setSplitMsg(`Marked bar ${ab}`); if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); splitMsgTimer.current = setTimeout(() => setSplitMsg(null), 1200); } };
+
+  const cR = 120, cC = 2 * Math.PI * cR; let prg = 0;
+  if (isEnded) prg = 1;
+  else if (isCI) prg = tsN > 0 ? (bei + 1) / tsN : 0;
+  else if (isT && ps.remaining != null) prg = 1 - (ps.remaining / (sections[si]?.duration || 1));
+  else if (!isT) { const bs = tl.filter(b => b.si === si); if (bs.length) { const t = bs.length, c = ab - bs[0].ab, bp = bei / Math.max(1, tsN); prg = (c + bp) / t; } }
+  const sDo = cC - (prg * cC);
+  const showNav = !isP || isEnded;
+
+  return (
+    <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 4px ${borderColor}, inset 0 0 30px ${borderColor}44` : undefined }}>
+      {showF && flash && <div style={{ position: "absolute", inset: 0, background: fc, opacity: fo, transition: "opacity 0.05s", pointerEvents: "none" }} />}
+      {splitMsg && <div style={{ position: "absolute", inset: 0, background: C.record, opacity: 0.15, pointerEvents: "none", transition: "opacity 0.3s" }} />}
+
+      {/* TOP BAR */}
+      <div style={{ position: "absolute", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", zIndex: 2 }}>
+        <button onClick={onMute} data-tip-b={muted ? "Unmute" : "Mute"} style={tS}>{muted ? I.volOff(18) : I.volOn(18)}</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {isRec && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.record, display: "flex", alignItems: "center", gap: 4, animation: "pulse 2s infinite" }}>{I.rec(12)} REC</div>}
+          {mode === "practice" && ps.pctLabel && !isEnded && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.practice, fontWeight: 600 }}>{ps.pctLabel}</div>}
+          <button onClick={onExit} data-tip-b="Exit" style={tS}>{I.x(18)}</button>
+        </div>
+      </div>
+
+      {/* MIDDLE - centered */}
+      <div style={{ position: "absolute", top: 70, left: 0, right: 0, bottom: 210, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", zIndex: 1 }}>
+        <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "min(260px, 45vh)", height: "min(260px, 45vh)" }}>
+          <svg width="100%" height="100%" viewBox="0 0 280 280" style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)", pointerEvents: "none" }}>
+            <circle cx={140} cy={140} r={cR} fill="none" stroke={C.border} strokeWidth={8} />
+            <circle cx={140} cy={140} r={cR} fill="none" stroke={borderColor || C.downbeat} strokeWidth={8} strokeDasharray={cC} strokeDashoffset={sDo} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.1s linear" }} />
+          </svg>
+          <div style={{ fontSize: 20, color: C.textMuted, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, position: "relative", zIndex: 1, marginBottom: 8 }}>
+            {isEnded ? "" : isCI ? <><span style={{ fontSize: 14 }}>Count-in</span><span style={{ fontSize: 14, color: C.downbeat, fontWeight: 600 }}>Bar {ab}</span></> : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} FREE</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
+          </div>
+          <div className={`hdr-text ${ps.flash && ps.beatType === 0 ? 'pump' : ''}`} style={{ fontFamily: "'Bebas Neue','DM Mono',monospace", fontSize: isEnded ? 80 : 110, fontWeight: 400, color: isEnded ? C.downbeat : C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
+            {isEnded ? "END" : isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
+          </div>
+        </div>
+        {/* Split msg - reserved height */}
+        <div style={{ height: 22, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
+          {splitMsg && <span style={{ fontSize: 14, color: C.record, fontWeight: 600 }}>{splitMsg}</span>}
+        </div>
+        {/* Section info - reserved height */}
+        <div style={{ height: 40, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+          {!isCI && !isEnded && <>
+            <div style={{ fontSize: 12, color: C.textMuted }}>{si + 1}/{sections.length}{!isT && ps.tempo ? ` · ${Math.round(ps.tempo)}` : ""}</div>
+            {upN && <div style={{ color: C.downbeat, fontSize: 13, fontWeight: 600, animation: "pulse 2s infinite" }}>Up Next: {upN}</div>}
+          </>}
+        </div>
+        <div style={{ height: 24, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
+          {showD && !isT && !isCI && !isEnded && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)", border: on ? `2px solid ${c}` : "2px solid transparent", transform: on ? "scale(1.1)" : "scale(1)", boxShadow: on ? `0 0 10px ${c}66` : "none" }} />; })}</div>}
+          {showD && isT && !isEnded && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent", transform: on ? "scale(1.1)" : "scale(1)", boxShadow: on ? `0 0 10px ${C.downbeat}66` : "none" }} />; })}</div>}
+        </div>
+        {/* Record hint - reserved height */}
+        <div style={{ height: 20, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
+          {isRec && isP && !isEnded && <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", opacity: 0.8, animation: "pulse 3s infinite" }}>Tap anywhere to mark section</span>}
+        </div>
+      </div>
+
+      {/* BOTTOM CONTROLS - fixed */}
+      <div style={{ position: "absolute", bottom: 24, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 2, pointerEvents: "none" }}>
+        {/* Nav row - visibility hidden during play */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, visibility: showNav ? "visible" : "hidden", pointerEvents: showNav ? "auto" : "none", opacity: showNav ? 1 : 0, transition: "opacity 0.15s" }}>
+          <button onClick={onPrevSec} data-tip="Previous" style={nv}>{I.chevL(18)}</button>
+          <input type="text" inputMode="numeric" value={goBar} onChange={e => setGoBar(e.target.value)} placeholder="Bar #" style={{ ...nI, width: 64, fontSize: 14 }} onKeyDown={e => { if (e.key === "Enter") { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); } } }} />
+          <button onClick={onNextSec} data-tip="Next" style={nv}>{I.chevR(18)}</button>
+        </div>
+        {/* Quick settings */}
+        {settings && onSettings && <div style={{ display: "flex", gap: 6, justifyContent: "center", pointerEvents: "auto" }}>
+          <button onClick={() => onSettings({ ...settings, accented: !settings.accented })} style={qS}>{settings.accented ? "Accent" : "Flat"}</button>
+          <button onClick={() => onSettings({ ...settings, pitched: !settings.pitched })} style={qS}>{settings.pitched ? "Pitch" : "Noise"}</button>
+          <button onClick={() => { const m = ["dots", "dots+flash", "flash"]; const i = (m.indexOf(settings.visualMode) + 1) % m.length; onSettings({ ...settings, visualMode: m[i] }); }} style={qS}><span style={{ opacity: settings.visualMode.includes("dots") ? 1 : 0.25 }}>●</span> <span style={{ opacity: settings.visualMode.includes("flash") ? 1 : 0.25 }}>◻</span></button>
+          <button onClick={() => onSettings({ ...settings, countIn: (settings.countIn + 1) % 3 })} style={qS}>{settings.countIn === 0 ? "No Count-in" : `${settings.countIn} Count-in`}</button>
+        </div>}
+        {/* Transport */}
+        <div style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
+          <div style={{ width: 44, display: "flex", justifyContent: "center" }}>
+            {showNav && <button onClick={onRestart} data-tip="Restart" style={tS}>{I.restart(18)}</button>}
+          </div>
+          <button onClick={guardedAction(() => { const v = parseInt(goBar); if (isP) { onPause(); } else { onResume(!isNaN(v) && v > 0 ? v : null); setGoBar(""); } })} data-tip={isP ? "Pause" : "Play"} style={tB}>{isP ? I.pause(22) : I.play(22)}</button>
+          <div style={{ width: 44, display: "flex", justifyContent: "center" }}>
+            {mode === "normal" && onTapTempo ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, width: 44 }}>
+              {tapBpm && <span style={{ fontSize: 10, color: C.downbeat, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{tapBpm}</span>}
+              <button onClick={onTapTempo} style={{ ...tS, background: tapFlash ? C.downbeat : C.surface, color: tapFlash ? "#000" : C.text, transition: "background 0.15s, color 0.15s" }}><span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace" }}>TAP</span></button>
+            </div> : null}
           </div>
         </div>
       </div>
-    </div>
-  </div>
+    </div>);
+}
+const nv = { padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", justifyContent: "center" };
+const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", background: C.downbeat, color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.downbeat}33` };
+const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
+const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" };
 
-  <!-- Water -->
-  <div class="element-page" id="water-page">
-    <button class="home-btn" onclick="goHome()">⌂</button>
-    <div class="bg-char">水</div>
-    <div class="interaction-area">
-      <div class="water-tilt-hint" id="waterTiltHint">
-        <svg viewBox="0 0 48 48" fill="none" stroke-linecap="round">
-          <rect x="16" y="10" width="16" height="26" rx="3" stroke="rgba(255,255,255,0.7)" stroke-width="1.5" />
-          <path d="M8 23 L3 23" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" />
-          <path d="M6 19.5 L3 23 L6 26.5" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" fill="none" />
-          <path d="M40 23 L45 23" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" />
-          <path d="M42 19.5 L45 23 L42 26.5" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" fill="none" />
-          <path d="M24 5 L24 1" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" />
-          <path d="M20.5 3.5 L24 0.5 L27.5 3.5" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" fill="none" />
-          <path d="M24 43 L24 47" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" />
-          <path d="M20.5 44.5 L24 47.5 L27.5 44.5" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" fill="none" />
-        </svg>
-      </div>
-      <div class="water-stroke-area" id="waterStrokeArea">
-        <svg class="water-char-svg" id="waterCharSvg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
-          <path class="water-stroke" id="ws0" d="M100 15 Q100 130 95 185" stroke="rgba(70,130,200,0.25)"
-            stroke-width="14" fill="none" stroke-linecap="round" />
-          <path class="water-stroke" id="ws1" d="M30 60 Q60 50 75 75" stroke="rgba(70,130,200,0.25)" stroke-width="12"
-            fill="none" stroke-linecap="round" />
-          <path class="water-stroke" id="ws2" d="M60 110 Q40 145 20 180" stroke="rgba(70,130,200,0.25)"
-            stroke-width="13" fill="none" stroke-linecap="round" />
-          <path class="water-stroke" id="ws3" d="M140 60 Q135 75 125 90" stroke="rgba(70,130,200,0.25)"
-            stroke-width="13" fill="none" stroke-linecap="round" />
-          <path class="water-stroke" id="ws4" d="M125 110 Q145 145 170 180" stroke="rgba(70,130,200,0.25)"
-            stroke-width="13" fill="none" stroke-linecap="round" />
-        </svg>
-        <div class="water-bubble" id="waterBubble">
-          <div class="water-bubble-inner"></div>
-        </div>
-      </div>
-      <div class="water-tilt-readout" id="waterReadout" style="opacity:0;">
-        <div class="tilt-axis"><span class="tilt-label">Tilt</span><span class="tilt-value" id="tiltBeta">0°</span>
-        </div>
-        <div class="tilt-axis"><span class="tilt-label">Roll</span><span class="tilt-value" id="tiltGamma">0°</span>
-        </div>
-        <div class="tilt-axis"><span class="tilt-label">Spin</span><span class="tilt-value" id="tiltAlpha">0°</span>
-        </div>
-      </div>
-    </div>
-  </div>
+// ============ VIDEO VIEW ============
+function fmtTime(s) { if (s == null) return "--:--.-"; const m = Math.floor(s / 60), sec = s % 60; return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`; }
 
-  <!-- Fire -->
-  <div class="element-page" id="fire-page">
-    <button class="home-btn" onclick="goHome()">⌂</button>
-    <div class="bg-char">火</div>
-    <div class="interaction-area fire-layout">
-      <div class="fire-xy-container">
-        <div class="xy-pad" id="firePad" style="border-color:rgba(220,60,40,0.25);max-width:180px;max-height:180px;">
-          <div class="crosshair" id="fireCrosshair"></div>
-          <div class="ghost-cursor fire-ghost" id="fireGhost"></div>
-        </div>
-      </div>
-      <div class="fire-stroke-area" id="fireStrokeArea">
-        <svg class="fire-char-svg" id="fireCharSvg" viewBox="0 0 200 200" preserveAspectRatio="xMidYMid meet">
-          <!-- 火 strokes as dashed outlines for tracing -->
-          <path class="fire-stroke" id="fs0" d="M70 80 Q60 95 55 105" stroke="rgba(220,60,40,0.28)" stroke-width="9"
-            fill="none" stroke-linecap="round" stroke-dasharray="4 6" />
-          <path class="fire-stroke" id="fs1" d="M140 70 Q130 85 120 95" stroke="rgba(220,60,40,0.28)" stroke-width="9"
-            fill="none" stroke-linecap="round" stroke-dasharray="4 6" />
-          <path class="fire-stroke" id="fs2" d="M100 35 Q100 100 40 170" stroke="rgba(220,60,40,0.28)" stroke-width="10"
-            fill="none" stroke-linecap="round" stroke-dasharray="4 6" />
-          <path class="fire-stroke" id="fs3" d="M100 90 Q140 135 165 170" stroke="rgba(220,60,40,0.28)"
-            stroke-width="10" fill="none" stroke-linecap="round" stroke-dasharray="4 6" />
-        </svg>
-        <div class="fire-flame-layer" id="fireFlameLayer"></div>
-        <div class="fire-trace-ghost" id="fireTraceGhost"></div>
-      </div>
-    </div>
-  </div>
+function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, settings, muted, onUpdateSections, videoSync: initSync, onEditSection, onAddSection, onDeleteSection, onMoveSection }) {
+  const containerRef = useRef(null);
+  const playerRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [vidPlaying, setVidPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [startPt, setStartPt] = useState(initSync?.start ?? null);
+  const [endPt, setEndPt] = useState(initSync?.end ?? null);
+  const pollRef = useRef(null);
+  const [syncActive, setSyncActive] = useState(false);
+  const [syncBar, setSyncBar] = useState(null);
+  const [syncEnded, setSyncEnded] = useState(false);
+  const [syncCountIn, setSyncCountIn] = useState(false); // true during count-in
+  const syncCbRef = useRef(null);
+  const [vidCountIn, setVidCountIn] = useState(settings.countIn || 1); // 0, 1, 2 bars
+  // Refs for YouTube callback (avoids stale closures)
+  const syncActiveRef = useRef(false);
+  const syncBarRef = useRef(null);
+  const tlRef = useRef(tl);
+  const metRef = useRef(met);
+  const settingsRef = useRef(settings);
+  const mutedRef = useRef(muted);
+  useEffect(() => { syncActiveRef.current = syncActive; }, [syncActive]);
+  useEffect(() => { syncBarRef.current = syncBar; }, [syncBar]);
+  useEffect(() => { tlRef.current = tl; }, [tl]);
+  useEffect(() => { metRef.current = met; }, [met]);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
 
-  <!-- Earth -->
-  <div class="element-page" id="earth-page">
-    <button class="home-btn" onclick="goHome()">⌂</button>
-    <div class="bg-char">土</div>
-    <div class="interaction-area">
-      <div class="earth-touch-area" id="earthTouch">
-        <div class="earth-thumbprint" id="earthCue">
-          <svg viewBox="0 0 64 80" fill="none" stroke="rgba(255,255,255,0.55)" stroke-width="1.1"
-            stroke-linecap="round">
-            <path d="M18 70 C12 62 10 52 10 42 C10 22 18 10 32 8 C46 10 54 22 54 42 C54 52 52 62 46 70"
-              stroke="rgba(255,255,255,0.25)" stroke-width="1.5" />
-            <path d="M20 60 C24 54 28 52 32 52 C36 52 40 54 44 60" />
-            <path d="M18 56 C23 48 27 46 32 46 C37 46 41 48 46 56" />
-            <path d="M17 51 C22 43 27 40 32 40 C37 40 42 43 47 51" />
-            <path d="M17 46 C22 38 27 35 32 35 C37 35 42 38 47 46" />
-            <path d="M24 40 C24 34 27 30 32 30 C37 30 40 34 40 40 C40 44 37 47 32 47 C27 47 24 44 24 40" />
-            <path d="M27 39 C27 36 29 33 32 33 C35 33 37 36 37 39 C37 42 35 44 32 44 C29 44 27 42 27 39" />
-            <path d="M18 40 C20 30 25 24 32 24 C39 24 44 30 46 40" />
-            <path d="M16 36 C19 24 25 18 32 18 C39 18 45 24 48 36" />
-            <path d="M15 32 C18 20 24 14 32 14 C40 14 46 20 49 32" />
-            <path d="M16 28 C19 18 24 12 32 12 C40 12 45 18 48 28" />
-            <path d="M32 68 L32 76" stroke="rgba(255,255,255,0.3)" stroke-width="1.3" />
-            <path d="M28 73 L32 77 L36 73" stroke="rgba(255,255,255,0.3)" stroke-width="1.3" fill="none" />
-          </svg>
-        </div>
-      </div>
-    </div>
-  </div>
+  const ytId = useMemo(() => {
+    if (!videoUrl) return null;
+    const m = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }, [videoUrl]);
+  const vimeoId = useMemo(() => {
+    if (!videoUrl || ytId) return null;
+    const m = videoUrl.match(/vimeo\.com\/(\d+)/);
+    return m ? m[1] : null;
+  }, [videoUrl, ytId]);
+  const isSC = useMemo(() => {
+    if (!videoUrl || ytId) return false;
+    return /soundcloud\.com\/[^/]+\/[^/]+/.test(videoUrl);
+  }, [videoUrl, ytId]);
+  const isYT = !!ytId;
+  const isVimeo = !!vimeoId;
+  const hasSync = isYT || isVimeo || isSC;
+  const embedUrl = useMemo(() => hasSync ? null : getEmbedUrl(videoUrl), [videoUrl, hasSync]);
 
-  <!-- HARMONY / MANDALA -->
-  <div id="harmonyScreen">
-    <canvas id="harmonyBgCanvas"></canvas>
-    <div class="circle-layout harmony-layout" id="harmonyLayout">
-      <div class="circle-ring" style="opacity: 0.2;"></div>
-      <canvas class="energy-canvas" id="harmonyCanvas"></canvas>
-      <div class="circle-el c-metal harmony-el" data-el="metal"><span class="char">金</span><span
-          class="elname">Metal</span></div>
-      <div class="circle-el c-wood harmony-el" data-el="wood"><span class="char">木</span><span
-          class="elname">Wood</span></div>
-      <div class="circle-el c-water harmony-el" data-el="water"><span class="char">水</span><span
-          class="elname">Water</span></div>
-      <div class="circle-el c-fire harmony-el" data-el="fire"><span class="char">火</span><span
-          class="elname">Fire</span></div>
-      <div class="circle-el c-earth harmony-el" data-el="earth"><span class="char">土</span><span
-          class="elname">Earth</span></div>
-      <div class="circle-center" id="harmonyCenter" style="width: 100px; height: 100px; border-radius: 50%;">
-        <!-- Empty center core to anchor the tap glows -->
-      </div>
-    </div>
-  </div>
-
-  <!-- AFTERMATH / RUINS -->
-  <div id="aftermathScreen">
-
-    <!-- Ash Particles System -->
-    <div class="ash-layer ash-layer-1"></div>
-    <div class="ash-layer ash-layer-2"></div>
-    <div class="ash-layer ash-layer-3"></div>
-
-    <!-- Fullscreen radial flash overlay -->
-    <div id="aftermathFlash"></div>
-
-    <!-- Center ember Rebirth SVG -->
-    <div id="aftermathEmber">
-      <svg viewBox="-50 -50 100 100">
-        <!-- Rebirth Mandala/Lotus Pattern -->
-        <g class="mandala-petals">
-          <path d="M0 -10 Q 20 -40, 0 -45 Q -20 -40, 0 -10 Z" />
-          <path d="M0 10 Q 20 40, 0 45 Q -20 40, 0 10 Z" />
-          <path d="M10 0 Q 40 -20, 45 0 Q 40 20, 10 0 Z" />
-          <path d="M-10 0 Q -40 -20, -45 0 Q -40 20, -10 0 Z" />
-          <circle cx="0" cy="0" r="8" fill="rgba(255,200,100,0.8)" />
-          <!-- Inner sparks -->
-          <circle cx="0" cy="-25" r="2" fill="#fff" />
-          <circle cx="0" cy="25" r="2" fill="#fff" />
-          <circle cx="25" cy="0" r="2" fill="#fff" />
-          <circle cx="-25" cy="0" r="2" fill="#fff" />
-        </g>
-      </svg>
-    </div>
-
-    <!-- Ruined Elements replacing text with chiseled SVGs (approximate kanji structures) -->
-    
-    <!-- METAL 金 -->
-    <div class="ruin-svg-container" data-element="metal" data-color="212,175,55" data-dur="2.5" 
-         style="top: 18%; left: 12%; --rot: -12deg; --glow-color: rgba(212,175,55,0.4); --glow-color-solid: rgb(212,175,55);">
-      <svg viewBox="0 0 100 100">
-        <!-- Base for shadow -->
-        <path class="stone-base" d="M50 15 L20 45 L35 45 L35 85 L65 85 L65 45 L80 45 Z" transform="translate(4,4)" />
-        <path class="stone-base" d="M30 65 L70 65 M40 75 L60 75 M25 85 L75 85" stroke-width="4" transform="translate(4,4)" />
-        <circle cx="40" cy="55" r="4" class="stone-base" transform="translate(4,4)" />
-        <circle cx="60" cy="55" r="4" class="stone-base" transform="translate(4,4)" />
-        <!-- Face -->
-        <path class="stone-face" d="M50 15 L20 45 L35 45 L35 85 L65 85 L65 45 L80 45 Z" />
-        <path class="stone-face" d="M30 65 L70 65 M40 75 L60 75 M25 85 L75 85" stroke="#4a4a4a" stroke-width="4" />
-        <circle cx="40" cy="55" r="4" class="stone-face" />
-        <circle cx="60" cy="55" r="4" class="stone-face" />
-        <!-- Highlights -->
-        <path class="stone-highlight" d="M50 15 L20 45 L35 45 L50 15 M35 45 L35 85 L38 85 L38 45 Z" />
-      </svg>
-    </div>
-
-    <!-- WOOD 木 -->
-    <div class="ruin-svg-container" data-element="wood" data-color="76,153,76" data-dur="3.5" 
-         style="top: 55%; left: 58%; --rot: 18deg; --glow-color: rgba(76,153,76,0.4); --glow-color-solid: rgb(76,153,76);">
-      <svg viewBox="0 0 100 100">
-        <path class="stone-base" d="M20 40 L80 40 M50 15 L50 90 M50 40 L25 85 M50 40 L75 85" stroke-width="12" stroke-linecap="square" transform="translate(4,4)" />
-        <path class="stone-face" d="M20 40 L80 40 M50 15 L50 90 M50 40 L25 85 M50 40 L75 85" stroke="#4a4a4a" stroke-width="12" stroke-linecap="square" />
-        <path class="stone-highlight" d="M20 36 L80 36 M46 15 L46 90" stroke="#8a8a8a" stroke-width="4" />
-      </svg>
-    </div>
-
-    <!-- WATER 水 -->
-    <div class="ruin-svg-container" data-element="water" data-color="70,130,200" data-dur="4.0" 
-         style="top: 38%; left: 35%; --rot: 4deg; --glow-color: rgba(70,130,200,0.4); --glow-color-solid: rgb(70,130,200);">
-      <svg viewBox="0 0 100 100">
-        <path class="stone-base" d="M50 10 L45 80 Q50 90 65 85 M25 40 L45 55 M15 75 L35 60 M75 35 L55 55 M85 70 L65 55" stroke-width="10" stroke-linecap="round" fill="none" transform="translate(4,4)" />
-        <path class="stone-face" d="M50 10 L45 80 Q50 90 65 85 M25 40 L45 55 M15 75 L35 60 M75 35 L55 55 M85 70 L65 55" stroke="#4a4a4a" stroke-width="10" stroke-linecap="round" fill="none" />
-        <path class="stone-highlight" d="M48 10 L43 80 M24 38 L44 53" stroke="#8a8a8a" stroke-width="3" fill="none" />
-      </svg>
-    </div>
-
-    <!-- FIRE 火 -->
-    <div class="ruin-svg-container" data-element="fire" data-color="220,60,40" data-dur="2.0" 
-         style="top: 68%; left: 15%; --rot: -25deg; --glow-color: rgba(220,60,40,0.5); --glow-color-solid: rgb(220,60,40);">
-      <svg viewBox="0 0 100 100">
-        <path class="stone-base" d="M30 45 L50 85 M70 45 L50 85 M20 60 L35 30 M80 60 L65 30" stroke-width="11" stroke-linecap="round" fill="none" transform="translate(4,4)" />
-        <path class="stone-face" d="M30 45 L50 85 M70 45 L50 85 M20 60 L35 30 M80 60 L65 30" stroke="#4a4a4a" stroke-width="11" stroke-linecap="round" fill="none" />
-        <path class="stone-highlight" d="M28 45 L48 85 M18 60 L33 30" stroke="#8a8a8a" stroke-width="3" fill="none" />
-      </svg>
-    </div>
-
-    <!-- EARTH 土 -->
-    <div class="ruin-svg-container" data-element="earth" data-color="139,94,60" data-dur="5.0" 
-         style="top: 22%; left: 55%; --rot: 10deg; --glow-color: rgba(139,94,60,0.4); --glow-color-solid: rgb(139,94,60);">
-      <svg viewBox="0 0 100 100">
-        <path class="stone-base" d="M30 45 L70 45 M50 15 L50 85 M15 85 L85 85" stroke-width="12" stroke-linecap="square" fill="none" transform="translate(4,4)" />
-        <path class="stone-face" d="M30 45 L70 45 M50 15 L50 85 M15 85 L85 85" stroke="#4a4a4a" stroke-width="12" stroke-linecap="square" fill="none" />
-        <path class="stone-highlight" d="M30 41 L70 41 M46 15 L46 85 M15 81 L85 81" stroke="#8a8a8a" stroke-width="4" fill="none" />
-      </svg>
-    </div>
-  </div>
-
-  <!-- Nav -->
-  <div class="bottom-nav" id="bottomNav" style="display:none;">
-    <button class="nav-item metal" onclick="switchElement('metal')"><span>金</span><span
-        class="nav-label">Metal</span></button>
-    <button class="nav-item wood" onclick="switchElement('wood')"><span>木</span><span
-        class="nav-label">Wood</span></button>
-    <button class="nav-item water" onclick="switchElement('water')"><span>水</span><span
-        class="nav-label">Water</span></button>
-    <button class="nav-item fire" onclick="switchElement('fire')"><span>火</span><span
-        class="nav-label">Fire</span></button>
-    <button class="nav-item earth" onclick="switchElement('earth')"><span>土</span><span
-        class="nav-label">Earth</span></button>
-  </div>
-
-  <script>
-    // ═══════════════════════════════════
-    // FIREBASE STATUS CONTROL
-    // ═══════════════════════════════════
-
-    // *** REPLACE with your Firebase config ***
-    const FIREBASE_CONFIG = {
-      databaseURL: 'https://wuxing-fa488-default-rtdb.firebaseio.com'
+  // Metronome callback
+  const countingInRef = useRef(false);
+  useEffect(() => {
+    syncCbRef.current = evt => {
+      try {
+        if (evt.type === "countIn") {
+          countingInRef.current = true;
+          setSyncCountIn(true);
+          setSyncBar({ ab: 0, bei: evt.beatInBar - 1, bt: evt.beatInBar === 1 ? 0 : 2, tsN: evt.totalBeats, tsD: 0, tempo: 0, si: 0, countIn: true, beatsLeft: evt.beatsLeft });
+        } else if (evt.type === "beat") {
+          // First beat after count-in → start video
+          if (countingInRef.current) {
+            countingInRef.current = false;
+            setSyncCountIn(false);
+            try { if (playerRef.current?.playVideo) playerRef.current.playVideo(); } catch {}
+          }
+          const bar = { ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si };
+          setSyncBar(bar); syncBarRef.current = bar;
+        } else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); syncActiveRef.current = false; met.stop(); try { if (playerRef.current?.pauseVideo) playerRef.current.pauseVideo(); } catch {} }
+      } catch {}
     };
-    firebase.initializeApp(FIREBASE_CONFIG);
-    const db = firebase.database();
-    let appStatus = 'locked'; // locked | live | ended | live_wood | destroy_water | etc.
-    let globalActiveUsers = 1; // Default to 1 to avoid division by zero
+  }, [met]);
 
-    const IS_ADMIN = window.location.search.includes('admin=true');
-    let adminTimerInterval = null, adminStatusTime = 0;
-
-    // Setup Admin Panel & Presence
-    if (IS_ADMIN) {
-      document.getElementById('adminPanel').style.display = 'block';
-      // Hide everything else
-      document.getElementById('lockedScreen').classList.add('hidden');
-      document.getElementById('permissionOverlay').classList.add('hidden');
-      db.ref('users').on('value', snap => {
-        globalActiveUsers = Math.max(1, snap.numChildren());
-        document.getElementById('adminUserCount').textContent = snap.numChildren();
-      });
-      db.ref('status').on('value', snap => {
-        const val = snap.val() || 'unknown';
-        document.getElementById('adminCurrentStatus').textContent = val;
-        adminStatusTime = Date.now();
-        // Highlight active button
-        document.querySelectorAll('.admin-btn').forEach(b => b.classList.remove('admin-active'));
-        const statusMap = {
-          'locked': '🔒 Locked', 'live': '▶ Live', 'live_all': '⊞ All',
-          'live_wood': '木 Wood', 'live_fire': '火 Fire', 'live_earth': '土 Earth',
-          'live_metal': '金 Metal', 'live_water': '水 Water', 'live_harmony': '✦ Harmony',
-          'destroy_wood': '木 Ashes', 'destroy_fire': '火 Inferno', 'destroy_earth': '土 Quake',
-          'destroy_metal': '金 Rust', 'destroy_water': '水 Tsunami',
-          'live_aftermath': '☠ Aftermath', 'ended': '⏹ END SHOW'
-        };
-        const label = statusMap[val];
-        if (label) {
-          document.querySelectorAll('.admin-btn').forEach(b => {
-            if (b.textContent.trim() === label.trim()) b.classList.add('admin-active');
-          });
-        }
-      });
-      // Elapsed timer
-      adminTimerInterval = setInterval(() => {
-        if (adminStatusTime) {
-          const sec = Math.floor((Date.now() - adminStatusTime) / 1000);
-          document.getElementById('adminTimer').textContent = sec + 's';
-        }
-      }, 500);
-    }
-
-    window.setAdminStatus = function (status) {
-      db.ref('status').set(status);
+  // YouTube API
+  useEffect(() => {
+    if (!isYT) return;
+    const loadApi = () => {
+      if (window.YT && window.YT.Player) { initPlayer(); return; }
+      if (document.querySelector('script[src*="youtube.com/iframe_api"]')) { window.onYouTubeIframeAPIReady = initPlayer; return; }
+      const tag = document.createElement("script"); tag.src = "https://www.youtube.com/iframe_api"; document.head.appendChild(tag); window.onYouTubeIframeAPIReady = initPlayer;
     };
-
-    let isPresenceInitialized = false;
-    function initPresence() {
-      if (isPresenceInitialized || IS_ADMIN) return;
-      isPresenceInitialized = true;
-      const connectedRef = db.ref('.info/connected');
-      const myConnectionsRef = db.ref('users');
-      connectedRef.on('value', (snap) => {
-        if (snap.val() === true) {
-          const con = myConnectionsRef.push();
-          con.onDisconnect().remove();
-          con.set(true);
-        }
-      });
-      db.ref('users').on('value', snap => {
-        globalActiveUsers = Math.max(1, snap.numChildren());
-      });
-    }
-
-    // ═══════════════════════════════════
-    // DESTRUCTION ENGINE
-    // ═══════════════════════════════════
-    let destructionStartTime = 0, destructionFrame = null, destructionElement = null;
-    let destructLeafTimer = null, destructCrackleTimer = null, destructPulseTimer = null;
-    const DESTRUCT_DURATION = 30000; // 30s baseline
-
-    function startDestruction(el) {
-      // Cancel any existing destruction loop first (prevents double rAF)
-      if (destructionFrame) { cancelAnimationFrame(destructionFrame); destructionFrame = null; }
-      if (destructLeafTimer) { clearInterval(destructLeafTimer); destructLeafTimer = null; }
-      if (destructCrackleTimer) { clearInterval(destructCrackleTimer); destructCrackleTimer = null; }
-      if (destructPulseTimer) { clearInterval(destructPulseTimer); destructPulseTimer = null; }
-
-      destructionElement = el;
-      destructionStartTime = Date.now();
-      document.body.classList.add('destruction-mode');
-      destructionTick();
-
-      // Element-specific auto-triggers
-      if (el === 'wood') startDestructWoodLeaves();
-      if (el === 'fire') startDestructFireCrackles();
-      if (el === 'earth') startDestructEarthPulses();
-    }
-
-    function stopDestruction() {
-      document.body.classList.remove('destruction-mode');
-      if (destructionFrame) { cancelAnimationFrame(destructionFrame); destructionFrame = null; }
-      if (destructLeafTimer) { clearInterval(destructLeafTimer); destructLeafTimer = null; }
-      if (destructCrackleTimer) { clearInterval(destructCrackleTimer); destructCrackleTimer = null; }
-      if (destructPulseTimer) { clearInterval(destructPulseTimer); destructPulseTimer = null; }
-      destructionElement = null;
-      destructionStartTime = 0;
-      waterDestructSnap = 1.0;
-      // Reset CSS custom properties
-      document.documentElement.style.cssText = '';
-    }
-
-    function destructionTick() {
-      if (!destructionElement) return;
-      const elapsed = Date.now() - destructionStartTime;
-      const p = Math.min(1, elapsed / DESTRUCT_DURATION); // 0→1 over 30s
-      const el = destructionElement;
-      const root = document.documentElement;
-
-      // ── Global shake intensity ──
-      const shakeAmt = 2 + p * 8;
-      const rotAmt = 0.2 + p * 1.2;
-      const skewAmt = 0.3 + p * 2;
-      root.style.setProperty('--d-tx1', (-shakeAmt) + 'px');
-      root.style.setProperty('--d-ty1', (shakeAmt * 0.7) + 'px');
-      root.style.setProperty('--d-tx2', (shakeAmt * 1.2) + 'px');
-      root.style.setProperty('--d-ty2', (-shakeAmt) + 'px');
-      root.style.setProperty('--d-tx3', (-shakeAmt * 0.8) + 'px');
-      root.style.setProperty('--d-ty3', (shakeAmt * 1.1) + 'px');
-      root.style.setProperty('--d-tx4', (shakeAmt * 0.9) + 'px');
-      root.style.setProperty('--d-ty4', (-shakeAmt * 0.6) + 'px');
-      root.style.setProperty('--d-rot', rotAmt + 'deg');
-      root.style.setProperty('--d-skew', skewAmt + 'deg');
-
-      // ── Per-element degradation ──
-      if (el === 'wood') destructTickWood(p);
-      else if (el === 'fire') destructTickFire(p);
-      else if (el === 'earth') destructTickEarth(p);
-      else if (el === 'metal') destructTickMetal(p);
-      else if (el === 'water') destructTickWater(p);
-
-      destructionFrame = requestAnimationFrame(destructionTick);
-    }
-
-    // ── WOOD DESTRUCTION ──
-    function destructTickWood(p) {
-      const root = document.documentElement;
-      // Green → grey/brown for nodes and branches
-      const r = Math.round(76 + p * 100);
-      const g = Math.round(153 - p * 100);
-      const b = Math.round(76 - p * 40);
-      root.style.setProperty('--d-wood-border', `rgba(${r},${g},${b},${0.3 - p * 0.2})`);
-      root.style.setProperty('--d-wood-node-bg', `rgba(${r},${g},${b},${p * 0.15})`);
-      // Bg-char: shift to white/grey with visible alpha
-      const charGrey = Math.round(120 + p * 60);
-      root.style.setProperty('--d-wood-char-color', `rgba(${charGrey},${charGrey},${charGrey},${0.12 - p * 0.05})`);
-      root.style.setProperty('--d-wood-branch', `rgba(${r},${g},${b},${0.12 - p * 0.08})`);
-
-      // Audio degradation
-      if (woodSynth) {
-        // Detune flat ~50 cents
-        woodSynth.osc1.detune.setTargetAtTime(2 - p * 50, audioCtx.currentTime, 0.3);
-        woodSynth.osc2.detune.setTargetAtTime(-2 - p * 50, audioCtx.currentTime, 0.3);
-      }
-      if (woodLoop) {
-        // Filter closing down
-        woodLoop.filter.frequency.setTargetAtTime(600 - p * 500, audioCtx.currentTime, 0.3);
-      }
-      if (woodSynthLfo) {
-        // LFO slows to near zero
-        woodSynthLfo.frequency.setTargetAtTime(Math.max(0.01, 0.15 - p * 0.14), audioCtx.currentTime, 0.3);
-      }
-    }
-
-    function startDestructWoodLeaves() {
-      // Profuse grey ash leaves falling downward
-      destructLeafTimer = setInterval(() => {
-        if (!destructionElement || destructionElement !== 'wood') return;
-        spawnDestructLeaf();
-      }, 120);
-    }
-
-    function spawnDestructLeaf() {
-      const layer = document.getElementById('treeLeafLayer');
-      if (!layer) return;
-      const container = document.getElementById('treeContainer');
-      if (!container) return;
-      const cw = container.clientWidth, ch = container.clientHeight;
-
-      // Random position across full width, start near top
-      const startX = Math.random() * cw;
-      const startY = -10 - Math.random() * 40;
-      const endY = ch + 20;
-
-      const dur = 2.0 + Math.random() * 1.5;
-      const rot = Math.random() * 360;
-      const rotSpeed = 80 + Math.random() * 200;
-      const driftX = (Math.random() - 0.5) * 80;
-      const swayAmp = 10 + Math.random() * 20;
-      const swayFreq = 1 + Math.random() * 2;
-      const size = 0.3 + Math.random() * 0.5;
-
-      // Grey/ash color with variation
-      const grey = Math.round(100 + Math.random() * 80);
-      const fillOp = 0.3 + Math.random() * 0.4;
-
-      const leaf = document.createElement('div');
-      leaf.className = 'tree-leaf';
-      leaf.style.left = startX + 'px';
-      leaf.style.top = startY + 'px';
-      leaf.innerHTML = `<svg viewBox="0 0 20 20" fill="rgba(${grey},${grey},${grey - 20},${fillOp})" stroke="rgba(${grey},${grey},${grey},0.3)" stroke-width="0.5">
-    <path d="M10 2 C6 6 3 10 4 14 C5 18 9 19 10 19 C11 19 15 18 16 14 C17 10 14 6 10 2Z"/>
-    <path d="M10 5 L10 17" fill="none" stroke="rgba(${grey},${grey},${grey},0.3)" stroke-width="0.6"/>
-  </svg>`;
-
-      const startTime = performance.now();
-
-      function animLeaf(now) {
-        const t = Math.min((now - startTime) / (dur * 1000), 1);
-        const px = startX + driftX * t + swayAmp * Math.sin(t * Math.PI * swayFreq);
-        const py = startY + (endY - startY) * t;
-        const r = rot + rotSpeed * t;
-        const op = t < 0.1 ? t / 0.1 : (t > 0.8 ? Math.max(0, (1 - t) / 0.2) : 1);
-
-        leaf.style.transform = `translate(-50%,-50%) rotate(${r}deg) scale(${size})`;
-        leaf.style.left = px + 'px';
-        leaf.style.top = py + 'px';
-        leaf.style.opacity = op * 0.7;
-        if (t < 1) requestAnimationFrame(animLeaf);
-        else leaf.remove();
-      }
-      layer.appendChild(leaf);
-      requestAnimationFrame(animLeaf);
-    }
-
-    // ── FIRE DESTRUCTION ──
-    function destructTickFire(p) {
-      const root = document.documentElement;
-      // All strokes glow brighter
-      const strokeOp = 0.18 + p * 0.7;
-      root.style.setProperty('--d-fire-stroke', `rgba(255,${Math.round(120 - p * 80)},${Math.round(40 - p * 30)},${strokeOp})`);
-      root.style.setProperty('--d-fire-stroke-op', strokeOp.toFixed(2));
-      // Brightness and contrast push
-      root.style.setProperty('--d-fire-bright', (1 + p * 0.6).toFixed(2));
-      root.style.setProperty('--d-fire-contrast', (1 + p * 0.5).toFixed(2));
-
-      // Audio: filter opens wide, playback rate up, detuning spreads
-      if (fireLoop) {
-        fireLoop.filter.frequency.setTargetAtTime(400 + p * 5600, audioCtx.currentTime, 0.3);
-        fireLoop.source.playbackRate.setTargetAtTime(1 + p * 0.8, audioCtx.currentTime, 0.3);
-      }
-      if (fireSynth) {
-        fireSynth.osc1.detune.setTargetAtTime(4 + p * 40, audioCtx.currentTime, 0.3);
-        fireSynth.osc2.detune.setTargetAtTime(-4 - p * 40, audioCtx.currentTime, 0.3);
-      }
-    }
-
-    function startDestructFireCrackles() {
-      destructCrackleTimer = setInterval(() => {
-        if (!destructionElement || destructionElement !== 'fire') return;
-        if (!audioCtx) return;
-        const p = Math.min(1, (Date.now() - destructionStartTime) / DESTRUCT_DURATION);
-        // Random crackles: more frequent as p increases
-        if (Math.random() < 0.3 + p * 0.5) {
-          const t = audioCtx.currentTime;
-          const osc = audioCtx.createOscillator();
-          const g = audioCtx.createGain();
-          osc.type = 'sawtooth';
-          osc.frequency.value = 1500 + Math.random() * 3000;
-          g.gain.setValueAtTime(0.05 + p * 0.1, t);
-          g.gain.exponentialRampToValueAtTime(0.001, t + 0.08 + Math.random() * 0.12);
-          osc.connect(g); g.connect(audioCtx.destination);
-          osc.start(t); osc.stop(t + 0.25);
-        }
-      }, 200);
-    }
-
-    // ── EARTH DESTRUCTION ──
-    function destructTickEarth(p) {
-      const root = document.documentElement;
-      // Extra shake intensity
-      root.style.setProperty('--d-earth-shake', (3 + p * 12) + 'px');
-
-      // Audio: drone drops lower, filter opens
-      if (earthDrone) {
-        earthDrone.osc1.frequency.setTargetAtTime(55 - p * 15, audioCtx.currentTime, 0.3);
-        earthDrone.osc2.frequency.setTargetAtTime((55 - p * 15) * 1.002, audioCtx.currentTime, 0.3);
-        earthDrone.filter.frequency.setTargetAtTime(400 + p * 2000, audioCtx.currentTime, 0.3);
-        // Volume pushes up
-        earthDrone.gain.gain.setTargetAtTime(0.12 + p * 0.15, audioCtx.currentTime, 0.3);
-      }
-      // Continuous vibration
-      if (navigator.vibrate && p > 0.1) {
-        navigator.vibrate([30, 20]);
-      }
-    }
-
-    function startDestructEarthPulses() {
-      // Auto-trigger visual pulses without touch
-      destructPulseTimer = setInterval(() => {
-        if (!destructionElement || destructionElement !== 'earth') return;
-        const ta = document.getElementById('earthTouch');
-        if (ta) {
-          ta.style.boxShadow = '0 0 40px rgba(139,94,60,0.6), inset 0 0 25px rgba(139,94,60,0.3)';
-          setTimeout(() => { if (ta) ta.style.boxShadow = 'none'; }, 300);
-        }
-      }, 800);
-    }
-
-    // ── METAL DESTRUCTION ──
-    function destructTickMetal(p) {
-      const root = document.documentElement;
-      // Gold → rust: interpolate color
-      const r = Math.round(212 - p * 73);  // 212→139
-      const g = Math.round(175 - p * 81);  // 175→94
-      const b = Math.round(55 - p * 25);   // 55→30
-      root.style.setProperty('--d-metal-color', `rgba(${r},${g},${b},0.45)`);
-    }
-
-    // Metal bell audio degradation applied per-strike via progress check
-    function getMetalDestructionProgress() {
-      if (!destructionElement || destructionElement !== 'metal') return 0;
-      return Math.min(1, (Date.now() - destructionStartTime) / DESTRUCT_DURATION);
-    }
-
-    // ── WATER DESTRUCTION ──
-    let waterDestructSnap = 1.0; // 1 = full snap to strokes, 0 = free movement
-
-    function destructTickWater(p) {
-      const root = document.documentElement;
-      // Bubble grows
-      const bubbleSize = 28 + p * 30;
-      root.style.setProperty('--d-water-bubble-size', bubbleSize + 'px');
-      // Stroke colors shift red
-      const sr = Math.round(70 + p * 150);
-      const sg = Math.round(130 - p * 80);
-      const sb = Math.round(200 - p * 100);
-      root.style.setProperty('--d-water-stroke', `rgba(${sr},${sg},${sb},${0.15 + p * 0.15})`);
-
-      // Loosen stroke constraint
-      waterDestructSnap = 1 - p * 0.85; // goes from 1.0 → 0.15
-
-      // Audio chaos
-      if (waterLoop) {
-        waterLoop.source.playbackRate.setTargetAtTime(
-          0.5 + Math.random() * p * 2, audioCtx.currentTime, 0.1);
-        waterLoop.filter.frequency.setTargetAtTime(
-          200 + Math.random() * p * 5000, audioCtx.currentTime, 0.1);
-      }
-      if (waterLfo) {
-        waterLfo.frequency.setTargetAtTime(0.3 + p * 8, audioCtx.currentTime, 0.3);
-      }
-      if (waterSynth) {
-        // Ab2 detunes sharp
-        waterSynth.osc1.detune.setTargetAtTime(3 + p * 60, audioCtx.currentTime, 0.3);
-        waterSynth.osc2.detune.setTargetAtTime(-3 + p * 60, audioCtx.currentTime, 0.3);
-      }
-    }
-
-    // ── Hard kill all audio (admin transitions) ──
-    function killAllAudio() {
-      if (!audioCtx) return;
-      const t = audioCtx.currentTime;
-      const KILL_FADE = 0.3;
-      const KILL_STOP = 400;
-
-      const fadeAndStop = (gainNode, ...stopNodes) => {
-        if (!gainNode) return;
-        try { gainNode.gain.setValueAtTime(gainNode.gain.value, t); } catch (e) { }
-        try { gainNode.gain.linearRampToValueAtTime(0, t + KILL_FADE); } catch (e) { }
-        setTimeout(() => {
-          stopNodes.forEach(n => { if (n) try { n.stop(); } catch (e) { } });
-        }, KILL_STOP);
-      };
-
-      // Wood
-      if (woodLoop) { fadeAndStop(woodLoop.gain, woodLoop.source); woodLoop = null; }
-      if (woodSynth) { fadeAndStop(woodSynth.gain, woodSynth.osc1, woodSynth.osc2); woodSynth = null; }
-      if (woodSynthLfo) { try { woodSynthLfo.stop(); } catch (e) { } woodSynthLfo = null; }
-      if (woodSynthLfoGain) woodSynthLfoGain = null;
-
-      // Water
-      if (waterLoop) { fadeAndStop(waterLoop.gain, waterLoop.source); waterLoop = null; }
-      if (waterSynth) { fadeAndStop(waterSynth.gain, waterSynth.osc1, waterSynth.osc2); waterSynth = null; }
-      if (waterLfo) { try { waterLfo.stop(); } catch (e) { } waterLfo = null; }
-      if (waterLfoGain) waterLfoGain = null;
-
-      // Fire
-      if (fireLoop) { fadeAndStop(fireLoop.gain, fireLoop.source); fireLoop = null; }
-      if (fireSynth) { fadeAndStop(fireSynth.gain, fireSynth.osc1, fireSynth.osc2); fireSynth = null; }
-      if (fireSynthLfo) { try { fireSynthLfo.stop(); } catch (e) { } fireSynthLfo = null; }
-      if (fireSynthLfoGain) fireSynthLfoGain = null;
-
-      // Earth
-      if (earthDrone) { fadeAndStop(earthDrone.gain, earthDrone.osc1, earthDrone.osc2); earthDrone = null; }
-      if (earthBed) { fadeAndStop(earthBed.gain, earthBed.source); earthBed = null; }
-
-      // Aftermath oscillator
-      if (window.aftermathOsc) {
-        try { window.aftermathGain.gain.setValueAtTime(0, t); window.aftermathOsc.stop(); } catch (e) { }
-        window.aftermathOsc = null; window.aftermathGain = null;
-      }
-    }
-
-    function onStatusChange(status) {
-      if (status === appStatus) return;
-
-      // Admin is remote control only — no rendering
-      if (IS_ADMIN) { appStatus = status; return; }
-
-      if (appStatus === 'ended' || appStatus === 'live_aftermath') {
-        if (status !== 'ended' && status !== 'live_aftermath') {
-          window.location.reload();
-          return;
-        }
-      }
-
-      // Clean up previous destruction if switching away
-      if (appStatus && appStatus.startsWith('destroy_') && !status.startsWith('destroy_')) {
-        stopDestruction();
-      }
-
-      appStatus = status;
-
-      if (status === 'locked') {
-        stopDestruction();
-        document.getElementById('lockedScreen').classList.remove('hidden');
-        document.getElementById('endScreen').classList.add('hidden');
-        document.getElementById('permissionOverlay').classList.add('hidden');
-      } else if (status === 'ended') {
-        stopDestruction();
-        killAllAudio();
-        triggerSoftEnd();
-      } else if (status === 'live_aftermath') {
-        stopDestruction();
-        triggerAftermath();
-      } else if (status === 'live_harmony') {
-        stopDestruction();
-        triggerHarmony();
-      } else {
-        // Active Narrative States
-        document.getElementById('lockedScreen').classList.add('hidden');
-        document.getElementById('endScreen').classList.add('hidden');
-
-        if (!audioCtx) {
-          document.getElementById('permissionOverlay').classList.remove('hidden');
-        } else {
-          document.getElementById('permissionOverlay').classList.add('hidden');
-
-          const harm = document.getElementById('harmonyScreen'); if (harm) harm.style.display = 'none';
-          cleanupHarmony();
-          const aft = document.getElementById('aftermathScreen'); if (aft) { aft.style.display = 'none'; aft.classList.remove('interactive'); }
-
-          if (status === 'live') {
-            document.getElementById('landing').style.display = 'flex';
-            document.getElementById('bottomNav').style.display = 'none';
-            if (currentElement) {
-              const old = document.getElementById(currentElement + '-page');
-              if (old) old.classList.remove('active');
-            }
-            currentElement = null;
-            initLanding();
-            if (landingState !== 'wuxing') {
-              setTimeout(() => startEnergyFlow(landingState === 'sheng' ? 1 : -1), 100);
-            }
-          } else if (status === 'live_all') {
-            document.getElementById('landing').style.display = 'none';
-            document.getElementById('bottomNav').style.display = 'flex';
-            if (!currentElement) switchElement('wood');
-          } else if (status.startsWith('live_')) {
-            let el = status.replace('live_', '');
-            document.getElementById('landing').style.display = 'none';
-            document.getElementById('bottomNav').style.display = 'none';
-            switchElement(el);
-          } else if (status.startsWith('destroy_')) {
-            let el = status.replace('destroy_', '');
-            document.getElementById('landing').style.display = 'none';
-            document.getElementById('bottomNav').style.display = 'none';
-            // Switch to the element if not already there
-            if (currentElement !== el) switchElement(el);
-            // Start destruction engine
-            startDestruction(el);
+    const initPlayer = () => {
+      if (!containerRef.current || playerRef.current) return;
+      playerRef.current = new window.YT.Player(containerRef.current, {
+        videoId: ytId, playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+        events: {
+          onReady: () => { setReady(true); setDuration(playerRef.current.getDuration() || 0); },
+          onStateChange: e => {
+            const isPlay = e.data === window.YT.PlayerState.PLAYING;
+            const isPause = e.data === window.YT.PlayerState.PAUSED;
+            setVidPlaying(isPlay);
+            handleVidStateChange(isPlay, isPause);
           }
         }
-      }
-    }
-
-    // Real-time listener
-    db.ref('status').on('value', snap => {
-      const val = snap.val();
-      if (val) onStatusChange(val);
-    });
-
-    // Fallback check every 30s
-    setInterval(() => {
-      db.ref('status').once('value', snap => { if (snap.val()) onStatusChange(snap.val()); });
-    }, 30000);
-
-    function triggerHarmony() {
-      if (currentElement) { cleanupCurrent(); document.getElementById(currentElement + '-page').classList.remove('active'); currentElement = null; }
-      document.getElementById('permissionOverlay').classList.add('hidden');
-      document.getElementById('landing').style.display = 'none';
-      document.getElementById('bottomNav').style.display = 'none';
-      document.getElementById('lockedScreen').classList.add('hidden');
-      document.getElementById('endScreen').classList.add('hidden');
-
-      const harm = document.getElementById('harmonyScreen');
-      harm.style.display = 'flex';
-
-      const aft = document.getElementById('aftermathScreen');
-      if (aft) { aft.style.display = 'none'; aft.classList.remove('interactive'); }
-
-      // Reset Element animation states
-      document.querySelectorAll('.harmony-el').forEach((el, index) => {
-        el.classList.remove('entered');
-        // Add a slight stagger to the entrance
-        setTimeout(() => {
-          el.classList.add('entered');
-        }, 100 + (index * 150));
       });
-
-      // Fade in background canvas
-      const bgCanvas = document.getElementById('harmonyBgCanvas');
-      if (bgCanvas) {
-        bgCanvas.style.opacity = '1';
-      }
-
-      initHarmonyFlow();
-    }
-
-    // ── Harmony energy flow + tap interaction ──
-    let harmonyFlowFrame = null, harmonyBgFrame = null;
-    let harmonyParticles = [], harmonyDir = 1, harmonyDirTimer = null;
-    let harmonyCenterGlow = 0, harmonyCenterDecay = null;
-    let bgTime = 0; // For background gradient animation
-
-    // Low-opacity, deep colors for the background
-    const BG_COLORS = [
-      { r: 30, g: 25, b: 5 },   // Metal
-      { r: 5, g: 20, b: 5 },    // Wood
-      { r: 5, g: 15, b: 30 },   // Water
-      { r: 30, g: 5, b: 5 },    // Fire
-      { r: 20, g: 12, b: 5 }    // Earth
-    ];
-
-    const HARMONY_COLORS = {
-      metal: 'rgba(212,175,55,0.5)', wood: 'rgba(76,153,76,0.5)',
-      water: 'rgba(70,130,200,0.5)', fire: 'rgba(220,60,40,0.5)', earth: 'rgba(139,94,60,0.5)'
     };
+    loadApi();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [isYT, ytId]);
 
-    function initHarmonyFlow() {
-      const canvas = document.getElementById('harmonyCanvas');
-      const bgCanvas = document.getElementById('harmonyBgCanvas');
-      if (!canvas || !bgCanvas) return;
-
-      canvas.width = canvas.parentElement.clientWidth;
-      canvas.height = canvas.parentElement.clientHeight;
-
-      bgCanvas.width = window.innerWidth;
-      bgCanvas.height = window.innerHeight;
-      bgTime = 0;
-
-      // Start particles passing each other (half clockwise, half counter-clockwise)
-      harmonyParticles = [];
-      for (let i = 0; i < 16; i++) {
-        harmonyParticles.push({
-          angle: (i / 16) * Math.PI * 2,
-          speed: 0.005 + Math.random() * 0.003, // Slower for elegance
-          direction: i % 2 === 0 ? 1 : -1, // Alternate directions
-          size: 1.5 + Math.random() * 1.5
-        });
-      }
-      harmonyDir = 1;
-
-      drawHarmonyBg();
-      drawHarmonyFlow();
-
-      // Auto-alternate direction every 8s
-      harmonyDirTimer = setInterval(() => {
-        harmonyDir *= -1;
-      }, 8000);
-
-      // Tap ripples on element buttons
-      document.querySelectorAll('.harmony-el').forEach(el => {
-        el.addEventListener('touchstart', harmonyTap);
-        el.addEventListener('click', harmonyTap);
-      });
-
-      // Center glow decay
-      harmonyCenterGlow = 0;
-      harmonyCenterDecay = setInterval(() => {
-        if (harmonyCenterGlow > 0) {
-          harmonyCenterGlow = Math.max(0, harmonyCenterGlow - 0.02);
-          updateHarmonyCenterGlow();
-        }
-      }, 50);
-    }
-
-    // Low GPU Background Gradient Loop
-    function drawHarmonyBg() {
-      const canvas = document.getElementById('harmonyBgCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d', { alpha: false }); // alpha: false helps performance
-
-      bgTime += 0.002;
-
-      // Calculate 3 shifting points for a simple, soft mesh gradient
-      const w = canvas.width, h = canvas.height;
-
-      // Create a solid black base
-      ctx.fillStyle = '#050505';
-      ctx.fillRect(0, 0, w, h);
-
-      // Add 3 soft, slow-moving radial gradients (Low GPU cost vs many gradients)
-      for (let i = 0; i < 3; i++) {
-        const color = BG_COLORS[(Math.floor(bgTime * 10) + i) % BG_COLORS.length];
-
-        const x = w / 2 + Math.sin(bgTime + i * 2) * w * 0.3;
-        const y = h / 2 + Math.cos(bgTime * 0.8 + i) * h * 0.3;
-        const r = Math.max(w, h) * 0.6;
-
-        const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-        grad.addColorStop(0, `rgba(${color.r}, ${color.g}, ${color.b}, 0.8)`);
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-
-        ctx.fillStyle = grad;
-        // Use lighter blend mode to accumulate colors
-        ctx.globalCompositeOperation = 'screen';
-        ctx.fillRect(0, 0, w, h);
-        ctx.globalCompositeOperation = 'source-over'; // reset
-      }
-
-      harmonyBgFrame = requestAnimationFrame(drawHarmonyBg);
-    }
-
-    // Generative Lines and Particles Loop
-    function drawHarmonyFlow() {
-      const canvas = document.getElementById('harmonyCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      const cx = canvas.width / 2, cy = canvas.height / 2;
-      const r = Math.min(cx, cy) * 0.72;
-
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Draw Generative Network Lines (Pentagram shape: Wood->Fire->Earth->Metal->Water)
-      ctx.beginPath();
-      for (let i = 0; i < 5; i++) {
-        // The traditional Sheng cycle points (simplified visually to a star/pentagon)
-        const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-        const nextAngle = (((i + 1) % 5) / 5) * Math.PI * 2 - Math.PI / 2;
-
-        const x1 = cx + r * Math.cos(angle);
-        const y1 = cy + r * Math.sin(angle);
-        const x2 = cx + r * Math.cos(nextAngle);
-        const y2 = cy + r * Math.sin(nextAngle);
-
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y2);
-      }
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-
-      for (const p of harmonyParticles) {
-        // Individual direction instead of global harmonyDir
-        p.angle += p.speed * p.direction;
-        const x = cx + r * Math.cos(p.angle), y = cy + r * Math.sin(p.angle);
-
-        ctx.beginPath();
-        ctx.arc(x, y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,0.6)`;
-        ctx.fill();
-
-        // Short, optimized tail
-        ctx.beginPath();
-        const tailX = cx + r * Math.cos(p.angle - p.speed * p.direction * 10);
-        const tailY = cy + r * Math.sin(p.angle - p.speed * p.direction * 10);
-
-        ctx.moveTo(x, y);
-        ctx.lineTo(tailX, tailY);
-        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
-        ctx.lineWidth = p.size;
-        ctx.lineCap = 'round';
-        ctx.stroke();
-      }
-      harmonyFlowFrame = requestAnimationFrame(drawHarmonyFlow);
-    }
-
-    function harmonyTap(e) {
-      e.preventDefault();
-      const el = e.currentTarget;
-      const elName = el.dataset.el;
-      const color = HARMONY_COLORS[elName] || 'rgba(255,255,255,0.4)';
-
-      // Create ripple
-      const ripple = document.createElement('div');
-      ripple.className = 'harmony-ripple';
-      ripple.style.background = `radial-gradient(circle, ${color} 0%, transparent 70%)`;
-      ripple.style.left = '50%';
-      ripple.style.top = '50%';
-      el.appendChild(ripple);
-      setTimeout(() => ripple.remove(), 700);
-
-      // Brighten center
-      harmonyCenterGlow = Math.min(1, harmonyCenterGlow + 0.15);
-      updateHarmonyCenterGlow();
-    }
-
-    function updateHarmonyCenterGlow() {
-      const center = document.getElementById('harmonyCenter');
-      if (!center) return;
-      if (harmonyCenterGlow > 0.05) {
-        center.classList.add('glowing');
-        center.style.boxShadow = `0 0 ${20 + harmonyCenterGlow * 40}px rgba(255,255,255,${harmonyCenterGlow * 0.25}), 0 0 ${40 + harmonyCenterGlow * 60}px rgba(255,255,255,${harmonyCenterGlow * 0.1})`;
-      } else {
-        center.classList.remove('glowing');
-        center.style.boxShadow = '';
-      }
-    }
-
-    function cleanupHarmony() {
-      if (harmonyBgFrame) { cancelAnimationFrame(harmonyBgFrame); harmonyBgFrame = null; }
-      if (harmonyFlowFrame) { cancelAnimationFrame(harmonyFlowFrame); harmonyFlowFrame = null; }
-      if (harmonyDirTimer) { clearInterval(harmonyDirTimer); harmonyDirTimer = null; }
-      if (harmonyCenterDecay) { clearInterval(harmonyCenterDecay); harmonyCenterDecay = null; }
-      document.querySelectorAll('.harmony-el').forEach(el => {
-        el.removeEventListener('touchstart', harmonyTap);
-        el.removeEventListener('click', harmonyTap);
-        el.classList.remove('entered');
-      });
-      const canvas = document.getElementById('harmonyCanvas');
-      if (canvas) { const ctx = canvas.getContext('2d'); ctx.clearRect(0, 0, canvas.width, canvas.height); }
-      const bgCanvas = document.getElementById('harmonyBgCanvas');
-      if (bgCanvas) {
-        bgCanvas.style.opacity = '0';
-        const ctx = bgCanvas.getContext('2d');
-        ctx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
-      }
-    }
-
-    function triggerAftermath() {
-      if (currentElement) { cleanupCurrent(); document.getElementById(currentElement + '-page').classList.remove('active'); currentElement = null; }
-      cleanupHarmony();
-      document.getElementById('permissionOverlay').classList.add('hidden');
-      document.getElementById('landing').style.display = 'none';
-      document.getElementById('bottomNav').style.display = 'none';
-      document.getElementById('lockedScreen').classList.add('hidden');
-      document.getElementById('endScreen').classList.add('hidden');
-
-      const harm = document.getElementById('harmonyScreen');
-      if (harm) harm.style.display = 'none';
-      document.body.classList.remove('destruction-mode');
-
-      const aft = document.getElementById('aftermathScreen');
-      if (aft) aft.style.display = 'block';
-
-      // Barely audible noise floor to keep audio context alive
-      if (audioCtx && !window.aftermathOsc) {
-        window.aftermathOsc = audioCtx.createOscillator();
-        window.aftermathGain = audioCtx.createGain();
-        window.aftermathOsc.type = 'sine';
-        window.aftermathOsc.frequency.value = 20;
-        window.aftermathGain.gain.value = 0.001;
-        window.aftermathOsc.connect(window.aftermathGain);
-        window.aftermathGain.connect(audioCtx.destination);
-        window.aftermathOsc.start();
-      }
-
-      // Initialize interactive aftermath
-      initAftermathInteraction();
-    }
-
-    // ── AFTERMATH INTERACTION ──
-    let aftermathBusy = false;
-    let aftermathCleared = 0;
-
-    function initAftermathInteraction() {
-      aftermathBusy = false;
-      aftermathCleared = 0;
-      const aft = document.getElementById('aftermathScreen');
-      aft.classList.add('interactive');
-
-      // Reset all ruin-svg-containers to visible and tappable
-      const chars = aft.querySelectorAll('.ruin-svg-container');
-      chars.forEach(ch => {
-        ch.style.display = '';
-        ch.style.opacity = '';
-        ch.classList.remove('brightening');
-        ch.addEventListener('touchstart', aftermathCharTap, { passive: false });
-        ch.addEventListener('click', aftermathCharTap);
-      });
-
-      // Reset ash layer opacities
-      document.querySelectorAll('.ash-layer').forEach(layer => layer.style.opacity = '1');
-
-      // Hide ember
-      const ember = document.getElementById('aftermathEmber');
-      ember.classList.remove('visible');
-      ember.removeEventListener('touchstart', aftermathEmberTap);
-      ember.removeEventListener('click', aftermathEmberTap);
-
-      // Reset flash overlay
-      const flash = document.getElementById('aftermathFlash');
-      flash.style.opacity = '0';
-      flash.style.background = 'transparent';
-    }
-
-    function aftermathCharTap(e) {
-      e.stopPropagation();
-      e.preventDefault();
-      if (aftermathBusy) return;
-      aftermathBusy = true;
-
-      // Haptic feedback if supported
-      if (navigator.vibrate) navigator.vibrate(50);
-
-      const charEl = e.currentTarget;
-      const color = charEl.dataset.color;
-      const dur = parseFloat(charEl.dataset.dur);
-      const flash = document.getElementById('aftermathFlash');
-
-      // Get tap coordinates
-      let touchX = window.innerWidth / 2;
-      let touchY = window.innerHeight / 2;
-      if (e.touches && e.touches.length > 0) {
-        touchX = e.touches[0].clientX;
-        touchY = e.touches[0].clientY;
-      } else if (e.clientX && e.clientY) {
-        touchX = e.clientX;
-        touchY = e.clientY;
-      }
-
-      // Progressive ash clearing
-      aftermathCleared++;
-      const ashOpacity = Math.max(0, 1 - (aftermathCleared * 0.2));
-      document.querySelectorAll('.ash-layer').forEach(layer => {
-        layer.style.transition = 'opacity 2s ease';
-        layer.style.opacity = ashOpacity;
-      });
-
-      // Phase 1: Character brightens (Trigger CSS animation classes)
-      const brightenTime = dur * 0.12;
-      charEl.classList.add('brightening');
-      
-      // Setup the radial burst on the flash div
-      flash.style.transition = 'none';
-      flash.style.opacity = '0';
-      flash.style.background = `radial-gradient(circle at ${touchX}px ${touchY}px, rgb(${color}) 0%, rgba(${color}, 0.8) 40%, transparent 100%)`;
-
-      // Phase 2: Burst expands
-      const fillTime = dur * 0.15;
-      setTimeout(() => {
-        flash.style.transition = `opacity ${fillTime}s ease-in`;
-        flash.style.opacity = '1';
-        if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // Heavier burst vibration
-      }, brightenTime * 1000);
-
-      // Phase 3: Hold at full color
-      const holdTime = dur * 0.2;
-      const holdStart = (brightenTime + fillTime) * 1000;
-
-      // Phase 4: Fade back to black, character gone
-      const fadeTime = dur * 0.53;
-      setTimeout(() => {
-        charEl.style.display = 'none';
-        flash.style.transition = `opacity ${fadeTime}s ease-out`;
-        flash.style.opacity = '0';
-      }, holdStart + holdTime * 1000);
-
-      // Cleanup and unlock
-      const totalMs = dur * 1000;
-      setTimeout(() => {
-        charEl.removeEventListener('touchstart', aftermathCharTap);
-        charEl.removeEventListener('click', aftermathCharTap);
-        flash.style.background = 'transparent';
-        aftermathBusy = false;
-
-        // All five cleared: show Ember Rebirth SVG
-        if (aftermathCleared >= 5) {
-          setTimeout(() => {
-            const ember = document.getElementById('aftermathEmber');
-            ember.classList.add('visible');
-            ember.addEventListener('touchstart', aftermathEmberTap, { passive: false });
-            ember.addEventListener('click', aftermathEmberTap);
-            if (navigator.vibrate) navigator.vibrate(200); // Rebirth hum
-          }, 1500);
-        }
-      }, totalMs);
-    }
-
-    function aftermathEmberTap(e) {
-      e.stopPropagation();
-      e.preventDefault();
-      
-      if (navigator.vibrate) navigator.vibrate([50, 50, 100, 50, 200]); // Pulsing hum
-
-      const ember = document.getElementById('aftermathEmber');
-      const burst = document.createElement('div');
-      burst.className = 'ember-tap-burst';
-      ember.appendChild(burst);
-      setTimeout(() => burst.remove(), 1200);
-    }
-
-    function triggerSoftEnd() {
-      // Random fade 3-6 seconds per device
-      const fadeDur = 3 + Math.random() * 3;
-      const t = audioCtx ? audioCtx.currentTime : 0;
-      let actualWaitTime = 0;
-
-      // Fade all active audio
-      if (audioCtx && currentElement) {
-        actualWaitTime = fadeDur * 1000 + 200;
-        const fadeNodes = [];
-        if (woodLoop) fadeNodes.push(woodLoop.gain);
-        if (woodSynth) fadeNodes.push(woodSynth.gain);
-        if (waterLoop) fadeNodes.push(waterLoop.gain);
-        if (waterSynth) fadeNodes.push(waterSynth.gain);
-        if (fireLoop) fadeNodes.push(fireLoop.gain);
-        if (fireSynth) fadeNodes.push(fireSynth.gain);
-        if (earthDrone) fadeNodes.push(earthDrone.gain);
-        if (earthBed) fadeNodes.push(earthBed.gain);
-        fadeNodes.forEach(g => {
-          g.gain.setValueAtTime(g.gain.value, t);
-          g.gain.linearRampToValueAtTime(0, t + fadeDur);
-        });
-      }
-
-      // Show end screen after fade completes (or instantly if no audio)
-      setTimeout(() => {
-        if (currentElement) cleanupCurrent();
-        document.querySelectorAll('.element-page').forEach(p => p.classList.remove('active'));
-        document.getElementById('landing').style.display = 'none';
-        document.getElementById('bottomNav').style.display = 'none';
-
-        const harm = document.getElementById('harmonyScreen');
-        if (harm) harm.style.display = 'none';
-        cleanupHarmony();
-        const aft = document.getElementById('aftermathScreen');
-        if (aft) { aft.style.display = 'none'; aft.classList.remove('interactive'); }
-        document.body.classList.remove('destruction-mode');
-
-        document.getElementById('permissionOverlay').classList.add('hidden');
-        document.getElementById('lockedScreen').classList.add('hidden');
-        document.getElementById('endScreen').classList.remove('hidden');
-        currentElement = null;
-      }, actualWaitTime);
-    }
-
-    // ═══════════════════════════════════
-    // WAKE FROM SLEEP
-    // ═══════════════════════════════════
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') {
-        // Resume audio context
-        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-        // Re-check Firebase status
-        db.ref('status').once('value', snap => { if (snap.val()) onStatusChange(snap.val()); });
-        // Re-initialize current element if still live
-        if (appStatus === 'live' && currentElement) {
-          const el = currentElement;
-          cleanupCurrent();
-          currentElement = null;
-          switchElement(el);
-        }
-      }
-    });
-
-    // ═══════════════════════════════════
-    // AUDIO LOADING
-    // ═══════════════════════════════════
-    let audioCtx = null, currentElement = null;
-    const audioBuffers = {};
-    const AUDIO_FILES = {
-      'water_long': 'audio/Water_Long.mp3',
-      'wood_long': 'audio/Wood_Long.mp3',
-      'fire_long': 'audio/Fire_Long.mp3',
-      'earth_long': 'audio/Earth_Long.mp3',
-      'C2': 'audio/C2_Marimba_Hard.mp3', 'C3': 'audio/C3_Marimba_Hard.mp3',
-      'C4': 'audio/C4_Marimba_Hard.mp3', 'C5': 'audio/C5_Marimba_Hard.mp3', 'C6': 'audio/C6_Marimba_Hard.mp3',
-      'Db2': 'audio/Db2_Marimba_Hard.mp3', 'Db3': 'audio/Db3_Marimba_Hard.mp3',
-      'Db4': 'audio/Db4_Marimba_Hard.mp3', 'Db5': 'audio/Db5_Marimba_Hard.mp3',
-      'F2': 'audio/F2_Marimba_Hard.mp3', 'F3': 'audio/F3_Marimba_Hard.mp3',
-      'F4': 'audio/F4_Marimba_Hard.mp3', 'F5': 'audio/F5_Marimba_Hard.mp3',
-      'G2': 'audio/G2_Marimba_Hard.mp3', 'G3': 'audio/G3_Marimba_Hard.mp3',
-      'G4': 'audio/G4_Marimba_Hard.mp3', 'G5': 'audio/G5_Marimba_Hard.mp3',
-      'Ab2': 'audio/Ab2_Marimba_Hard.mp3', 'Ab3': 'audio/Ab3_Marimba_Hard.mp3',
-      'Ab4': 'audio/Ab4_Marimba_Hard.mp3', 'Ab5': 'audio/Ab5_Marimba_Hard.mp3',
-      'Wb1': 'audio/Wb1.mp3', 'Wb2': 'audio/Wb2.mp3', 'Wb3': 'audio/Wb3.mp3', 'Wb4': 'audio/Wb4.mp3'
+  // Vimeo API
+  useEffect(() => {
+    if (!isVimeo) return;
+    const loadApi = () => {
+      if (window.Vimeo && window.Vimeo.Player) { initPlayer(); return; }
+      if (document.querySelector('script[src*="player.vimeo.com/api"]')) { const check = setInterval(() => { if (window.Vimeo?.Player) { clearInterval(check); initPlayer(); } }, 100); return; }
+      const tag = document.createElement("script"); tag.src = "https://player.vimeo.com/api/player.js"; tag.onload = () => initPlayer(); document.head.appendChild(tag);
     };
+    const initPlayer = () => {
+      if (!containerRef.current || playerRef.current) return;
+      const vp = new window.Vimeo.Player(containerRef.current, { id: parseInt(vimeoId), responsive: true });
+      playerRef.current = vp;
+      // Adapt Vimeo API to match our interface
+      vp.playVideo = () => vp.play();
+      vp.pauseVideo = () => vp.pause();
+      vp.seekTo = (t) => vp.setCurrentTime(t);
+      vp.getCurrentTime = () => vp._lastTime || 0;
+      vp.getDuration = () => vp._dur || 0;
+      vp.on("loaded", () => { vp.getDuration().then(d => { vp._dur = d; setDuration(d); }); setReady(true); });
+      vp.on("timeupdate", data => { vp._lastTime = data.seconds; setCurrentTime(data.seconds); });
+      vp.on("play", () => { setVidPlaying(true); handleVidStateChange(true, false); });
+      vp.on("pause", () => { setVidPlaying(false); handleVidStateChange(false, true); });
+    };
+    loadApi();
+    return () => { if (playerRef.current && isVimeo) { try { playerRef.current.destroy(); } catch {} playerRef.current = null; } };
+  }, [isVimeo, vimeoId]);
 
-    async function loadAllAudio() {
-      if (!audioCtx) return;
-      const promises = Object.entries(AUDIO_FILES).map(async ([k, url]) => {
+  // SoundCloud Widget API
+  useEffect(() => {
+    if (!isSC) return;
+    const loadApi = () => {
+      if (window.SC && window.SC.Widget) { initWidget(); return; }
+      if (document.querySelector('script[src*="api.soundcloud.com/sdk"]') || document.querySelector('script[src*="w.soundcloud.com/player/api"]')) {
+        const check = setInterval(() => { if (window.SC?.Widget) { clearInterval(check); initWidget(); } }, 100); return;
+      }
+      const tag = document.createElement("script"); tag.src = "https://w.soundcloud.com/player/api.js"; tag.onload = () => initWidget(); document.head.appendChild(tag);
+    };
+    const initWidget = () => {
+      if (!containerRef.current || playerRef.current) return;
+      // Create iframe for SC widget
+      const iframe = document.createElement("iframe");
+      iframe.src = `https://w.soundcloud.com/player/?url=${encodeURIComponent(videoUrl)}&color=%23f0a030&auto_play=false&hide_related=true&show_comments=false&show_user=true&show_reposts=false&show_teaser=false&visual=true`;
+      iframe.style.cssText = "position:absolute;top:0;left:0;width:100%;height:100%;border:none;";
+      iframe.allow = "autoplay";
+      containerRef.current.innerHTML = "";
+      containerRef.current.appendChild(iframe);
+      const widget = window.SC.Widget(iframe);
+      playerRef.current = widget;
+      // Adapt SC Widget API to match our interface
+      widget.playVideo = () => widget.play();
+      widget.pauseVideo = () => widget.pause();
+      const scSeek = widget.seekTo.bind(widget);
+      widget.seekTo = (t) => scSeek(t * 1000); // SC uses milliseconds
+      widget._lastTime = 0;
+      widget.bind(window.SC.Widget.Events.READY, () => {
+        widget.getDuration(d => { widget._dur = d / 1000; setDuration(d / 1000); });
+        setReady(true);
+      });
+      widget.bind(window.SC.Widget.Events.PLAY_PROGRESS, data => {
+        widget._lastTime = data.currentPosition / 1000;
+        setCurrentTime(data.currentPosition / 1000);
+      });
+      widget.bind(window.SC.Widget.Events.PLAY, () => { setVidPlaying(true); handleVidStateChange(true, false); });
+      widget.bind(window.SC.Widget.Events.PAUSE, () => { setVidPlaying(false); handleVidStateChange(false, true); });
+      widget.bind(window.SC.Widget.Events.FINISH, () => { setVidPlaying(false); handleVidStateChange(false, true); });
+    };
+    loadApi();
+    return () => { if (playerRef.current && isSC) { try { playerRef.current.unbind(window.SC.Widget.Events.PLAY); playerRef.current.unbind(window.SC.Widget.Events.PAUSE); playerRef.current.unbind(window.SC.Widget.Events.PLAY_PROGRESS); } catch {} playerRef.current = null; } };
+  }, [isSC, videoUrl]);
+
+  // Shared video state change handler (two-way sync)
+  const handleVidStateChange = (isPlay, isPause) => {
+    try {
+      const m = metRef.current, t = tlRef.current, st = settingsRef.current;
+      if (!m || !t) return;
+      if (isPlay && !syncActiveRef.current && !countingInRef.current && t.length > 0) {
+        m.setCb(syncCbRef.current); m.tap();
+        const bar = syncBarRef.current;
+        const fromBar = bar ? t.findIndex(b => b.ab === bar.ab) : 0;
+        m.start(t, Math.max(0, fromBar >= 0 ? fromBar : 0), 0, { accented: st.accented, pitched: st.pitched, muted: mutedRef.current });
+        setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+      } else if (isPause && syncActiveRef.current && !countingInRef.current) {
+        m.stop(); setSyncActive(false); syncActiveRef.current = false;
+        setSyncBar(null); syncBarRef.current = null;
+      }
+    } catch {}
+  };
+
+  // Poll time (YouTube only — Vimeo uses timeupdate event)
+  useEffect(() => {
+    if (!isYT) return;
+    if (vidPlaying && playerRef.current) {
+      pollRef.current = setInterval(() => { try { const t = playerRef.current.getCurrentTime(); if (typeof t === "number") setCurrentTime(t); } catch {} }, 100);
+    } else { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [vidPlaying, isYT]);
+
+  const seekTo = useCallback(t => { try { if (playerRef.current?.seekTo) { playerRef.current.seekTo(t, true); setCurrentTime(t); } else if (playerRef.current?.setCurrentTime) { playerRef.current.setCurrentTime(t); setCurrentTime(t); } } catch {} }, []);
+
+  // Calculate elapsed time to a given bar index from tl
+  const getElapsedToBar = useCallback((tlArr, barIdx) => {
+    let t = 0;
+    for (let i = 0; i < barIdx && i < tlArr.length; i++) {
+      const b = tlArr[i];
+      if (b.isT) { t += b.tDur || 0; } else {
+        const pbc = b.perBeatCd;
+        for (let j = 0; j < b.cpb; j++) t += pbc ? (pbc[j]?.cd ?? pbc[0]?.cd ?? 0.5) : (b.cd ?? 0.5);
+      }
+    }
+    return t;
+  }, []);
+
+  // Seek video to match metronome position
+  const seekVideoToBar = useCallback((barIdx) => {
+    if (!playerRef.current?.seekTo) return;
+    const elapsed = getElapsedToBar(tl, barIdx);
+    const videoTime = (startPt || 0) + elapsed;
+    playerRef.current.seekTo(videoTime, true);
+    setCurrentTime(videoTime);
+  }, [tl, startPt, getElapsedToBar]);
+
+  // Sync play from start (restart) — count-in then video
+  const syncPlayFromStart = () => {
+    if (!hasSync || !tl.length) return;
+    met.setCb(syncCbRef.current);
+    seekTo(startPt || 0);
+    setSyncBar(null); syncBarRef.current = null;
+    countingInRef.current = vidCountIn > 0;
+    setSyncCountIn(vidCountIn > 0);
+    setTimeout(() => {
+      // Don't start video yet — callback will start it after count-in
+      if (vidCountIn === 0 && playerRef.current) playerRef.current.playVideo();
+      met.tap(); met.start(tl, 0, vidCountIn, { accented: settings.accented, pitched: settings.pitched, muted });
+      setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+    }, 200);
+  };
+
+  // Toggle play/pause — Fix 2: clear syncBar on pause so sections reappear
+  const syncToggle = () => {
+    if (syncActive) {
+      if (playerRef.current) playerRef.current.pauseVideo();
+      met.stop(); setSyncActive(false); syncActiveRef.current = false;
+      setSyncBar(null); syncBarRef.current = null;
+      countingInRef.current = false; setSyncCountIn(false);
+    } else {
+      if (!tl.length) return;
+      met.setCb(syncCbRef.current);
+      // Fix 1: seek video to match bar position
+      const fromBar = syncBar ? tl.findIndex(b => b.ab === syncBar.ab) : 0;
+      const idx = Math.max(0, fromBar >= 0 ? fromBar : 0);
+      seekVideoToBar(idx);
+      setTimeout(() => {
+        if (playerRef.current) playerRef.current.playVideo();
+        met.tap(); met.start(tl, idx, 0, { accented: settings.accented, pitched: settings.pitched, muted });
+        setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+      }, 150);
+    }
+  };
+
+  // Section navigation — Fix 1: seek video to match section start
+  const jumpSec = d => {
+    const curSi = syncBar ? syncBar.si : 0;
+    const ns = Math.max(0, Math.min(sections.length - 1, curSi + d));
+    const i = tl.findIndex(b => b.si === ns);
+    if (i >= 0) {
+      const b = tl[i];
+      const bar = { ab: b.ab, bei: 0, bt: 0, tsN: b.tsN, tsD: b.tsD, tempo: b.tempo, si: b.si };
+      setSyncBar(bar); syncBarRef.current = bar;
+      setSyncEnded(false);
+      if (syncActive) { met.stop(); if (playerRef.current) playerRef.current.pauseVideo(); setSyncActive(false); syncActiveRef.current = false; }
+      seekVideoToBar(i);
+    }
+  };
+
+  // Set points
+  const setStart = () => setStartPt(currentTime);
+  const setEnd = () => setEndPt(currentTime);
+  const NUDGE = 0.05;
+  const nudge = (which, delta) => {
+    if (which === "start") { const v = Math.max(0, (startPt || 0) + delta); setStartPt(v); seekTo(v); }
+    else { const v = Math.max(0, (endPt || 0) + delta); setEndPt(v); seekTo(v); }
+  };
+  const handleSave = () => { if (onSyncPoints) onSyncPoints({ start: startPt, end: endPt }); };
+
+  // Tempo adjust
+  const adjustTempo = delta => {
+    if (!syncBar || !onUpdateSections) return;
+    const si = syncBar.si;
+    onUpdateSections(prev => prev.map((s, i) => i === si && s.type === "metered" ? { ...s, tempo: Math.max(10, Math.min(400, s.tempo + delta)) } : s));
+  };
+
+  useEffect(() => () => { met.stop(); met.setCb(null); }, [met]);
+  const curSec = syncBar != null ? sections[syncBar.si] : null;
+
+  // Edit mode
+  const [editMode, setEditMode] = useState(false);
+  const [goBar, setGoBar] = useState("");
+
+  // TAP tempo for video sync
+  const { tap: vidTap, tapBpm: vidTapBpm, tapFlash: vidTapFlash } = useTapTempo(useCallback(bpm => {
+    if (!syncBar || !onUpdateSections) return;
+    const si = syncBar.si;
+    onUpdateSections(prev => prev.map((s, i) => i === si && s.type === "metered" ? { ...s, tempo: bpm } : s));
+  }, [syncBar, onUpdateSections]));
+
+  // Go to bar
+  const handleGoToBar = () => {
+    const v = parseInt(goBar);
+    if (isNaN(v) || v < 1 || !tl.length) return;
+    const i = tl.findIndex(b => b.ab === v);
+    if (i < 0) return;
+    const b = tl[i];
+    const bar = { ab: b.ab, bei: 0, bt: 0, tsN: b.tsN, tsD: b.tsD, tempo: b.tempo, si: b.si };
+    setSyncBar(bar); syncBarRef.current = bar;
+    setSyncEnded(false);
+    if (syncActive) { met.stop(); if (playerRef.current) playerRef.current.pauseVideo(); setSyncActive(false); syncActiveRef.current = false; }
+    seekVideoToBar(i);
+    setGoBar("");
+  };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", justifyContent: "center", fontFamily: "'DM Mono',monospace" }}>
+      <div style={{ width: "100%", maxWidth: 540, display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px", flexShrink: 0 }}>
+        <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => setVidCountIn(v => (v + 1) % 3)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${vidCountIn > 0 ? C.accent + "55" : C.border}`, background: "transparent", color: vidCountIn > 0 ? C.accent : C.textMuted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{vidCountIn === 0 ? "No CI" : `${vidCountIn} CI`}</button>
+          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Save</button>}
+          <button className="close-btn" onClick={() => { if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); syncActiveRef.current = false; } onClose(); }}>{I.x(18)}</button>
+        </div>
+      </div>
+
+      {/* Video */}
+      <div style={{ flexShrink: 0, padding: "0 12px", marginBottom: 6 }}>
+        <div style={{ position: "relative", paddingBottom: "36%", borderRadius: 8, overflow: "hidden", background: "#000" }}>
+          {isYT ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
+            : isVimeo ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
+            : isSC ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
+            : embedUrl ? <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{isSafeUrl(videoUrl) ? <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>Open in browser</a> : <span style={{ color: C.danger, fontSize: 11 }}>Invalid URL Format</span>}</div>}
+        </div>
+      </div>
+
+      {/* Start / End — side by side */}
+      {hasSync && <div style={{ display: "flex", gap: 6, padding: "0 12px", marginBottom: 6, flexShrink: 0 }}>
+        {/* Start */}
+        <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${startPt != null ? C.practice + "44" : C.border}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: startPt != null ? 4 : 0 }}>
+            <span style={{ fontSize: 9, color: C.practice, fontWeight: 600 }}>START</span>
+            <button onClick={setStart} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.practice}44`, background: "transparent", color: C.practice, fontSize: 9, cursor: "pointer" }}>Set</button>
+          </div>
+          {startPt != null && <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <button onClick={() => nudge("start", -NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>←</button>
+            <div style={{ fontSize: 12, color: C.text, flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => seekTo(startPt)}>{fmtTime(startPt)}</div>
+            <button onClick={() => nudge("start", NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>→</button>
+          </div>}
+        </div>
+        {/* End */}
+        <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${endPt != null ? C.record + "44" : C.border}` }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: endPt != null ? 4 : 0 }}>
+            <span style={{ fontSize: 9, color: C.record, fontWeight: 600 }}>END</span>
+            <button onClick={setEnd} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.record}44`, background: "transparent", color: C.record, fontSize: 9, cursor: "pointer" }}>Set</button>
+          </div>
+          {endPt != null && <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+            <button onClick={() => nudge("end", -NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>←</button>
+            <div style={{ fontSize: 12, color: C.text, flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => seekTo(endPt)}>{fmtTime(endPt)}</div>
+            <button onClick={() => nudge("end", NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>→</button>
+          </div>}
+        </div>
+      </div>}
+
+      {/* Middle: Sections (stopped) or Metronome (playing/paused-with-bar) */}
+      {syncCountIn && syncBar ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>Count-in</div>
+          <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>{syncBar.beatsLeft || ""}</div>
+          {syncBar.tsN > 0 && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
+            {Array.from({ length: syncBar.tsN }).map((_, i) => {
+              const on = i === syncBar.bei, c = i === 0 ? C.downbeat : C.sub;
+              return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
+            })}
+          </div>}
+        </div>
+      ) : (syncActive || (syncBar && !syncEnded)) && syncBar ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px", minHeight: 0, position: "relative" }}>
+          {/* Edit toggle */}
+          <button onClick={() => setEditMode(e => !e)} style={{ position: "absolute", top: 4, right: 16, background: "none", border: `1px solid ${editMode ? C.accent + "55" : C.border}`, borderRadius: 6, color: editMode ? C.accent : C.textMuted, cursor: "pointer", padding: "3px 8px", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>{editMode ? "🔓" : "🔒"}</button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1 }}>
+              <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsN}</span>
+              <div style={{ height: 1, width: 24, background: C.textMuted }} />
+              <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsD}</span>
+            </div>
+            <div style={{ fontSize: 64, fontWeight: 400, color: C.text, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2, minWidth: 70, textAlign: "center" }}>{syncBar.ab}</div>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+              <span style={{ fontSize: 24, color: C.downbeat, fontWeight: 700 }}>{syncBar.tempo}</span>
+              <span style={{ fontSize: 9, color: C.textMuted }}>BPM</span>
+            </div>
+          </div>
+          {syncBar.tsN > 0 && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
+            {Array.from({ length: syncBar.tsN }).map((_, i) => {
+              const on = i === syncBar.bei, c = i === 0 ? C.downbeat : C.sub;
+              return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
+            })}
+          </div>}
+          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>Sec {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}</div>
+
+          {/* Edit mode controls */}
+          {editMode && (
+            <div style={{ width: "100%", maxWidth: 300, marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* Tempo adjust */}
+              {curSec && curSec.type === "metered" && (
+                <div style={{ background: C.surface, borderRadius: 10, padding: 10, border: `1px solid ${C.accent}44` }}>
+                  <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>Section {syncBar.si + 1} Tempo</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                    <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-5</button>
+                    <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-1</button>
+                    <div style={{ fontSize: 22, color: C.text, fontWeight: 700, minWidth: 50, textAlign: "center" }}>{curSec.tempo}</div>
+                    <button onClick={() => adjustTempo(1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+1</button>
+                    <button onClick={() => adjustTempo(5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+5</button>
+                  </div>
+                </div>
+              )}
+              {/* TAP + Go to Bar row */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                  {vidTapBpm && <span style={{ fontSize: 10, color: C.downbeat, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{vidTapBpm}</span>}
+                  <button onClick={vidTap} style={{ background: vidTapFlash ? C.downbeat : C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: vidTapFlash ? "#000" : C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12, transition: "background 0.1s, color 0.1s" }}>TAP</button>
+                </div>
+                <div style={{ flex: 1, display: "flex", gap: 4, alignItems: "center" }}>
+                  <input value={goBar} onChange={e => setGoBar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleGoToBar(); }} placeholder="Bar #" inputMode="numeric" style={{ ...nI, flex: 1, textAlign: "center", padding: "0 8px", fontSize: 13, height: 38 }} />
+                  <button onClick={handleGoToBar} style={{ ...tS, width: 38, height: 38, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Go</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : syncActive && !syncBar ? (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div style={{ fontSize: 14, color: C.textMuted }}>Starting...</div>
+        </div>
+      ) : syncEnded ? (
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
+          <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>END</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>Tap restart or go back to sections</div>
+          <button onClick={() => { setSyncBar(null); setSyncEnded(false); }} style={{ marginTop: 12, padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>Back to sections</button>
+        </div>
+      ) : (
+        <div style={{ flex: 1, overflowY: "auto", padding: "4px 12px 16px", minHeight: 0 }}>
+          <div style={{ display: "flex", gap: 8, fontSize: 11, color: C.textMuted, marginBottom: 6 }}><span>{sections.length} sec</span></div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            {sections.map((sec, i) => {
+              const isT = sec.type === "timed";
+              return (<div key={sec.id} onClick={() => onEditSection && onEditSection(sec.id)} style={{ background: C.surface, borderRadius: 8, padding: "8px 10px", border: `1px solid ${C.border}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 20, alignItems: "center" }}>
+                  <button onClick={e => { e.stopPropagation(); onMoveSection && onMoveSection(i, -1); }} disabled={i === 0} style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 1, display: "flex", fontSize: 10 }}>▲</button>
+                  <span style={{ fontSize: 9, color: C.textMuted }}>{i + 1}</span>
+                  <button onClick={e => { e.stopPropagation(); onMoveSection && onMoveSection(i, 1); }} disabled={i === sections.length - 1} style={{ background: "none", border: "none", color: i === sections.length - 1 ? C.border : C.textMuted, cursor: i === sections.length - 1 ? "default" : "pointer", padding: 1, display: "flex", fontSize: 10 }}>▼</button>
+                </div>
+                {isT ? <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.duration}s free</div> : (<>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 24, textAlign: "center", lineHeight: 1 }}><div>{sec.tsNum}</div><div style={{ height: 1, background: C.textMuted, margin: "1px 0" }} /><div>{sec.tsDen}</div></div>
+                  <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.tempo} BPM</div>
+                  <div style={{ fontSize: 11, color: sec.loop ? C.downbeat : C.textMuted }}>{sec.loop ? "∞" : `${sec.bars}b`}</div>
+                </>)}
+                {onDeleteSection && sections.length > 1 && <button onClick={e => { e.stopPropagation(); onDeleteSection(sec.id); }} style={{ background: "none", border: "none", color: C.danger + "77", cursor: "pointer", padding: 2, display: "flex" }}>{I.trash(12)}</button>}
+              </div>);
+            })}
+            <button onClick={() => onAddSection && onAddSection()} style={{ width: "100%", padding: 10, borderRadius: 8, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(16)}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Transport */}
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "center", padding: "8px 0 20px", flexShrink: 0 }}>
+        <button onClick={syncPlayFromStart} style={{ ...tS, width: 40, height: 40 }}>{I.restart(18)}</button>
+        <button onClick={syncToggle} style={{ width: 52, height: 52, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{syncActive ? I.pause(20) : I.play(20)}</button>
+      </div>
+
+      {!hasSync && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube, Vimeo, and SoundCloud.</div></div>}
+      </div>
+    </div>
+  );
+}
+
+// ============ SETTINGS / SAVE / LIBRARY ============
+function SetP({ settings: s, onChange, onClose }) {
+  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
+    <SR l="Mode">{["basic", "default", "advanced"].map(v => <button key={v} onClick={() => u("appMode", v)} style={{ ...oB(s.appMode === v), textTransform: "capitalize" }}>{v}</button>)}</SR>
+    <div style={{ fontSize: 11, color: C.textMuted, marginTop: -8, marginBottom: 14, marginLeft: 82, fontFamily: "'Outfit',sans-serif", lineHeight: 1.5 }}>{s.appMode === "basic" ? "Tempo, time signature, bars, and loop only" : s.appMode === "advanced" ? "Per-beat tempo mapping, fermata, grouping builder" : "Grouping, curves, record, practice, library"}</div>
+    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR>
+    <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>Device ID: {getDeviceId()}</div>
+      <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>Your data is stored locally and backed up anonymously.</div>
+    </div></div></div>);
+}
+function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
+function SaveM({ sections, onClose, onSaved, videoUrl: savedVideoUrl, videoSync: savedVideoSync }) {
+  const [t, sT] = useState(""), [c, sC] = useState(""), [perf, setPerf] = useState(""), [vUrl, setVUrl] = useState(savedVideoUrl || ""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); const profile = { id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (perf.trim()) profile.performer = perf.trim(); if (vUrl.trim()) profile.videoUrl = vUrl.trim(); if (savedVideoSync) profile.videoSync = savedVideoSync; p.push(profile); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
+    <input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
+    <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
+    <input value={perf} onChange={e => setPerf(e.target.value)} placeholder="Performer / Ensemble (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 13, color: C.textMuted }} />
+    <input value={vUrl} onChange={e => setVUrl(e.target.value)} placeholder="Video URL (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 13, color: C.textMuted }} />
+    <button onClick={go} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button>
+  </div></div>);
+}
+function LibP({ onLoad, onClose }) {
+  const [p, sP] = useState(ldP()), [s, sS] = useState("");
+  const f = p.filter(x => x.title.toLowerCase().includes(s.toLowerCase()) || x.composer.toLowerCase().includes(s.toLowerCase()) || (x.performer || "").toLowerCase().includes(s.toLowerCase()));
+  const [confirmDelId, setConfirmDelId] = useState(null);
+  const confirmDelTimer = useRef(null);
+  const del = id => {
+    if (confirmDelId !== id) { setConfirmDelId(id); if (confirmDelTimer.current) clearTimeout(confirmDelTimer.current); confirmDelTimer.current = setTimeout(() => setConfirmDelId(null), 3000); return; }
+    setConfirmDelId(null);
+    const u = p.filter(x => x.id !== id); svP(u); sP(u);
+  };
+  const exportAll = () => {
+    try {
+      const json = JSON.stringify(p, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a"); a.href = url; a.download = "tempus-profiles.json"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) { }
+  };
+  const importFile = () => {
+    const input = document.createElement("input"); input.type = "file"; input.accept = ".json";
+    input.onchange = e => {
+      const file = e.target.files?.[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
         try {
-          const r = await fetch(url);
-          const ab = await r.arrayBuffer();
-          audioBuffers[k] = await audioCtx.decodeAudioData(ab);
-        } catch (e) { console.warn('Failed to load ' + url, e); }
-      });
-      await Promise.all(promises);
-    }
-
-    function initAudio() {
-      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-    }
-
-    function playBuffer(key, loop, gain) {
-      const buf = audioBuffers[key]; if (!buf) return null;
-      const src = audioCtx.createBufferSource();
-      const g = audioCtx.createGain();
-      src.buffer = buf; src.loop = !!loop;
-      g.gain.value = gain || 1;
-      src.connect(g); g.connect(audioCtx.destination);
-      src.start();
-      return { source: src, gain: g };
-    }
-
-    function playBufferWithChain(key, loop) {
-      const buf = audioBuffers[key]; if (!buf) return null;
-      const src = audioCtx.createBufferSource();
-      const g = audioCtx.createGain();
-      const fl = audioCtx.createBiquadFilter();
-      fl.type = 'lowpass'; fl.frequency.value = 800; fl.Q.value = 2;
-      g.gain.value = 0;
-      src.buffer = buf; src.loop = !!loop;
-      src.connect(fl); fl.connect(g); g.connect(audioCtx.destination);
-      src.start();
-      return { source: src, gain: g, filter: fl };
-    }
-
-    document.getElementById('startBtn').addEventListener('click', async () => {
-      const s = document.getElementById('permStatus'); s.textContent = 'Loading…';
-      initAudio();
-      if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') { try { await DeviceMotionEvent.requestPermission(); } catch (e) { } }
-      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') { try { await DeviceOrientationEvent.requestPermission(); } catch (e) { } }
-      if (navigator.vibrate) navigator.vibrate(1);
-      if ('wakeLock' in navigator) { try { await navigator.wakeLock.request('screen'); } catch (e) { } }
-      await loadAllAudio();
-
-      initPresence(); // Track user connection for hive scaling
-
-      document.getElementById('permissionOverlay').classList.add('hidden');
-
-      // Trigger routing based on whatever the current status is
-      let currentTrigger = appStatus;
-      appStatus = null;
-      onStatusChange(currentTrigger);
-    });
-
-    function hideCue(id) { const c = document.getElementById(id); if (c) { c.classList.remove('cue-visible'); c.classList.add('cue-hidden'); } }
-    function showCue(id) { const c = document.getElementById(id); if (c) { c.classList.remove('cue-hidden'); c.classList.add('cue-visible'); } }
-
-    // ═══════════════════════════════════
-    // LANDING
-    // ═══════════════════════════════════
-    const PPOS = [{ top: 7.5, left: 50 }, { top: 34.5, left: 90 }, { top: 84, left: 74 }, { top: 84, left: 26 }, { top: 34.5, left: 10 }];
-    const EL_IDS = ['el-metal', 'el-wood', 'el-water', 'el-fire', 'el-earth'];
-    const STATE_MAP = {
-      wuxing: [0, 1, 2, 3, 4],
-      sheng: [0, 2, 1, 3, 4],
-      ke: [0, 4, 2, 1, 3]
-    };
-    const STATE_LABELS = {
-      wuxing: { title: '五行', sub: 'Five Elements' },
-      sheng: { title: '生', sub: 'Creation' },
-      ke: { title: '克', sub: 'Destruction' }
-    };
-    const STATE_ORDER = ['wuxing', 'sheng', 'ke'];
-    let landingState = 'wuxing', energyAnimFrame = null, energyParticles = [], energyDirection = 0;
-
-    function initLanding() {
-      const layout = document.getElementById('circleLayout');
-      const canvas = document.getElementById('energyCanvas');
-      const sz = layout.clientWidth;
-      canvas.width = sz * 2; canvas.height = sz * 2;
-      canvas.style.width = sz + 'px'; canvas.style.height = sz + 'px';
-      setElementPositions('wuxing');
-    }
-    function setElementPositions(state) {
-      const map = STATE_MAP[state];
-      for (let i = 0; i < 5; i++) {
-        const el = document.getElementById(EL_IDS[i]);
-        const p = PPOS[map[i]];
-        el.style.top = p.top + '%'; el.style.left = p.left + '%';
-      }
-    }
-    function cycleLandingState() {
-      stopEnergyFlow();
-      const next = STATE_ORDER[(STATE_ORDER.indexOf(landingState) + 1) % 3];
-      landingState = next;
-      document.getElementById('centerTitle').textContent = STATE_LABELS[next].title;
-      document.getElementById('centerSub').textContent = STATE_LABELS[next].sub;
-      setElementPositions(next);
-      if (next !== 'wuxing') setTimeout(() => startEnergyFlow(next === 'sheng' ? 1 : -1), 750);
-    }
-    function startEnergyFlow(dir) {
-      energyDirection = dir; energyParticles = [];
-      for (let i = 0; i < 6; i++)energyParticles.push({ angle: (i / 6) * Math.PI * 2, speed: 0.012 + Math.random() * 0.004, size: 2 + Math.random() * 1.5 });
-      drawEnergy();
-    }
-    function stopEnergyFlow() {
-      if (energyAnimFrame) { cancelAnimationFrame(energyAnimFrame); energyAnimFrame = null; }
-      const canvas = document.getElementById('energyCanvas');
-      if (canvas) { canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height); }
-    }
-    function drawEnergy() {
-      const canvas = document.getElementById('energyCanvas');
-      const ctx = canvas.getContext('2d'), w = canvas.width, h = canvas.height, cx = w / 2, cy = h / 2, r = w * 0.425;
-      ctx.clearRect(0, 0, w, h);
-      for (const p of energyParticles) {
-        p.angle += p.speed * energyDirection;
-        const x = cx + r * Math.sin(p.angle), y = cy - r * Math.cos(p.angle);
-        const g = ctx.createRadialGradient(x, y, 0, x, y, 16);
-        g.addColorStop(0, 'rgba(255,255,255,0.4)'); g.addColorStop(0.4, 'rgba(255,255,255,0.1)'); g.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(x, y, p.size, 0, Math.PI * 2); ctx.fill();
-        for (let t = 1; t <= 3; t++) {
-          const ta = p.angle - p.speed * energyDirection * t * 3, tx = cx + r * Math.sin(ta), ty = cy - r * Math.cos(ta);
-          ctx.fillStyle = `rgba(255,255,255,${0.2 - t * 0.06})`; ctx.beginPath(); ctx.arc(tx, ty, p.size * 0.7, 0, Math.PI * 2); ctx.fill();
-        }
-      }
-      energyAnimFrame = requestAnimationFrame(drawEnergy);
-    }
-
-    // ═══════════════════════════════════
-    // NAV
-    // ═══════════════════════════════════
-    function openElement(n) { initAudio(); stopEnergyFlow(); document.getElementById('landing').style.display = 'none'; document.getElementById('bottomNav').style.display = 'flex'; switchElement(n); }
-    function switchElement(n) {
-      if (appStatus === 'live_harmony' || appStatus === 'live_aftermath') return;
-      if (currentElement === n) return;
-      if (currentElement) {
-        document.getElementById(currentElement + '-page').classList.remove('active');
-        cleanupCurrent();
-      }
-      document.querySelectorAll('.element-page').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-      document.querySelector(`.nav-item.${n}`).classList.add('active');
-      document.getElementById(n + '-page').classList.add('active');
-      currentElement = n; initAudio();
-      ({ metal: initMetal, wood: initWood, water: initWater, fire: initFire, earth: initEarth })[n]();
-    }
-    function goHome() {
-      cleanupCurrent();
-      document.querySelectorAll('.element-page').forEach(p => p.classList.remove('active'));
-      document.getElementById('bottomNav').style.display = 'none';
-      document.getElementById('landing').style.display = 'flex';
-      currentElement = null; initLanding();
-      if (landingState !== 'wuxing') setTimeout(() => startEnergyFlow(landingState === 'sheng' ? 1 : -1), 100);
-    }
-    function cleanupCurrent() { ({ metal: cleanupMetal, wood: cleanupWood, water: cleanupWater, fire: cleanupFire, earth: cleanupEarth })[currentElement](); }
-
-    // ═══════════════════════════════════
-    // METAL — synth, 1s idle
-    // ═══════════════════════════════════
-    let metalHandler = null, metalLastShake = 0, metalIdleTimer = null, metalActiveNodes = 0;
-    const METAL_NODE_CAP = 12;
-    function initMetal() {
-      showCue('metalCue');
-      metalHandler = e => {
-        const a = e.accelerationIncludingGravity || e.acceleration; if (!a) return;
-        const m = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z), now = Date.now();
-        if (m > 18 && now - metalLastShake > 120) {
-          metalLastShake = now; hideCue('metalCue'); triggerMetalRing(Math.min(m / 40, 1));
-          clearTimeout(metalIdleTimer); metalIdleTimer = setTimeout(() => showCue('metalCue'), 1000);
-        }
+          const imported = JSON.parse(ev.target.result);
+          if (Array.isArray(imported)) { const merged = [...p]; imported.forEach(ip => { if (!merged.find(x => x.title === ip.title && x.composer === ip.composer)) merged.push({ ...ip, id: Date.now() + Math.random() }); }); svP(merged); sP(merged); }
+        } catch { }
       };
-      window.addEventListener('devicemotion', metalHandler);
-      document.getElementById('metalRing').addEventListener('touchstart', metalTap);
-    }
-    function metalTap() { hideCue('metalCue'); triggerMetalRing(0.7); clearTimeout(metalIdleTimer); metalIdleTimer = setTimeout(() => showCue('metalCue'), 1000); }
-    function triggerMetalRing(v) {
-      if (metalActiveNodes >= METAL_NODE_CAP) return; // prevent node accumulation
-      metalActiveNodes++;
-      const r = document.getElementById('metalRing'); r.classList.add('shaking'); setTimeout(() => r.classList.remove('shaking'), 200);
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+  return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "80vh", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Library</div><div style={{ display: "flex", gap: 6 }}>
+      <button onClick={importFile} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, padding: "4px 8px", cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Import</button>
+      <button onClick={exportAll} disabled={p.length === 0} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: p.length > 0 ? C.textMuted : C.border, padding: "4px 8px", cursor: p.length > 0 ? "pointer" : "default", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Export</button>
+      <button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+    </div></div>
+    <div style={{ position: "relative", marginBottom: 12 }}>
+      <input value={s} onChange={e => sS(e.target.value)} placeholder="Search..." style={{ ...nI, width: "100%", textAlign: "left", padding: "0 36px", fontSize: 14 }} />
+      <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
+      {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
+    </div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}><div style={{ opacity: 0.15, transform: "scale(1.2)" }}>{I.folder(48)}</div><div style={{ fontSize: 16, color: C.textMuted }}>{p.length === 0 ? "Your Library is empty" : "No pieces found"}</div><div style={{ fontSize: 13, color: C.border, maxWidth: "80%" }}>{p.length === 0 ? "Save your sections into profiles to quickly load them later." : "Try adjusting your search query."}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null, x.videoSync || null); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}{x.performer ? ` · ${x.performer}` : ""}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
+  </div></div>);
+}
 
-      // Emit sparks
-      for (let i = 0; i < 6; i++) {
-        const spark = document.createElement('div');
-        spark.className = 'metal-spark';
-        const angle = Math.random() * Math.PI * 2;
-        const startRad = 70;
-        const endRad = startRad + 30 + Math.random() * 40;
-        spark.style.setProperty('--sx', `${Math.cos(angle) * startRad}px`);
-        spark.style.setProperty('--sy', `${Math.sin(angle) * startRad}px`);
-        spark.style.setProperty('--ex', `${Math.cos(angle) * endRad}px`);
-        spark.style.setProperty('--ey', `${Math.sin(angle) * endRad}px`);
-        spark.style.setProperty('--rot', `${angle + Math.PI / 2}rad`);
-        r.appendChild(spark);
-        setTimeout(() => spark.remove(), 500);
-      }
+// ============ PRACTICE SETUP MODAL ============
+function PracSetup({ sections, onStart, onClose }) {
+  const refSec = sections.find(s => s.type === "metered");
+  const refTempo = refSec?.tempo || 120;
+  const [startBpm, setStartBpm] = useState(Math.round(refTempo * 0.7));
+  const [inc, setInc] = useState(5);
+  const [reps, setReps] = useState(2);
+  const pct = Math.round((startBpm / refTempo) * 100);
+  const doStart = () => {
+    const startPct = Math.max(10, Math.min(100, pct));
+    const pctInc = Math.max(1, Math.round((inc / refTempo) * 100));
+    onStart(null, { startPct, targetPct: 100, pctInc, pctReps: reps });
+    onClose();
+  };
+  return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+    <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} Practice Mode</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
+      <Row label="Start">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Stp value={startBpm} onChange={setStartBpm} min={10} max={refTempo} />
+          <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
+          <span style={{ color: C.textMuted + "88", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{pct}%</span>
+        </div>
+      </Row>
+      <Row label="Target">
+        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 16, color: C.text }}>{refTempo}</span>
+        <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
+        <span style={{ color: C.textMuted + "88", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>100%</span>
+      </Row>
+      <Row label="Increment">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Stp value={inc} onChange={setInc} min={1} max={50} />
+          <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
+        </div>
+      </Row>
+      <Row label="Repeats"><Stp value={reps} onChange={setReps} min={1} max={20} /></Row>
+      <div style={{ marginTop: 18 }}>
+        <button onClick={doStart} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: C.practice, color: "#000", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Start</button>
+      </div>
+    </div>
+  </div>);
+}
 
-      const dp = getMetalDestructionProgress();
-      const t = audioCtx.currentTime;
-      const f = 800 + Math.random() * 600;
+// ============ MAIN ============
+export default function Tempus() {
+  const [sections, setSections] = useState(() => { try { const saved = _getLS("tempus_sections"); if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length > 0) return parsed; } } catch {} return [mkM()]; });
+  useEffect(() => { _setLS("tempus_sections", JSON.stringify(sections)); fbSyncDebounced(sections); }, [sections]);
+  const [editId, setEditId] = useState(null);
+  const [editIsNew, setEditIsNew] = useState(false);
+  const [showSet, setShowSet] = useState(false);
+  const [showSave, setShowSave] = useState(false);
+  const [showLib, setShowLib] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(() => _getLS("tempus_videoUrl") || null);
+  const [videoSync, setVideoSync] = useState(() => { try { const s = _getLS("tempus_videoSync"); return s ? JSON.parse(s) : null; } catch { return null; } });
+  const [showVideo, setShowVideo] = useState(false);
+  useEffect(() => { if (videoUrl) _setLS("tempus_videoUrl", videoUrl); else { try { localStorage.removeItem("tempus_videoUrl"); } catch {} } }, [videoUrl]);
+  useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
+  const [showPrac, setShowPrac] = useState(false);
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default" }; });
+  useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
+  const [muted, setMuted] = useState(false);
+  const [ps, setPs] = useState(null);
+  const [isP, setIsP] = useState(false);
+  const [mode, setMode] = useState("normal"); // "normal"|"record"|"practice"
+  const [pracSections, setPracSections] = useState(null);
+  const [pracStep, setPracStep] = useState(0);
+  const met = useMetronome();
+  const fto = useRef(null);
+  const splitPoints = useRef([]);
 
-      // Bell strike
-      const bellVol = v * 0.25 * (1 - dp * 0.7);
-      const bellDecay = 1.5 + dp * 3;
-      const bellFilterFreq = f * (1 - dp * 0.5);
+  const [pracPending, setPracPending] = useState(false);
 
-      const m = audioCtx.createOscillator(), mg = audioCtx.createGain();
-      const c = audioCtx.createOscillator(), e = audioCtx.createGain();
-      const bf = audioCtx.createBiquadFilter();
-      bf.type = 'lowpass'; bf.frequency.value = 6000 - dp * 4000; bf.Q.value = 1;
-
-      m.frequency.value = bellFilterFreq * 1.4;
-      mg.gain.value = f * 2 * (1 - dp * 0.6);
-      c.frequency.value = bellFilterFreq;
-      m.connect(mg); mg.connect(c.frequency);
-      c.connect(bf); bf.connect(e); e.connect(audioCtx.destination);
-      e.gain.setValueAtTime(bellVol, t);
-      e.gain.exponentialRampToValueAtTime(0.001, t + bellDecay);
-      m.start(t); c.start(t); m.stop(t + bellDecay + 0.1); c.stop(t + bellDecay + 0.1);
-
-      // E4 resonance
-      const eTone = audioCtx.createOscillator();
-      const eGain = audioCtx.createGain();
-      eTone.type = 'sine';
-      eTone.frequency.value = 329.6 - dp * 36.6;
-      eTone.connect(eGain);
-      eGain.connect(audioCtx.destination);
-      eGain.gain.setValueAtTime(0, t);
-      eGain.gain.setValueAtTime(0, t + 0.4);
-      eGain.gain.linearRampToValueAtTime(v * 0.025, t + 1.0);
-      eGain.gain.linearRampToValueAtTime(0, t + 3.0);
-      eTone.start(t);
-      eTone.stop(t + 3.1);
-
-      // Decrement when longest node finishes
-      setTimeout(() => { metalActiveNodes = Math.max(0, metalActiveNodes - 1); }, (bellDecay + 0.2) * 1000);
-    }
-    function cleanupMetal() {
-      if (metalHandler) window.removeEventListener('devicemotion', metalHandler);
-      document.getElementById('metalRing').removeEventListener('touchstart', metalTap);
-      clearTimeout(metalIdleTimer); metalHandler = null; metalActiveNodes = 0;
-    }
-
-    // ═══════════════════════════════════
-    // WOOD — Tree of life
-    // ═══════════════════════════════════
-    let woodLoop = null, woodSynth = null, woodSynthLfo = null, woodSynthLfoGain = null, woodPadActive = false, woodLeafInterval = null, woodBreathPhase = 0, woodBreathFrame = null, woodHoldStart = 0, woodGlowInterval = null, woodGlowDeck = [], woodGlowStopped = false;
-    let leafTargetDeck = [], leafTargetIdx = 0;
-
-    // Round robin config
-    const WOOD_NODES = [
-      { keys: ['C2', 'C3', 'C4', 'C5', 'C6'], def: 'C3', defCount: 2 },
-      { keys: ['Db2', 'Db3', 'Db4', 'Db5'], def: 'Db3', defCount: 2 },
-      { keys: ['F2', 'F3', 'F4', 'F5'], def: 'F3', defCount: 2 },
-      { keys: ['G2', 'G3', 'G4', 'G5'], def: 'G3', defCount: 2 },
-      { keys: ['Ab2', 'Ab3', 'Ab4', 'Ab5'], def: 'Ab3', defCount: 2 },
-      { keys: ['Wb1', 'Wb2', 'Wb3', 'Wb4'], def: 'Wb3', defCount: 1 }
-    ];
-    let woodTapCounts = [0, 0, 0, 0, 0, 0];
-
-    // Node positions (% of container) for branch drawing
-    const TREE_NODES = [
-      { x: 22, y: 62 }, { x: 72, y: 57 }, { x: 12, y: 38 }, { x: 82, y: 34 }, { x: 32, y: 14 }, { x: 68, y: 18 }
-    ];
-    const TREE_ROOT = { x: 50, y: 94 };
-    const TREE_TRUNK_TOP = { x: 50, y: 52 };
-
-    // Branch control points (stored after drawing for leaf paths)
-    let branchPaths = [];
-
-    function shuffleArray(arr) {
-      const a = [...arr];
-      for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1));[a[i], a[j]] = [a[j], a[i]]; }
-      return a;
-    }
-
-    function nextGlowIndex() {
-      if (woodGlowDeck.length === 0) woodGlowDeck = shuffleArray([0, 1, 2, 3, 4, 5]);
-      return woodGlowDeck.shift();
-    }
-
-    function nextLeafTarget() {
-      if (leafTargetIdx >= leafTargetDeck.length) { leafTargetDeck = shuffleArray([0, 1, 2, 3, 4, 5]); leafTargetIdx = 0; }
-      return leafTargetDeck[leafTargetIdx++];
-    }
-
-    function initWood() {
-      woodTapCounts = [0, 0, 0, 0, 0, 0];
-      woodGlowStopped = false;
-      leafTargetDeck = shuffleArray([0, 1, 2, 3, 4, 5]); leafTargetIdx = 0;
-      showCue('woodCue');
-      drawBranches();
-
-      // MP3 loop through filter
-      woodLoop = playBufferWithChain('wood_long', true);
-      if (woodLoop) { woodLoop.filter.frequency.value = 600; woodLoop.gain.gain.value = 0; }
-
-      // Sine synth bed with slow LFO (pulsing ember)
-      woodSynth = createDrone(65.4, 'sine', 2);
-      woodSynth.filter.frequency.value = 600; woodSynth.gain.gain.value = 0;
-      woodSynthLfo = audioCtx.createOscillator();
-      woodSynthLfoGain = audioCtx.createGain();
-      woodSynthLfo.type = 'sine'; woodSynthLfo.frequency.value = 0.15;
-      woodSynthLfoGain.gain.value = 0.03;
-      woodSynthLfo.connect(woodSynthLfoGain);
-      woodSynthLfoGain.connect(woodSynth.gain.gain);
-      woodSynthLfo.start();
-
-      const root = document.getElementById('woodRoot');
-      root.addEventListener('touchstart', woodTS);
-      root.addEventListener('touchend', woodTE);
-      root.addEventListener('touchcancel', woodTE);
-
-      // Marimba nodes
-      const nodes = document.querySelectorAll('#wood-page .tree-node');
-      nodes.forEach((n, i) => {
-        n.addEventListener('touchstart', e => {
-          e.preventDefault();
-          // Stop glow permanently on first tap
-          if (!woodGlowStopped) {
-            woodGlowStopped = true;
-            if (woodGlowInterval) { clearInterval(woodGlowInterval); woodGlowInterval = null; }
-            nodes.forEach(nn => nn.classList.remove('invite-glow'));
-          }
-          triggerWoodSample(i);
-
-          // Visual bloom effect on hit
-          n.classList.add('actively-playing');
-          // Reset after frame to let transition handle the long fade
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              n.classList.remove('actively-playing');
-            });
-          });
-        });
-      });
-
-      // Start shuffled glow cycling
-      woodGlowDeck = [];
-      let currentGlow = -1;
-      woodGlowInterval = setInterval(() => {
-        if (woodGlowStopped) return;
-        nodes.forEach(nn => nn.classList.remove('invite-glow'));
-        currentGlow = nextGlowIndex();
-        nodes[currentGlow].classList.add('invite-glow');
-      }, 600);
-    }
-
-    function drawBranches() {
-      const svg = document.getElementById('treeBranches');
-      const vw = 300, vh = 500;
-      const rx = TREE_ROOT.x / 100 * vw, ry = TREE_ROOT.y / 100 * vh;
-      const ttx = TREE_TRUNK_TOP.x / 100 * vw, tty = TREE_TRUNK_TOP.y / 100 * vh;
-      let paths = '';
-      branchPaths = [];
-
-      // Trunk
-      paths += `<path d="M${rx} ${ry} Q${rx} ${ry - 40} ${ttx} ${tty}" stroke="rgba(76,153,76,0.25)" stroke-width="1.5" fill="none"/>`;
-
-      // Branches to each node
-      TREE_NODES.forEach((n, i) => {
-        const nx = n.x / 100 * vw, ny = n.y / 100 * vh;
-        const cpx = (ttx + nx) / 2 + (((i % 3) - 1) * 15);
-        const cpy = Math.min(tty, ny) + (Math.abs(tty - ny) * 0.3);
-        paths += `<path d="M${ttx} ${tty} Q${cpx} ${cpy} ${nx} ${ny}" stroke="rgba(76,153,76,0.25)" stroke-width="1.2" fill="none"/>`;
-        // Store control points for leaf path sampling
-        branchPaths.push({ sx: ttx, sy: tty, cpx, cpy, ex: nx, ey: ny });
-      });
-      svg.innerHTML = paths;
-    }
-
-    // Quadratic bezier point at parameter t
-    function bezierPt(sx, sy, cpx, cpy, ex, ey, t) {
-      const u = 1 - t;
-      return {
-        x: u * u * sx + 2 * u * t * cpx + t * t * ex,
-        y: u * u * sy + 2 * u * t * cpx + t * t * ey,
-      };
-    }
-
-    function woodTS(e) {
+  const [undoToast, setUndoToast] = useState(null);
+  const undoTimer = useRef(null);
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dropIdx, setDropIdx] = useState(null);
+  // Touch drag reorder
+  const [tDrag, setTDrag] = useState(null); // { idx, startY, offsetY }
+  const [tDropIdx, setTDropIdx] = useState(null);
+  const cardRefs = useRef([]);
+  const tDragTimer = useRef(null);
+  const onGripTouchStart = useCallback((idx, e) => {
+    const touch = e.touches[0];
+    const startY = touch.clientY;
+    tDragTimer.current = setTimeout(() => {
+      if (navigator.vibrate) try { navigator.vibrate(20); } catch {}
+      // Measure all card positions
+      const positions = cardRefs.current.map(el => el ? el.getBoundingClientRect() : null);
+      setTDrag({ idx, startY, offsetY: 0, positions });
+      setTDropIdx(idx);
+    }, 300);
+  }, []);
+  useEffect(() => {
+    if (!tDrag) return;
+    const onMove = e => {
       e.preventDefault();
-      woodPadActive = true; woodHoldStart = Date.now();
-      hideCue('woodCue');
-      const root = document.getElementById('woodRoot');
-      root.classList.add('active');
-
-      if (woodLoop) {
-        woodLoop.gain.gain.setValueAtTime(woodLoop.gain.gain.value, audioCtx.currentTime);
-        woodLoop.gain.gain.linearRampToValueAtTime(0.35, audioCtx.currentTime + 0.8);
+      const y = e.touches[0].clientY;
+      const offsetY = y - tDrag.startY;
+      setTDrag(prev => prev ? { ...prev, offsetY } : null);
+      // Calculate drop index from card positions
+      const positions = tDrag.positions;
+      let newDrop = tDrag.idx;
+      for (let i = 0; i < positions.length; i++) {
+        if (!positions[i]) continue;
+        const midY = positions[i].top + positions[i].height / 2;
+        if (y < midY) { newDrop = i; break; }
+        newDrop = i + 1;
       }
-      if (woodSynth) {
-        woodSynth.gain.gain.setValueAtTime(0, audioCtx.currentTime);
-        woodSynth.gain.gain.linearRampToValueAtTime(0.06, audioCtx.currentTime + 1.5);
+      newDrop = Math.max(0, Math.min(sections.length - 1, newDrop));
+      setTDropIdx(newDrop);
+    };
+    const onEnd = () => {
+      if (tDrag && tDropIdx !== null && tDrag.idx !== tDropIdx) {
+        setSections(p => { const c = [...p]; const [m] = c.splice(tDrag.idx, 1); c.splice(tDropIdx, 0, m); return c; });
       }
-      // Speed up LFO on press
-      if (woodSynthLfo) woodSynthLfo.frequency.linearRampToValueAtTime(0.35, audioCtx.currentTime + 2.0);
+      setTDrag(null); setTDropIdx(null);
+    };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+    return () => { document.removeEventListener("touchmove", onMove); document.removeEventListener("touchend", onEnd); document.removeEventListener("touchcancel", onEnd); };
+  }, [tDrag, tDropIdx, sections.length]);
+  const cancelTouchDrag = useCallback(() => { if (tDragTimer.current) { clearTimeout(tDragTimer.current); tDragTimer.current = null; } }, []);
 
-      leafTargetDeck = shuffleArray([0, 1, 2, 3, 4, 5]); leafTargetIdx = 0;
-      woodLeafTick();
-      woodBreathPhase = 0;
-      woodBreathLoop();
-    }
+  const activeSections = pracSections || sections;
+  const tl = useMemo(() => buildTL(activeSections), [activeSections]);
+  const totalBars = tl.length;
 
-    function woodLeafTick() {
-      if (!woodPadActive) return;
-      const elapsed = Date.now() - woodHoldStart;
-      const progress = Math.min(elapsed / 10000, 1);
-      // Base interval 300→80ms + random jitter ±40ms
-      const baseInterval = 300 - progress * 220;
-      const jitter = (Math.random() - 0.5) * 80;
-      const interval = Math.max(60, baseInterval + jitter);
-      spawnTreeLeaf();
-      woodLeafInterval = setTimeout(woodLeafTick, interval);
-    }
+  useEffect(() => { met.updS({ muted }); }, [muted]);
+  useEffect(() => { met.updS({ accented: settings.accented, pitched: settings.pitched }); }, [settings.accented, settings.pitched]);
 
-    function woodTE() {
-      woodPadActive = false;
-      const root = document.getElementById('woodRoot');
-      root.classList.remove('active');
-      showCue('woodCue');
-      if (woodLoop) {
-        woodLoop.gain.gain.setValueAtTime(woodLoop.gain.gain.value, audioCtx.currentTime);
-        woodLoop.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.8);
-      }
-      if (woodSynth) {
-        woodSynth.gain.gain.setValueAtTime(woodSynth.gain.gain.value, audioCtx.currentTime);
-        woodSynth.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.8);
-      }
-      // Fade LFO modulation to prevent pop
-      if (woodSynthLfoGain) woodSynthLfoGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.2);
-      // Slow LFO back down and restore LFO depth after fade
-      if (woodSynthLfo) woodSynthLfo.frequency.linearRampToValueAtTime(0.15, audioCtx.currentTime + 1.0);
-      setTimeout(() => { if (woodSynthLfoGain) woodSynthLfoGain.gain.value = 0.03; }, 1200);
-      if (woodLeafInterval) { clearTimeout(woodLeafInterval); woodLeafInterval = null; }
-      if (woodBreathFrame) { cancelAnimationFrame(woodBreathFrame); woodBreathFrame = null; }
-    }
+  useEffect(() => {
+    met.setCb(evt => {
+      if (evt.type === "beat") { const bar = tl[evt.barIdx]; setPs({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: true, countIn: false, isTimed: false, fermata: false, pctLabel: pracSections ? `${pracStep}%` : null }); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "countIn") { setPs(p => ({ ...p || {}, countIn: true, flash: true, isTimed: false, beatIndex: evt.beatInBar - 1, beatType: evt.beatInBar === 1 ? 0 : 2, tsNum: evt.totalBeats, tsDen: 0, allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2) })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "timedStart") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, flash: true, beatType: 0, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.dur, tsNum: 0, tsDen: 0 })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "timedTick") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.rem, flash: p?.flash || false, tsNum: 0, tsDen: 0, beatType: 0, totalMarkers: p?.totalMarkers || 0, markerIdx: p?.markerIdx || 0 })); }
+      else if (evt.type === "timedMarker") { setPs(p => ({ ...p || {}, flash: true, beatType: 0, totalMarkers: evt.tm, markerIdx: evt.mi })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "fermataHold") { setPs(p => ({ ...p || {}, fermata: true, fermataRem: evt.rem, fermataDur: evt.dur })); }
+      else if (evt.type === "ended") { setPs(p => ({ ...p || {}, ended: true, flash: false, countIn: false, fermata: false })); setIsP(false); }
+    });
+  }, [met, tl, pracSections, pracStep]);
 
-    function woodBreathLoop() {
-      if (!woodPadActive || !woodLoop) return;
-      woodBreathPhase += 0.008;
-      const freq = 1400 + 1100 * Math.sin(woodBreathPhase);
-      woodLoop.filter.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.1);
-      if (woodSynth) woodSynth.filter.frequency.setTargetAtTime(freq * 0.5, audioCtx.currentTime, 0.1);
-      woodBreathFrame = requestAnimationFrame(woodBreathLoop);
-    }
+  const prePlayTempos = useRef(null);
+  const go = useCallback((fi = 0) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
+  const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
+  useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
+  const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => { if (prev.length !== saved.length) return prev; return prev.map((s, i) => ({ ...s, tempo: saved[i] ?? s.tempo })); }); } } catch {} prePlayTempos.current = null; }, [met]);
+  const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
+  const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
-    function spawnTreeLeaf() {
-      const layer = document.getElementById('treeLeafLayer');
-      const container = document.getElementById('treeContainer');
-      if (!container || !layer || branchPaths.length === 0) return;
-      const cw = container.clientWidth, ch = container.clientHeight;
-      const scX = cw / 300, scY = ch / 500;
-
-      // Balanced target via shuffled deck
-      const targetIdx = nextLeafTarget();
-      const branch = branchPaths[targetIdx];
-
-      // Trunk path: root to trunk top (quadratic bezier)
-      const trunkSx = TREE_ROOT.x / 100 * cw, trunkSy = TREE_ROOT.y / 100 * ch;
-      const trunkCpx = trunkSx, trunkCpy = trunkSy - 40 * scY;
-      const trunkEx = TREE_TRUNK_TOP.x / 100 * cw, trunkEy = TREE_TRUNK_TOP.y / 100 * ch;
-
-      // Branch path (scaled to container)
-      const bsx = branch.sx * scX, bsy = branch.sy * scY;
-      const bcpx = branch.cpx * scX, bcpy = branch.cpy * scY;
-      const bex = branch.ex * scX, bey = branch.ey * scY;
-
-      // Spawn from root rim
-      const angle = Math.random() * Math.PI * 2;
-      const rootR = 35;
-      const spawnX = trunkSx + Math.cos(angle) * rootR;
-      const spawnY = trunkSy + Math.sin(angle) * rootR;
-
-      // Randomized parameters
-      const dur = 2.5 + Math.random() * 1.8;
-      const rot = Math.random() * 360;
-      const rotSpeed = 100 + Math.random() * 200;
-      const swayAmp = 8 + Math.random() * 16;
-      const swayFreq = 1.5 + Math.random() * 2;
-      const fillOp = 0.4 + Math.random() * 0.4;
-
-      const leaf = document.createElement('div');
-      leaf.className = 'tree-leaf';
-      leaf.style.left = spawnX + 'px'; leaf.style.top = spawnY + 'px';
-      leaf.innerHTML = `<svg viewBox="0 0 20 20" fill="rgba(76,153,76,${fillOp})" stroke="rgba(76,153,76,0.4)" stroke-width="0.5">
-    <path d="M10 2 C6 6 3 10 4 14 C5 18 9 19 10 19 C11 19 15 18 16 14 C17 10 14 6 10 2Z"/>
-    <path d="M10 5 L10 17" fill="none" stroke="rgba(76,153,76,0.4)" stroke-width="0.6"/>
-  </svg>`;
-
-      const startTime = performance.now();
-      // Trunk takes first 40% of journey, branch takes 60%
-      const trunkFrac = 0.4;
-
-      function animLeaf(now) {
-        const t = Math.min((now - startTime) / (dur * 1000), 1);
-        let px, py;
-
-        if (t < 0.05) {
-          // Quick move from spawn to trunk start
-          const st = t / 0.05;
-          px = spawnX + (trunkSx - spawnX) * st;
-          py = spawnY + (trunkSy - spawnY) * st;
-        } else if (t < trunkFrac) {
-          // Follow trunk
-          const tt = (t - 0.05) / (trunkFrac - 0.05);
-          const ease = tt * tt * (3 - 2 * tt); // smoothstep
-          const pt = bezierPt(trunkSx, trunkSy, trunkCpx, trunkCpy, trunkEx, trunkEy, ease);
-          px = pt.x; py = pt.y;
-        } else {
-          // Follow branch
-          const bt = (t - trunkFrac) / (1 - trunkFrac);
-          const ease = bt * bt * (3 - 2 * bt);
-          const pt = bezierPt(bsx, bsy, bcpx, bcpy, bex, bey, ease);
-          px = pt.x; py = pt.y;
-        }
-
-        // Add sway perpendicular to path
-        px += swayAmp * Math.sin(t * Math.PI * swayFreq);
-
-        const r = rot + rotSpeed * t;
-        const op = t < 0.1 ? t / 0.1 : (t > 0.75 ? Math.max(0, (1 - t) / 0.25) : 1);
-        const sc = 0.5 + 0.5 * (1 - t * 0.4);
-
-        leaf.style.transform = `translate(-50%,-50%) rotate(${r}deg) scale(${sc})`;
-        leaf.style.left = px + 'px'; leaf.style.top = py + 'px';
-        leaf.style.opacity = op * 0.7;
-        if (t < 1) requestAnimationFrame(animLeaf);
-        else leaf.remove();
-      }
-      layer.appendChild(leaf);
-      requestAnimationFrame(animLeaf);
-    }
-
-    function triggerWoodSample(nId) {
-      if (!audioCtx) return;
-
-      const conf = WOOD_NODES[nId];
-      const count = woodTapCounts[nId];
-      let key;
-      if (count < conf.defCount) {
-        key = conf.def;
-      } else {
-        key = conf.keys[Math.floor(Math.random() * conf.keys.length)];
-      }
-      woodTapCounts[nId]++;
-
-      // Destruction: slower, quieter, muffled
-      if (destructionElement === 'wood' && destructionStartTime) {
-        const dp = Math.min(1, (Date.now() - destructionStartTime) / DESTRUCT_DURATION);
-        const result = playBuffer(key, false, 0.5 * (1 - dp * 0.6));
-        if (result) {
-          result.source.playbackRate.value = 1 - dp * 0.3; // slows down
-        }
-      } else {
-        playBuffer(key, false, 0.5);
-      }
-    }
-
-    function cleanupWood() {
-      woodPadActive = false;
-      const fadeDur = appStatus.startsWith('destroy_') ? 0.5 : 1.5;
-      const fadeTimeout = fadeDur * 1000 + 300;
-      if (woodLoop) {
-        const ref = woodLoop; woodLoop = null;
-        ref.gain.gain.setValueAtTime(ref.gain.gain.value, audioCtx.currentTime);
-        ref.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDur);
-        setTimeout(() => { try { ref.source.stop(); } catch (e) { } }, fadeTimeout);
-      }
-      if (woodSynth) {
-        const ref = woodSynth, lfo = woodSynthLfo, lfoG = woodSynthLfoGain;
-        woodSynth = null; woodSynthLfo = null; woodSynthLfoGain = null;
-        ref.gain.gain.setValueAtTime(ref.gain.gain.value, audioCtx.currentTime);
-        ref.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDur);
-        if (lfoG) lfoG.gain.setTargetAtTime(0, audioCtx.currentTime, fadeDur * 0.3);
-        setTimeout(() => {
-          if (lfo) try { lfo.stop(); } catch (e) { }
-          try { ref.osc1.stop(); ref.osc2.stop(); } catch (e) { }
-        }, fadeTimeout);
-      }
-      if (woodLeafInterval) { clearTimeout(woodLeafInterval); woodLeafInterval = null; }
-      if (woodBreathFrame) { cancelAnimationFrame(woodBreathFrame); woodBreathFrame = null; }
-      if (woodGlowInterval) { clearInterval(woodGlowInterval); woodGlowInterval = null; }
-      const nodes = document.querySelectorAll('#wood-page .tree-node');
-      nodes.forEach(n => n.classList.remove('invite-glow'));
-      const root = document.getElementById('woodRoot');
-      root.classList.remove('active');
-      root.removeEventListener('touchstart', woodTS);
-      root.removeEventListener('touchend', woodTE);
-      root.removeEventListener('touchcancel', woodTE);
-      const layer = document.getElementById('treeLeafLayer');
-      if (layer) layer.innerHTML = '';
-    }
-
-    // ═══════════════════════════════════
-    // WATER — MP3 loop, clamped tilt
-    // ═══════════════════════════════════
-    let waterLoop = null, waterSynth = null, waterLfo = null, waterLfoGain = null, waterOrientHandler = null, waterReady = false, waterDelayTimer = null, waterBaseAlpha = null, waterSmoothedAlpha = 0;
-    const BETA_NEUTRAL = 60, TILT_FWD = 55, TILT_BACK = 15, ROLL_CLAMP = 50, SPIN_CLAMP = 60, SPIN_MAX_JUMP = 30;
-
-    // 水 stroke paths in SVG space (0-200)
-    const WATER_STROKES = [
-      [{ x: 100, y: 15 }, { x: 100, y: 70 }, { x: 100, y: 130 }, { x: 95, y: 185 }], // ws0: center vertical hook
-      [{ x: 30, y: 60 }, { x: 45, y: 55 }, { x: 60, y: 50 }, { x: 75, y: 75 }], // ws1: top left hook
-      [{ x: 60, y: 110 }, { x: 50, y: 125 }, { x: 40, y: 145 }, { x: 20, y: 180 }], // ws2: bottom left sweep
-      [{ x: 140, y: 60 }, { x: 135, y: 75 }, { x: 125, y: 90 }], // ws3: right dot/short sweep
-      [{ x: 125, y: 110 }, { x: 145, y: 145 }, { x: 170, y: 180 }] // ws4: bottom right sweep
-    ];
-
-    // Find closest point on any stroke to a target XY in SVG space
-    function closestWaterPoint(tx, ty) {
-      let bestDist = Infinity, bestX = 100, bestY = 100, bestStroke = 0;
-      for (let si = 0; si < WATER_STROKES.length; si++) {
-        const stroke = WATER_STROKES[si];
-        for (let i = 0; i < stroke.length - 1; i++) {
-          const ax = stroke[i].x, ay = stroke[i].y, bx = stroke[i + 1].x, by = stroke[i + 1].y;
-          const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
-          let t = len2 > 0 ? ((tx - ax) * dx + (ty - ay) * dy) / len2 : 0;
-          t = Math.max(0, Math.min(1, t));
-          const cx = ax + t * dx, cy = ay + t * dy;
-          const dist = Math.sqrt((tx - cx) * (tx - cx) + (ty - cy) * (ty - cy));
-          if (dist < bestDist) { bestDist = dist; bestX = cx; bestY = cy; bestStroke = si; }
-        }
-      }
-      return { x: bestX, y: bestY, stroke: bestStroke };
-    }
-
-    function initWater() {
-      waterReady = false; waterBaseAlpha = null;
-      document.getElementById('waterReadout').style.opacity = '0';
-      const bubble = document.getElementById('waterBubble');
-      const sa = document.getElementById('waterStrokeArea');
-      // Start at center junction
-      bubble.style.left = '50%'; bubble.style.top = '47.5%';
-
-      // Show tilt hint, hide after first movement
-      const hint = document.getElementById('waterTiltHint');
-      if (hint) hint.style.opacity = '0.35';
-
-      waterLoop = playBufferWithChain('water_long', true);
-      if (waterLoop) {
-        waterLoop.gain.gain.value = 0;
-        waterLoop.filter.frequency.value = 800;
-        waterLfo = audioCtx.createOscillator();
-        waterLfoGain = audioCtx.createGain();
-        waterLfo.type = 'sine'; waterLfo.frequency.value = 0.3;
-        waterLfoGain.gain.value = 200;
-        waterLfo.connect(waterLfoGain);
-        waterLfoGain.connect(waterLoop.filter.frequency);
-        waterLfo.start();
-      }
-
-      waterSynth = createDrone(103.8, 'triangle', 3);
-      waterSynth.filter.frequency.value = 800; waterSynth.gain.gain.value = 0;
-
-      const readout = document.getElementById('waterReadout');
-      const vB = document.getElementById('tiltBeta'), vG = document.getElementById('tiltGamma'), vA = document.getElementById('tiltAlpha');
-
-      waterDelayTimer = setTimeout(() => {
-        waterReady = true;
-        if (waterLoop) {
-          waterLoop.gain.gain.setValueAtTime(0, audioCtx.currentTime);
-          waterLoop.gain.gain.linearRampToValueAtTime(0.35, audioCtx.currentTime + 2.0);
-        }
-        if (waterSynth) {
-          waterSynth.gain.gain.setValueAtTime(0, audioCtx.currentTime);
-          waterSynth.gain.gain.linearRampToValueAtTime(0.06, audioCtx.currentTime + 2.0);
-        }
-        readout.style.opacity = '1';
-      }, 1000);
-
-      const updateBubble = (normX, normY) => {
-        // normX: 0=left, 1=right. normY: 0=top, 1=bottom
-        // Map to SVG space target position
-        const targetSvgX = normX * 200;
-        const targetSvgY = normY * 200;
-        const pt = closestWaterPoint(targetSvgX, targetSvgY);
-
-        // Interpolate between snapped and free based on destruction
-        const snap = typeof waterDestructSnap !== 'undefined' ? waterDestructSnap : 1;
-        const finalX = pt.x * snap + targetSvgX * (1 - snap);
-        const finalY = pt.y * snap + targetSvgY * (1 - snap);
-
-        // Convert SVG coords to % of container
-        const pctX = (finalX / 200) * 100;
-        const pctY = (finalY / 200) * 100;
-        bubble.style.left = Math.max(0, Math.min(100, pctX)) + '%';
-        bubble.style.top = Math.max(0, Math.min(100, pctY)) + '%';
-
-        // Glow the active stroke (skip during destruction — CSS handles it)
-        if (snap > 0.5) {
-          const paths = document.querySelectorAll('.water-stroke');
-          paths.forEach((p, i) => {
-            p.setAttribute('stroke', i === pt.stroke ? 'rgba(70,130,200,0.45)' : 'rgba(70,130,200,0.25)');
-          });
-        }
-
-        // Audio: use final position
-        const audioNx = finalX / 200;
-        const audioNy = finalY / 200;
-        return { nx: audioNx, ny: audioNy };
-      };
-
-      waterOrientHandler = e => {
-        const beta = e.beta || 0, gamma = e.gamma || 0, alpha = e.alpha || 0;
-        if (waterBaseAlpha === null) { waterBaseAlpha = alpha; waterSmoothedAlpha = 0; }
-
-        // Hide tilt hint on first movement
-        if (hint && (Math.abs(beta - BETA_NEUTRAL) > 5 || Math.abs(gamma) > 5)) {
-          hint.style.opacity = '0'; hint.style.transition = 'opacity 0.5s ease';
-        }
-
-        // Tilt: asymmetric range -55 (forward) to +15 (back) relative to neutral
-        const relBeta = beta - BETA_NEUTRAL;
-        const cB = Math.max(-TILT_FWD, Math.min(TILT_BACK, relBeta));
-        // ny: 0=top(-55°, high pitch), 1=bottom(+15°, low pitch)
-        const ny = (cB + TILT_FWD) / (TILT_FWD + TILT_BACK);
-
-        // Roll: symmetric
-        const relGamma = gamma;
-        const cG = Math.max(-ROLL_CLAMP, Math.min(ROLL_CLAMP, relGamma));
-        const nx = (cG + ROLL_CLAMP) / (ROLL_CLAMP * 2);
-
-        // Spin: smooth anti-jump
-        let relAlpha = alpha - waterBaseAlpha;
-        if (relAlpha > 180) relAlpha -= 360;
-        if (relAlpha < -180) relAlpha += 360;
-        // Reject jumps > SPIN_MAX_JUMP, interpolate smoothly
-        const alphaDelta = relAlpha - waterSmoothedAlpha;
-        if (Math.abs(alphaDelta) > SPIN_MAX_JUMP) {
-          waterSmoothedAlpha += Math.sign(alphaDelta) * SPIN_MAX_JUMP * 0.3;
-        } else {
-          waterSmoothedAlpha += (relAlpha - waterSmoothedAlpha) * 0.3;
-        }
-        const cA = Math.max(-SPIN_CLAMP, Math.min(SPIN_CLAMP, waterSmoothedAlpha));
-        const nz = (cA + SPIN_CLAMP) / (SPIN_CLAMP * 2);
-
-        vB.textContent = Math.round(cB) + '°';
-        vG.textContent = Math.round(cG) + '°';
-        vA.textContent = Math.round(cA) + '°';
-
-        const audio = updateBubble(nx, ny);
-
-        if (!waterReady || !waterLoop) return;
-        // Invert: top of char (ny=0) = high pitch, bottom (ny=1) = low pitch
-        waterLoop.source.playbackRate.setTargetAtTime(0.5 + (1 - audio.ny) * 1.5, audioCtx.currentTime, 0.1);
-        waterLoop.filter.frequency.setTargetAtTime(200 + (1 - audio.ny) * 4000, audioCtx.currentTime, 0.1);
-        if (waterLfo) waterLfo.frequency.setTargetAtTime(0.1 + nz * 6, audioCtx.currentTime, 0.1);
-        if (waterSynth) waterSynth.filter.frequency.setTargetAtTime(200 + (1 - audio.ny) * 4000, audioCtx.currentTime, 0.1);
-      };
-      window.addEventListener('deviceorientation', waterOrientHandler);
-
-      // Touch fallback
-      sa.addEventListener('touchmove', e => {
+  const [confirmClear, setConfirmClear] = useState(false);
+  const confirmTimer = useRef(null);
+  useEffect(() => {
+    const hkd = e => {
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear;
+      if (e.code === "Space") {
+        if (anyModalOpen) return;
         e.preventDefault();
-        const r = sa.getBoundingClientRect(), t = e.touches[0];
-        const nx = Math.max(0, Math.min(1, (t.clientX - r.left) / r.width));
-        const ny = Math.max(0, Math.min(1, (t.clientY - r.top) / r.height));
-        if (hint) { hint.style.opacity = '0'; hint.style.transition = 'opacity 0.5s ease'; }
-        // Display: map ny back to tilt range (-55 to +15)
-        const displayTilt = Math.round(-TILT_FWD + ny * (TILT_FWD + TILT_BACK));
-        vB.textContent = displayTilt + '°';
-        vG.textContent = Math.round((nx - 0.5) * ROLL_CLAMP * 2) + '°';
-        const audio = updateBubble(nx, ny);
-        if (!waterReady || !waterLoop) return;
-        waterLoop.source.playbackRate.setTargetAtTime(0.5 + (1 - audio.ny) * 1.5, audioCtx.currentTime, 0.1);
-        waterLoop.filter.frequency.setTargetAtTime(200 + (1 - audio.ny) * 4000, audioCtx.currentTime, 0.1);
-      });
-    }
-
-    function cleanupWater() {
-      if (waterOrientHandler) window.removeEventListener('deviceorientation', waterOrientHandler);
-      waterOrientHandler = null; waterReady = false; waterBaseAlpha = null; waterSmoothedAlpha = 0;
-      clearTimeout(waterDelayTimer);
-      document.getElementById('waterReadout').style.opacity = '0';
-      const hint = document.getElementById('waterTiltHint');
-      if (hint) { hint.style.opacity = ''; hint.style.transition = ''; }
-      const bubble = document.getElementById('waterBubble');
-      if (bubble) { bubble.style.left = '50%'; bubble.style.top = '47.5%'; }
-      document.querySelectorAll('.water-stroke').forEach(p => p.setAttribute('stroke', 'rgba(70,130,200,0.25)'));
-      if (waterLoop) {
-        const fadeDur = appStatus.startsWith('destroy_') ? 0.5 : 1.5;
-        const fadeTimeout = fadeDur * 1000 + 300;
-        const loopRef = waterLoop, lfoRef = waterLfo;
-        waterLoop = null; waterLfo = null; waterLfoGain = null;
-        loopRef.gain.gain.setValueAtTime(loopRef.gain.gain.value, audioCtx.currentTime);
-        loopRef.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDur);
-        setTimeout(() => {
-          if (lfoRef) try { lfoRef.stop(); } catch (e) { }
-          try { loopRef.source.stop(); } catch (e) { }
-        }, fadeTimeout);
+        if (isP) { met.stop(); setIsP(false); }
+        else if (ps && (ps.ended || ps.countIn)) { met.tap(); go(0); }
+        else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }
+        else { met.tap(); go(0); }
       }
-      if (waterSynth) {
-        const fadeDur = appStatus.startsWith('destroy_') ? 0.5 : 1.5;
-        const fadeTimeout = fadeDur * 1000 + 300;
-        const ref = waterSynth; waterSynth = null;
-        ref.gain.gain.setValueAtTime(ref.gain.gain.value, audioCtx.currentTime);
-        ref.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDur);
-        setTimeout(() => { try { ref.osc1.stop(); ref.osc2.stop(); } catch (e) { } }, fadeTimeout);
+      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setConfirmClear(false); }
+      else if (isP && e.code === "ArrowLeft") jumpSec(-1);
+      else if (isP && e.code === "ArrowRight") jumpSec(1);
+    };
+    window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
+  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, confirmClear]);
+
+  const lastSplitTime = useRef(0);
+  const lastSplitBar = useRef(0);
+
+  // Live capture split
+  const handleSplit = useCallback(barNum => {
+    if (mode !== "record") return;
+    const now = Date.now();
+    if (now - lastSplitTime.current < 800 || barNum === lastSplitBar.current) return;
+    lastSplitTime.current = now;
+    lastSplitBar.current = barNum;
+    splitPoints.current.push(barNum);
+    setSections(prev => {
+      if (prev.length > 50) return prev; // safety cap
+      const tempTl = buildTL(prev);
+      const barInfo = tempTl.find(b => b.ab === barNum);
+      if (!barInfo) return prev;
+      const secIdx = barInfo.si;
+      const sec = prev[secIdx];
+      if (!sec || sec.type === "timed") return prev;
+      const barInSec = barInfo.bin;
+      if (barInSec <= 1 || barInSec >= sec.bars) return prev;
+      const elapsed1 = barInSec - 1, elapsed2 = sec.bars - (barInSec - 1);
+      const s1 = { ...sec, id: Date.now() + Math.random(), bars: elapsed1, capturedDuration: elapsed1 * gCD(sec.tempo, sec.beatUnit, sec.dotted, sec.tsDen) * sec.tsNum };
+      const s2 = { ...sec, id: Date.now() + Math.random() + 1, bars: elapsed2, capturedDuration: elapsed2 * gCD(sec.tempo, sec.beatUnit, sec.dotted, sec.tsDen) * sec.tsNum };
+      return [...prev.slice(0, secIdx), s1, s2, ...prev.slice(secIdx + 1)];
+    });
+  }, [mode]);
+
+  // Practice mode start
+  const startPractice = useCallback((_, profileOpts) => {
+    if (!profileOpts) return;
+    const { startPct, targetPct, pctInc, pctReps } = profileOpts;
+    let allSecs = [];
+    for (let p = startPct; p <= targetPct; p += pctInc) {
+      for (let r = 0; r < pctReps; r++) {
+        allSecs = allSecs.concat(scaleSections(sections, Math.min(p, targetPct)));
       }
     }
+    setPracSections(allSecs); setPracStep(startPct); setMode("practice");
+    setPracPending(true);
+  }, [sections, go]);
 
-    // ═══════════════════════════════════
-    // FIRE — MP3 XY pad + synth swipe + sine pulse
-    // ═══════════════════════════════════
-    let fireLoop = null, fireSynth = null, fireSynthLfo = null, fireSynthLfoGain = null, firePadActive = false, fireLastSwipe = 0, fireIdleTimer = null, fireGhostAnim = null, fireGhostStopped = false;
+  const addSec = () => { const ns = mkM(); if (sections.length > 0) { const l = sections[sections.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } } setSections(p => [...p, ns]); setEditIsNew(true); setEditId(ns.id); };
+  const moveSecTimer = useRef(null);
+  const moveSec = (i, d) => { if (moveSecTimer.current) return; moveSecTimer.current = setTimeout(() => { moveSecTimer.current = null; }, 150); setSections(p => { const a = [...p]; if (i + d >= 0 && i + d < a.length) [a[i], a[i + d]] = [a[i + d], a[i]]; return a; }); };
+  const editSec = sections.find(s => s.id === editId);
 
-    // 火 stroke paths in SVG space (0-200), matching fs0-fs3 order
-    const FIRE_STROKES = [
-      [{ x: 70, y: 80 }, { x: 60, y: 95 }, { x: 55, y: 105 }], // fs0: left dot
-      [{ x: 140, y: 70 }, { x: 130, y: 85 }, { x: 120, y: 95 }], // fs1: right dot
-      [{ x: 100, y: 35 }, { x: 100, y: 75 }, { x: 80, y: 120 }, { x: 60, y: 145 }, { x: 40, y: 170 }], // fs2: center left sweep
-      [{ x: 100, y: 90 }, { x: 125, y: 115 }, { x: 145, y: 140 }, { x: 165, y: 170 }] // fs3: center right sweep
-    ];
-    const FIRE_HIT_RADIUS = 28;
+  const handleClear = () => {
+    if (sections.length <= 1 && sections[0]?.tempo === 120 && sections[0]?.tsNum === 4) return;
+    if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
+    setConfirmClear(false);
+    const backup = [...sections];
+    setSections([mkM()]); setEditId(null); setVideoUrl(null); setVideoSync(null);
+    setUndoToast({ section: backup, index: -1 });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
+  };
 
-    function distToSegment(px, py, ax, ay, bx, by) {
-      const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
-      if (len2 === 0) return Math.sqrt((px - ax) * (px - ax) + (py - ay) * (py - ay));
-      let t = ((px - ax) * dx + (py - ay) * dy) / len2;
-      t = Math.max(0, Math.min(1, t));
-      const cx = ax + t * dx, cy = ay + t * dy;
-      return Math.sqrt((px - cx) * (px - cx) + (py - cy) * (py - cy));
+  const handleDelete = id => {
+    if (sections.length <= 1) return;
+    const idx = sections.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    const sec = sections[idx];
+    setSections(p => p.filter(s => s.id !== id));
+    setUndoToast({ section: sec, index: idx });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
+  };
+  const handleUndo = () => {
+    if (!undoToast) return;
+    if (undoToast.index === -1 && Array.isArray(undoToast.section)) {
+      setSections(undoToast.section);
+    } else {
+      setSections(p => { const c = [...p]; c.splice(undoToast.index, 0, undoToast.section); return c; });
     }
+    setUndoToast(null); if (undoTimer.current) clearTimeout(undoTimer.current);
+  };
 
-    function nearFireStroke(svgX, svgY) {
-      for (const stroke of FIRE_STROKES) {
-        for (let i = 0; i < stroke.length - 1; i++) {
-          if (distToSegment(svgX, svgY, stroke[i].x, stroke[i].y, stroke[i + 1].x, stroke[i + 1].y) < FIRE_HIT_RADIUS) return true;
-        }
-      }
-      return false;
-    }
+  const handleDragStart = (e, idx) => { setDragIdx(idx); e.dataTransfer.effectAllowed = "move"; };
+  const handleDragEnter = (e, idx) => { setDropIdx(idx); e.preventDefault(); };
+  const handleDragOver = e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const handleDragEnd = () => { setDragIdx(null); setDropIdx(null); };
+  const handleDrop = (e, idx) => {
+    e.preventDefault(); if (dragIdx === null || dragIdx === idx) { handleDragEnd(); return; }
+    setSections(p => { const c = [...p]; const [m] = c.splice(dragIdx, 1); c.splice(idx, 0, m); return c; });
+    handleDragEnd();
+  };
 
-    // Sample a point along a polyline stroke at parameter t (0-1)
-    function strokePointAt(stroke, t) {
-      let totalLen = 0; const segLens = [];
-      for (let i = 0; i < stroke.length - 1; i++) {
-        const dx = stroke[i + 1].x - stroke[i].x, dy = stroke[i + 1].y - stroke[i].y;
-        segLens.push(Math.sqrt(dx * dx + dy * dy)); totalLen += segLens[i];
-      }
-      let target = t * totalLen, accum = 0;
-      for (let i = 0; i < segLens.length; i++) {
-        if (accum + segLens[i] >= target || i === segLens.length - 1) {
-          const segT = segLens[i] > 0 ? (target - accum) / segLens[i] : 0;
-          return { x: stroke[i].x + (stroke[i + 1].x - stroke[i].x) * segT, y: stroke[i].y + (stroke[i + 1].y - stroke[i].y) * segT };
-        }
-        accum += segLens[i];
-      }
-      return { x: stroke[0].x, y: stroke[0].y };
-    }
+  // Tap tempo in performance mode - updates current section's tempo live
+  const { tap: handleLiveTapTempo, tapBpm: liveTapBpm, tapFlash: liveTapFlash } = useTapTempo(useCallback(bpm => {
+    if (!ps) return;
+    const si = ps.sectionIndex;
+    setSections(prev => prev.map((s, i) => i === si && s.type === "metered" ? { ...s, tempo: bpm } : s));
+  }, [ps]));
 
-    function startFireGhost() {
-      const gh = document.getElementById('fireTraceGhost');
-      if (!gh) return;
-      gh.style.opacity = '1'; fireGhostStopped = false;
-      let strokeIdx = 0;
-      const speeds = [800, 800, 2500, 2500]; // alternating slow/fast
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative" }}>
+      <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet" />
+      <style>{`
+        *{box-sizing:border-box;margin:0;padding:0} html{touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+        input,textarea{-webkit-user-select:auto;user-select:auto}
+        input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0} input[type=number]{-moz-appearance:textfield}
+        ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:2px}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+        @keyframes ripple { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.6); opacity: 0; } }
+        .sec-card { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.15s; }
+        .sec-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); border-color: ${C.textMuted}44; background: ${C.surfaceHover} !important; }
+        .glass-pill { background: rgba(17, 17, 22, 0.92); border-radius: 40px; border: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
+        .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
+        .pump { transform: scale(1.05); }
+        .btn-ripple { position: relative; }
+        .btn-ripple::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; z-index: -1; animation: ripple 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        [data-tip], [data-tip-b] { position: relative; }
+        [data-tip]::after, [data-tip-b]::after { position: absolute; left: 50%; transform: translateX(-50%); background: ${C.surface}; color: ${C.text}; font-size: 11px; font-family: 'Outfit',sans-serif; padding: 4px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.1s; border: 1px solid ${C.border}; z-index: 999; }
+        [data-tip]::after { content: attr(data-tip); bottom: calc(100% + 6px); }
+        [data-tip-b]::after { content: attr(data-tip-b); top: calc(100% + 8px); }
+        [data-tip]:hover::after, [data-tip-b]:hover::after { opacity: 1; }
+        @media (pointer: coarse) { [data-tip]::after, [data-tip-b]::after { display: none; } }
+        button { cursor: pointer; transition: transform 0.1s ease, background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease; }
+        button:hover:not(:disabled) { opacity: 0.85; }
+        button:active:not(:disabled) { opacity: 0.7; transform: scale(0.98); }
+        .close-btn { background: none; border: none; color: ${C.textMuted}; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
+        .close-btn:hover { background: ${C.surfaceHover}; color: ${C.text}; }
+        .transport-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.05) !important; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important; }
+        .transport-btn:active:not(:disabled) { transform: scale(0.95) !important; }
 
-      function traceStroke() {
-        if (fireGhostStopped) return;
-        const stroke = FIRE_STROKES[strokeIdx];
-        const dur = speeds[strokeIdx % speeds.length];
-        const sa = document.getElementById('fireStrokeArea');
-        if (!sa) return;
-        const start = Date.now();
-        const isFast = dur < 1500;
-        gh.style.width = isFast ? '18px' : '12px'; gh.style.height = isFast ? '18px' : '12px';
-        gh.style.background = isFast ? 'rgba(220,60,40,0.55)' : 'rgba(220,60,40,0.25)';
-        gh.style.boxShadow = isFast ? '0 0 14px rgba(220,60,40,0.5)' : '0 0 6px rgba(220,60,40,0.2)';
+        @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.6) !important; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+        .modal-content { animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(17, 17, 22, 0.85) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-top: 1px solid rgba(255,255,255,0.15) !important; box-shadow: 0 -16px 40px rgba(139, 124, 246, 0.05), 0 -8px 30px rgba(0,0,0,0.6); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+        .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
+        @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+        .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+      `}</style>
 
-        function step() {
-          if (fireGhostStopped) return;
-          const t = Math.min((Date.now() - start) / dur, 1);
-          const pt = strokePointAt(stroke, t);
-          gh.style.left = (pt.x / 200 * sa.clientWidth) + 'px';
-          gh.style.top = (pt.y / 200 * sa.clientHeight) + 'px';
-          if (t < 1) fireGhostAnim = requestAnimationFrame(step);
-          else setTimeout(() => { if (fireGhostStopped) return; strokeIdx = (strokeIdx + 1) % FIRE_STROKES.length; traceStroke(); }, 600);
-        }
-        fireGhostAnim = requestAnimationFrame(step);
-      }
-      traceStroke();
-    }
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
+        <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={handleClear} data-tip-b={confirmClear ? "Tap again" : "New"} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{confirmClear ? "Clear?" : I.fileNew(18)}</button>
+          {videoUrl && <button onClick={() => setShowVideo(true)} data-tip-b="Video" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
+          {settings.appMode !== "basic" && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
+          <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
+        </div>
+      </div>
 
-    function stopFireGhost() {
-      fireGhostStopped = true;
-      if (fireGhostAnim) { cancelAnimationFrame(fireGhostAnim); fireGhostAnim = null; }
-      const gh = document.getElementById('fireTraceGhost');
-      if (gh) gh.style.opacity = '0';
-    }
+      <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", gap: 16, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>
+        <span>{sections.length} section{sections.length !== 1 ? "s" : ""}</span><span>{totalBars} bar{totalBars !== 1 ? "s" : ""}</span>
+        {totalBars > 0 && <span>{Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur)}s</span>}
+      </div>
 
-    function initFire() {
-      fireLoop = playBufferWithChain('fire_long', true);
-      if (fireLoop) { fireLoop.filter.frequency.value = 400; fireLoop.filter.Q.value = 1; fireLoop.gain.gain.value = 0; }
+      <div style={{ padding: "8px 16px 120px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
+        {sections.map((sec, i) => <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={() => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={() => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={d => moveSec(i, d)} onDelete={sections.length > 1 ? handleDelete : null} onDragStart={handleDragStart} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={onGripTouchStart} cancelTouchDrag={cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} />)}
+        <button onClick={addSec} style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(20)}</button>
+      </div>
 
-      fireSynth = createDrone(174.6, 'sine', 4);
-      fireSynth.filter.frequency.value = 500; fireSynth.gain.gain.value = 0;
-      fireSynthLfo = audioCtx.createOscillator();
-      fireSynthLfoGain = audioCtx.createGain();
-      fireSynthLfo.type = 'sine'; fireSynthLfo.frequency.value = 0.5;
-      fireSynthLfoGain.gain.value = 0.04;
-      fireSynthLfo.connect(fireSynthLfoGain);
-      fireSynthLfoGain.connect(fireSynth.gain.gain);
-      fireSynthLfo.start();
-      fireSynth.gain.gain.setValueAtTime(0, audioCtx.currentTime);
-      fireSynth.gain.gain.linearRampToValueAtTime(0.07, audioCtx.currentTime + 1.5);
+      {/* Bottom buttons: Play / Record / Practice */}
+      <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
+        <div className="glass-pill" style={{ display: "flex", gap: 20, alignItems: "center", pointerEvents: "auto", padding: "10px 24px" }}>
+          {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
+          <button className="btn-ripple transport-btn" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 64, height: 64, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.play(28)}</button>
+          {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip="Practice Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
+        </div>
+      </div>
 
-      const pad = document.getElementById('firePad'), cross = document.getElementById('fireCrosshair');
-      const ghost = document.getElementById('fireGhost');
-      ghost.style.opacity = '1';
-
-      // Start trace ghost
-      fireGhostStopped = false;
-      startFireGhost();
-
-      const fireTouch = () => {
-        if (fireSynth) fireSynth.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 1.0);
-        if (fireIdleTimer) { clearTimeout(fireIdleTimer); fireIdleTimer = null; }
-      };
-      const fireRelease = () => {
-        if (fireIdleTimer) clearTimeout(fireIdleTimer);
-        fireIdleTimer = setTimeout(() => {
-          if (fireSynth) fireSynth.gain.gain.linearRampToValueAtTime(0.07, audioCtx.currentTime + 2.0);
-        }, 2000);
-      };
-
-      const mv = (x, y) => {
-        const r = pad.getBoundingClientRect();
-        const nx = Math.max(0, Math.min(1, (x - r.left) / r.width)), ny = Math.max(0, Math.min(1, (y - r.top) / r.height));
-        cross.style.left = (nx * 100) + '%'; cross.style.top = (ny * 100) + '%';
-        const logFreq = 300 * Math.pow(20, nx);
-        const q = 1 + (1 - ny) * 17;
-        if (fireLoop) {
-          fireLoop.filter.frequency.setTargetAtTime(logFreq, audioCtx.currentTime, 0.05);
-          fireLoop.filter.Q.setTargetAtTime(q, audioCtx.currentTime, 0.05);
-          fireLoop.gain.gain.setTargetAtTime(0.3, audioCtx.currentTime, 0.05);
-        }
-        const intensity = (nx + (1 - ny)) / 2;
-        pad.style.background = `rgba(220,60,40,${intensity * 0.4})`;
-      };
-      // Energy throttle variables
-      let fireLastEnergyTime = 0;
-
-      pad.addEventListener('touchstart', e => { e.preventDefault(); firePadActive = true; ghost.style.opacity = '0'; fireTouch(); mv(e.touches[0].clientX, e.touches[0].clientY); fireLastEnergyTime = Date.now(); });
-      pad.addEventListener('touchmove', e => {
-        e.preventDefault();
-        if (firePadActive) {
-          mv(e.touches[0].clientX, e.touches[0].clientY);
-          let now = Date.now();
-          if (now - fireLastEnergyTime > 100) { // Max 10 updates a second
-            fireLastEnergyTime = now;
-          }
-        }
-      });
-      pad.addEventListener('touchend', () => {
-        firePadActive = false; cross.style.left = '50%'; cross.style.top = '50%';
-        pad.style.background = 'transparent';
-        if (fireLoop) fireLoop.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
-        fireRelease();
-      });
-
-      // Stroke swipe area
-      const sa = document.getElementById('fireStrokeArea');
-      const svg = document.getElementById('fireCharSvg');
-      const fl = document.getElementById('fireFlameLayer');
-      let ss = null, sTime = 0;
-
-      sa.addEventListener('touchstart', e => {
-        e.preventDefault();
-        stopFireGhost();
-        fireTouch();
-        ss = { x: e.touches[0].clientX, y: e.touches[0].clientY }; sTime = Date.now();
-      });
-      sa.addEventListener('touchmove', e => {
-        e.preventDefault(); if (!ss) return;
-        const now = Date.now(); if (now - fireLastSwipe < 60) return;
-        const tx = e.touches[0].clientX, ty = e.touches[0].clientY;
-        const dx = tx - ss.x, dy = ty - ss.y, dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist > 12) {
-          const r = sa.getBoundingClientRect();
-          const localX = tx - r.left, localY = ty - r.top;
-          const svgX = (localX / r.width) * 200, svgY = (localY / r.height) * 200;
-
-          if (nearFireStroke(svgX, svgY)) {
-            fireLastSwipe = now;
-            const dt = now - sTime;
-            const speed = dt > 0 ? dist / dt : 1;
-            spawnFlame(localX, localY, fl);
-            triggerFlameSound(speed);
-            // Glow only the nearest stroke
-            svg.querySelectorAll('.fire-stroke').forEach((p, i) => {
-              const stroke = FIRE_STROKES[i];
-              let near = false;
-              for (let j = 0; j < stroke.length - 1; j++) {
-                if (distToSegment(svgX, svgY, stroke[j].x, stroke[j].y, stroke[j + 1].x, stroke[j + 1].y) < FIRE_HIT_RADIUS) { near = true; break; }
-              }
-              if (near) {
-                const glow = Math.min(0.6, 0.35 + speed * 0.3);
-                p.setAttribute('stroke', `rgba(220,60,40,${glow})`);
-                p.setAttribute('stroke-dasharray', 'none');
-                setTimeout(() => { p.setAttribute('stroke', 'rgba(220,60,40,0.28)'); p.setAttribute('stroke-dasharray', '4 6'); }, 250);
-              }
-            });
-          }
-          ss = { x: tx, y: ty }; sTime = now;
-        }
-      });
-      sa.addEventListener('touchend', () => { ss = null; fireRelease(); });
-    }
-    function spawnFlame(x, y, c) { const el = document.createElement('div'); el.className = 'flame-particle'; el.style.background = `hsl(${10 + Math.random() * 30},90%,55%)`; el.style.left = x + 'px'; el.style.top = y + 'px'; const s = 6 + Math.random() * 10; el.style.width = s + 'px'; el.style.height = s + 'px'; c.appendChild(el); setTimeout(() => el.remove(), 800); }
-    function triggerFlameSound(speed) {
-      // speed: ~0.1 (slow) to ~2.0+ (fast)
-      const spd = Math.min(speed, 2.0);
-      const norm = spd / 2.0; // 0 to 1
-      const t = audioCtx.currentTime;
-      // Duration: slow=80ms, fast=200ms
-      const dur = 0.08 + norm * 0.12;
-      const bs = Math.floor(audioCtx.sampleRate * dur);
-      const buf = audioCtx.createBuffer(1, bs, audioCtx.sampleRate);
-      const d = buf.getChannelData(0); for (let i = 0; i < bs; i++)d[i] = Math.random() * 2 - 1;
-      const s = audioCtx.createBufferSource(); s.buffer = buf;
-      // Frequency: slow=800Hz (dark), fast=3500Hz (bright)
-      const bp = audioCtx.createBiquadFilter(); bp.type = 'bandpass';
-      bp.frequency.value = 800 + norm * 2700 + Math.random() * 500;
-      // Q: slow=4 (narrow), fast=1.5 (wide)
-      bp.Q.value = 4 - norm * 2.5;
-      // Volume: slow=0.06, fast=0.25
-      const vol = 0.06 + norm * 0.19;
-      const e = audioCtx.createGain(); e.gain.setValueAtTime(vol, t); e.gain.exponentialRampToValueAtTime(0.001, t + dur + 0.05);
-      s.connect(bp); bp.connect(e); e.connect(audioCtx.destination); s.start(t);
-    }
-    function cleanupFire() {
-      stopFireGhost();
-      const fadeDur = appStatus.startsWith('destroy_') ? 0.5 : 1.5;
-      const fadeTimeout = fadeDur * 1000 + 300;
-      if (fireLoop) {
-        const ref = fireLoop; fireLoop = null;
-        ref.gain.gain.setValueAtTime(ref.gain.gain.value, audioCtx.currentTime);
-        ref.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDur);
-        setTimeout(() => { try { ref.source.stop(); } catch (e) { } }, fadeTimeout);
-      }
-      if (fireSynth) {
-        const ref = fireSynth, lfo = fireSynthLfo, lfoG = fireSynthLfoGain;
-        fireSynth = null; fireSynthLfo = null; fireSynthLfoGain = null;
-        ref.gain.gain.setValueAtTime(ref.gain.gain.value, audioCtx.currentTime);
-        ref.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDur);
-        if (lfoG) lfoG.gain.setTargetAtTime(0, audioCtx.currentTime, fadeDur * 0.3);
-        setTimeout(() => {
-          if (lfo) try { lfo.stop(); } catch (e) { }
-          try { ref.osc1.stop(); ref.osc2.stop(); } catch (e) { }
-        }, fadeTimeout);
-      }
-      if (fireIdleTimer) { clearTimeout(fireIdleTimer); fireIdleTimer = null; }
-      const pad = document.getElementById('firePad');
-      if (pad) pad.style.background = 'transparent';
-      const fl = document.getElementById('fireFlameLayer');
-      if (fl) fl.innerHTML = '';
-      const svg = document.getElementById('fireCharSvg');
-      if (svg) svg.querySelectorAll('.fire-stroke').forEach(p => { p.setAttribute('stroke', 'rgba(220,60,40,0.28)'); p.setAttribute('stroke-dasharray', '4 6'); });
-    }
-
-    // ═══════════════════════════════════
-    // EARTH — earthquake + MP3 bed
-    // ═══════════════════════════════════
-    let earthDrone = null, earthBed = null, earthAnimFrame = null, earthStartTime = null, earthLastVib = 0, earthPulseContainer = null, earthQuaking = false, earthFirstQuake = true;
-    const QUAKE_TIMES = [6000, 11000, 21000];
-    let earthQuakeTime = 6000;
-
-    function createDrone(f, t, d) {
-      const o1 = audioCtx.createOscillator(), o2 = audioCtx.createOscillator();
-      const g = audioCtx.createGain(), fl = audioCtx.createBiquadFilter();
-      o1.type = t || 'sine'; o1.frequency.value = f; o2.type = 'sine'; o2.frequency.value = f * 1.002;
-      if (d) { o1.detune.value = d; o2.detune.value = -d; }
-      fl.type = 'lowpass'; fl.frequency.value = 800; fl.Q.value = 2; g.gain.value = 0;
-      o1.connect(fl); o2.connect(fl); fl.connect(g); g.connect(audioCtx.destination);
-      o1.start(); o2.start();
-      return { osc1: o1, osc2: o2, gain: g, filter: fl };
-    }
-
-    function initEarth() {
-      showCue('earthCue');
-      earthDrone = createDrone(55, 'sine', 2); earthDrone.filter.frequency.value = 400;
-      const ta = document.getElementById('earthTouch');
-      earthPulseContainer = ta.parentElement;
-      ta.addEventListener('touchstart', earthTS);
-      ta.addEventListener('touchend', earthTE);
-      ta.addEventListener('touchcancel', earthTE);
-    }
-
-    function earthTS(e) {
-      e.preventDefault(); hideCue('earthCue');
-      earthStartTime = Date.now(); earthLastVib = 0; earthQuaking = false;
-      earthQuakeTime = earthFirstQuake ? 6000 : QUAKE_TIMES[Math.floor(Math.random() * QUAKE_TIMES.length)];
-      earthDrone.gain.gain.setValueAtTime(0, audioCtx.currentTime);
-
-      // Start MP3 bed
-      earthBed = playBuffer('earth_long', true, 0);
-      earthChargeLoop();
-    }
-
-    function earthChargeLoop() {
-      if (!earthStartTime) return;
-      const elapsed = Date.now() - earthStartTime;
-      const ta = document.getElementById('earthTouch');
-
-      if (earthQuaking) {
-        earthStartTime = Date.now(); earthQuaking = false; earthLastVib = 0;
-        earthQuakeTime = QUAKE_TIMES[Math.floor(Math.random() * QUAKE_TIMES.length)];
-        earthDrone.gain.gain.setValueAtTime(0.02, audioCtx.currentTime);
-        if (earthBed) earthBed.gain.gain.setValueAtTime(0.01, audioCtx.currentTime);
-        ta.style.boxShadow = 'none'; ta.style.borderColor = 'rgba(139,94,60,0.35)'; ta.style.background = 'transparent';
-        earthAnimFrame = requestAnimationFrame(earthChargeLoop);
-        return;
-      }
-
-      const progress = Math.min(elapsed / earthQuakeTime, 1);
-
-      // Synth drone volume
-      earthDrone.gain.gain.setValueAtTime(progress * 0.3, audioCtx.currentTime);
-      // MP3 bed always softer than synth
-      if (earthBed) earthBed.gain.gain.setValueAtTime(progress * 0.15, audioCtx.currentTime);
-
-      // Progressive glow
-      const glowSize = 20 + progress * 80, glowOp = 0.05 + progress * 0.35;
-      const borderOp = 0.25 + progress * 0.6, bgOp = progress * 0.2;
-      ta.style.boxShadow = `0 0 ${glowSize}px rgba(139,94,60,${glowOp})`;
-      ta.style.borderColor = `rgba(139,94,60,${borderOp})`;
-      ta.style.background = `rgba(139,94,60,${bgOp})`;
-
-      // Progressive haptic
-      const now = Date.now(), vibInterval = 800 - progress * 650;
-      if (now - earthLastVib > vibInterval) {
-        const vibStr = Math.round(30 + progress * 120);
-        if (navigator.vibrate) navigator.vibrate(vibStr);
-        earthLastVib = now; spawnEarthPulse();
-      }
-
-      if (progress >= 1) { triggerEarthquake(); return; }
-      earthAnimFrame = requestAnimationFrame(earthChargeLoop);
-    }
-
-    function triggerEarthquake() {
-      earthQuaking = true; earthFirstQuake = false;
-      earthQuakeTime = QUAKE_TIMES[Math.floor(Math.random() * QUAKE_TIMES.length)];
-      const ta = document.getElementById('earthTouch');
-      if (navigator.vibrate) navigator.vibrate([200, 80, 300, 80, 200]);
-      const page = document.getElementById('earth-page');
-      page.style.animation = 'screenShake 0.6s ease';
-      page.classList.add('quaking');
-      setTimeout(() => { page.style.animation = ''; page.classList.remove('quaking'); }, 700);
-      ta.style.boxShadow = '0 0 120px rgba(139,94,60,0.7)';
-      ta.style.borderColor = 'rgba(139,94,60,1)';
-      ta.style.background = 'rgba(139,94,60,0.35)';
-      earthDrone.gain.gain.setValueAtTime(0.45, audioCtx.currentTime);
-      earthDrone.gain.gain.linearRampToValueAtTime(0.02, audioCtx.currentTime + 1.5);
-      if (earthBed) {
-        earthBed.gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
-        earthBed.gain.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 1.5);
-      }
-      setTimeout(() => { if (earthStartTime) earthAnimFrame = requestAnimationFrame(earthChargeLoop); }, 1500);
-    }
-
-    function earthTE() {
-      earthStartTime = null; earthQuaking = false;
-      if (earthAnimFrame) { cancelAnimationFrame(earthAnimFrame); earthAnimFrame = null; }
-      if (navigator.vibrate) navigator.vibrate(0);
-      const ta = document.getElementById('earthTouch');
-      ta.style.boxShadow = 'none'; ta.style.borderColor = 'rgba(139,94,60,0.35)'; ta.style.background = 'transparent';
-      if (earthDrone) earthDrone.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
-      if (earthBed) {
-        const bedRef = earthBed; earthBed = null;
-        bedRef.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.3);
-        setTimeout(() => { try { bedRef.source.stop(); } catch (e) { } }, 350);
-      }
-      showCue('earthCue');
-    }
-
-    function spawnEarthPulse() {
-      const el = document.createElement('div'); el.className = 'earth-pulse';
-      const ta = document.getElementById('earthTouch');
-      const r = ta.getBoundingClientRect(), pr = earthPulseContainer.getBoundingClientRect();
-      const sz = ta.clientWidth; el.style.width = sz + 'px'; el.style.height = sz + 'px';
-      el.style.left = (r.left - pr.left + r.width / 2 - sz / 2) + 'px';
-      el.style.top = (r.top - pr.top + r.height / 2 - sz / 2) + 'px';
-      earthPulseContainer.appendChild(el); setTimeout(() => el.remove(), 1000);
-    }
-
-    function cleanupEarth() {
-      earthStartTime = null; earthQuaking = false; earthFirstQuake = true;
-      if (earthAnimFrame) { cancelAnimationFrame(earthAnimFrame); earthAnimFrame = null; }
-      const fadeDur = appStatus.startsWith('destroy_') ? 0.5 : 1.5;
-      const fadeTimeout = fadeDur * 1000 + 300;
-      if (earthDrone) {
-        const ref = earthDrone; earthDrone = null;
-        ref.gain.gain.setValueAtTime(ref.gain.gain.value, audioCtx.currentTime);
-        ref.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDur);
-        setTimeout(() => { try { ref.osc1.stop(); ref.osc2.stop(); } catch (e) { } }, fadeTimeout);
-      }
-      if (earthBed) {
-        const ref = earthBed; earthBed = null;
-        ref.gain.gain.setValueAtTime(ref.gain.gain.value, audioCtx.currentTime);
-        ref.gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + fadeDur);
-        setTimeout(() => { try { ref.source.stop(); } catch (e) { } }, fadeTimeout);
-      }
-      if (navigator.vibrate) navigator.vibrate(0);
-      const ta = document.getElementById('earthTouch');
-      ta.style.boxShadow = 'none'; ta.style.borderColor = 'rgba(139,94,60,0.35)'; ta.style.background = 'transparent';
-      ta.removeEventListener('touchstart', earthTS); ta.removeEventListener('touchend', earthTE); ta.removeEventListener('touchcancel', earthTE);
-    }
-
-    document.addEventListener('touchmove', e => { if (currentElement) e.preventDefault(); }, { passive: false });
-  </script>
-</body>
-
-</html>
+      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={(barNum) => { met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} />}
+      {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
+      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
+      {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} videoUrl={videoUrl} videoSync={videoSync} />}
+      {showLib && <LibP onLoad={(s, v, vs) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); }} onClose={() => setShowLib(false)} />}
+      {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
+      {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} onEditSection={id => { setEditIsNew(false); setEditId(id); }} onAddSection={addSec} onDeleteSection={handleDelete} onMoveSection={moveSec} />}
+      {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+        <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
+        <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
+      </div>}
+    </div>
+  );
+}
