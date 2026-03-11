@@ -45,7 +45,60 @@ const _memStore = {};
 function _getLS(k) { try { return localStorage.getItem(k); } catch { return _memStore[k] || null; } }
 function _setLS(k, v) { try { localStorage.setItem(k, v); } catch { _memStore[k] = v; } }
 function ldP() { try { return JSON.parse(_getLS(SK)) || []; } catch { return []; } }
-function svP(p) { _setLS(SK, JSON.stringify(p)); }
+function svP(p) { _setLS(SK, JSON.stringify(p)); try { const sec = JSON.parse(_getLS("tempus_sections")) || []; fbSyncDebounced(sec, p); } catch {} }
+
+// ============ FIREBASE SILENT BACKUP ============
+// TODO: Replace with your Firebase config
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA9LAg1iywIxG1KEbrwNQhrpfqELK3SOeY",
+  authDomain: "tempus-acc0e.firebaseapp.com",
+  projectId: "tempus-acc0e",
+  storageBucket: "tempus-acc0e.firebasestorage.app",
+  messagingSenderId: "290765368525",
+  appId: "1:290765368525:web:cc481f657d9e7ae7e18d84"
+};
+const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
+
+let _fb = null, _fbDb = null;
+async function fbInit() {
+  if (_fb) return _fbDb;
+  if (!FB_ENABLED) return null;
+  try {
+    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js");
+    const { getFirestore } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    _fb = initializeApp(FIREBASE_CONFIG);
+    _fbDb = getFirestore(_fb);
+    return _fbDb;
+  } catch { return null; }
+}
+
+function getDeviceId() {
+  let id = _getLS("tempus_device_id");
+  if (!id) { id = "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8); _setLS("tempus_device_id", id); }
+  return id;
+}
+
+let _fbSyncTimer = null;
+function fbSyncDebounced(sections, profiles) {
+  if (!FB_ENABLED) return;
+  if (_fbSyncTimer) clearTimeout(_fbSyncTimer);
+  _fbSyncTimer = setTimeout(async () => {
+    try {
+      const db = await fbInit();
+      if (!db) return;
+      const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+      const deviceId = getDeviceId();
+      await setDoc(doc(db, "tempus_backups", deviceId), {
+        deviceId,
+        sections,
+        profiles: profiles || ldP(),
+        settings: (() => { try { return JSON.parse(_getLS("tempus_settings")) || {}; } catch { return {}; } })(),
+        lastUpdated: new Date().toISOString(),
+        userAgent: navigator.userAgent || ""
+      }, { merge: true });
+    } catch {}
+  }, 5000);
+}
 
 // ============ SVG NOTE ============
 function NoteSVG({ type, dotted, size = 24 }) {
@@ -520,7 +573,11 @@ function SetP({ settings: s, onChange, onClose }) {
   const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
     <SR l="Mode">{["basic", "default", "advanced"].map(v => <button key={v} onClick={() => u("appMode", v)} style={{ ...oB(s.appMode === v), textTransform: "capitalize" }}>{v}</button>)}</SR>
     <div style={{ fontSize: 11, color: C.textMuted, marginTop: -8, marginBottom: 14, marginLeft: 82, fontFamily: "'Outfit',sans-serif", lineHeight: 1.5 }}>{s.appMode === "basic" ? "Tempo, time signature, bars, and loop only" : s.appMode === "advanced" ? "Per-beat tempo mapping, fermata, grouping builder" : "Grouping, curves, record, practice, library"}</div>
-    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR></div></div>);
+    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR>
+    <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>Device ID: {getDeviceId()}</div>
+      <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>Your data is stored locally and backed up anonymously.</div>
+    </div></div></div>);
 }
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved }) {
@@ -620,14 +677,15 @@ function PracSetup({ sections, onStart, onClose }) {
 // ============ MAIN ============
 export default function Tempus() {
   const [sections, setSections] = useState(() => { try { const saved = _getLS("tempus_sections"); if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length > 0) return parsed; } } catch {} return [mkM()]; });
-  useEffect(() => { _setLS("tempus_sections", JSON.stringify(sections)); }, [sections]);
+  useEffect(() => { _setLS("tempus_sections", JSON.stringify(sections)); fbSyncDebounced(sections); }, [sections]);
   const [editId, setEditId] = useState(null);
   const [editIsNew, setEditIsNew] = useState(false);
   const [showSet, setShowSet] = useState(false);
   const [showSave, setShowSave] = useState(false);
   const [showLib, setShowLib] = useState(false);
   const [showPrac, setShowPrac] = useState(false);
-  const [settings, setSettings] = useState({ accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default" });
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default" }; });
+  useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
   const [isP, setIsP] = useState(false);
