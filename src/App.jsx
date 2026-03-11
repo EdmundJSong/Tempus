@@ -589,6 +589,201 @@ const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", backgro
 const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
 const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" };
 
+// ============ VIDEO VIEW ============
+function fmtTime(s) { if (s == null) return "--:--.-"; const m = Math.floor(s / 60), sec = s % 60; return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`; }
+
+function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints }) {
+  const containerRef = useRef(null);
+  const playerRef = useRef(null);
+  const [ready, setReady] = useState(false);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [startPt, setStartPt] = useState(null);
+  const [endPt, setEndPt] = useState(null);
+  const pollRef = useRef(null);
+
+  // Extract YouTube video ID
+  const ytId = useMemo(() => {
+    if (!videoUrl) return null;
+    const m = videoUrl.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+    return m ? m[1] : null;
+  }, [videoUrl]);
+
+  const isYT = !!ytId;
+  const embedUrl = useMemo(() => {
+    if (isYT) return null; // YouTube uses JS API
+    return getEmbedUrl(videoUrl);
+  }, [videoUrl, isYT]);
+
+  // Load YouTube IFrame API
+  useEffect(() => {
+    if (!isYT) return;
+    const loadApi = () => {
+      if (window.YT && window.YT.Player) { initPlayer(); return; }
+      if (document.querySelector('script[src*="youtube.com/iframe_api"]')) {
+        window.onYouTubeIframeAPIReady = initPlayer; return;
+      }
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(tag);
+      window.onYouTubeIframeAPIReady = initPlayer;
+    };
+    const initPlayer = () => {
+      if (!containerRef.current || playerRef.current) return;
+      playerRef.current = new window.YT.Player(containerRef.current, {
+        videoId: ytId,
+        playerVars: { rel: 0, modestbranding: 1, playsinline: 1 },
+        events: {
+          onReady: () => {
+            setReady(true);
+            setDuration(playerRef.current.getDuration() || 0);
+          },
+          onStateChange: e => {
+            setPlaying(e.data === window.YT.PlayerState.PLAYING);
+          }
+        }
+      });
+    };
+    loadApi();
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [isYT, ytId]);
+
+  // Poll current time while playing
+  useEffect(() => {
+    if (playing && playerRef.current) {
+      pollRef.current = setInterval(() => {
+        const t = playerRef.current.getCurrentTime();
+        if (typeof t === "number") setCurrentTime(t);
+      }, 100);
+    } else { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } }
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, [playing]);
+
+  const seekTo = useCallback(t => {
+    if (playerRef.current && playerRef.current.seekTo) {
+      playerRef.current.seekTo(t, true);
+      setCurrentTime(t);
+    }
+  }, []);
+
+  const togglePlay = () => {
+    if (!playerRef.current) return;
+    if (playing) playerRef.current.pauseVideo();
+    else playerRef.current.playVideo();
+  };
+
+  const setStart = () => { setStartPt(currentTime); };
+  const setEnd = () => { setEndPt(currentTime); };
+  const nudge = (which, delta) => {
+    if (which === "start") {
+      const v = Math.max(0, (startPt || 0) + delta);
+      setStartPt(v); seekTo(v);
+    } else {
+      const v = Math.max(0, (endPt || 0) + delta);
+      setEndPt(v); seekTo(v);
+    }
+  };
+
+  const handleSave = () => {
+    if (onSyncPoints) onSyncPoints({ start: startPt, end: endPt });
+  };
+
+  const NUDGE = 0.05; // 50ms
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", flexDirection: "column", fontFamily: "'DM Mono',monospace" }}>
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 16px", flexShrink: 0 }}>
+        <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 14, color: C.text, fontWeight: 600 }}>Video Reference</div>
+        <button onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+      </div>
+
+      {/* Video Player */}
+      <div style={{ flexShrink: 0, padding: "0 16px", marginBottom: 12 }}>
+        <div style={{ position: "relative", paddingBottom: "56.25%", borderRadius: 10, overflow: "hidden", background: "#000" }}>
+          {isYT ? (
+            <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
+          ) : embedUrl ? (
+            <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+          ) : (
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 12 }}>Open video in browser</a>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Time display + transport */}
+      {isYT && (
+        <div style={{ padding: "0 16px", flexShrink: 0, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 8 }}>
+            <button onClick={togglePlay} style={{ width: 44, height: 44, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{playing ? I.pause(18) : I.play(18)}</button>
+            <div style={{ fontSize: 18, color: C.text, fontFamily: "'DM Mono',monospace", minWidth: 80, textAlign: "center" }}>{fmtTime(currentTime)}</div>
+            <div style={{ fontSize: 11, color: C.textMuted }}>/ {fmtTime(duration)}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Sync Points */}
+      {isYT && (
+        <div style={{ padding: "0 16px", flex: 1, overflowY: "auto" }}>
+          {/* Start Point */}
+          <div style={{ background: C.surface, borderRadius: 10, padding: 12, marginBottom: 8, border: `1px solid ${startPt != null ? C.practice + "55" : C.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: C.practice, fontWeight: 600, fontFamily: "'Outfit',sans-serif" }}>Start Point</span>
+              <button onClick={setStart} style={{ padding: "4px 12px", borderRadius: 6, border: `1px solid ${C.practice}55`, background: C.practice + "15", color: C.practice, fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>Set at {fmtTime(currentTime)}</button>
+            </div>
+            {startPt != null && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={() => nudge("start", -NUDGE)} style={{ ...tS, width: 36, height: 36, fontSize: 12 }}>←</button>
+                <div style={{ fontSize: 16, color: C.text, fontFamily: "'DM Mono',monospace", flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => seekTo(startPt)}>{fmtTime(startPt)}</div>
+                <button onClick={() => nudge("start", NUDGE)} style={{ ...tS, width: 36, height: 36, fontSize: 12 }}>→</button>
+                <span style={{ fontSize: 9, color: C.textMuted }}>±50ms</span>
+              </div>
+            )}
+          </div>
+
+          {/* End Point */}
+          <div style={{ background: C.surface, borderRadius: 10, padding: 12, marginBottom: 12, border: `1px solid ${endPt != null ? C.record + "55" : C.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, color: C.record, fontWeight: 600, fontFamily: "'Outfit',sans-serif" }}>End Point</span>
+              <button onClick={setEnd} style={{ padding: "4px 12px", borderRadius: 6, border: `1px solid ${C.record}55`, background: C.record + "15", color: C.record, fontSize: 11, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>Set at {fmtTime(currentTime)}</button>
+            </div>
+            {endPt != null && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button onClick={() => nudge("end", -NUDGE)} style={{ ...tS, width: 36, height: 36, fontSize: 12 }}>←</button>
+                <div style={{ fontSize: 16, color: C.text, fontFamily: "'DM Mono',monospace", flex: 1, textAlign: "center", cursor: "pointer" }} onClick={() => seekTo(endPt)}>{fmtTime(endPt)}</div>
+                <button onClick={() => nudge("end", NUDGE)} style={{ ...tS, width: 36, height: 36, fontSize: 12 }}>→</button>
+                <span style={{ fontSize: 9, color: C.textMuted }}>±50ms</span>
+              </div>
+            )}
+          </div>
+
+          {/* Duration summary */}
+          {startPt != null && endPt != null && endPt > startPt && (
+            <div style={{ textAlign: "center", fontSize: 12, color: C.textMuted, marginBottom: 12 }}>
+              Duration: {fmtTime(endPt - startPt)} ({(endPt - startPt).toFixed(1)}s)
+            </div>
+          )}
+
+          {/* Save sync points */}
+          {(startPt != null || endPt != null) && (
+            <button onClick={handleSave} style={{ width: "100%", padding: 12, borderRadius: 8, border: "none", background: C.downbeat, color: "#000", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Save Sync Points</button>
+          )}
+        </div>
+      )}
+
+      {/* Non-YouTube fallback message */}
+      {!isYT && (
+        <div style={{ padding: "0 16px", textAlign: "center" }}>
+          <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>Sync point scrubbing is available for YouTube videos only.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ============ SETTINGS / SAVE / LIBRARY ============
 function SetP({ settings: s, onChange, onClose }) {
   const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
@@ -601,18 +796,19 @@ function SetP({ settings: s, onChange, onClose }) {
     </div></div></div>);
 }
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
-function SaveM({ sections, onClose, onSaved }) {
-  const [t, sT] = useState(""), [c, sC] = useState(""), [vUrl, setVUrl] = useState(""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); const profile = { id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (vUrl.trim()) profile.videoUrl = vUrl.trim(); p.push(profile); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
+function SaveM({ sections, onClose, onSaved, videoUrl: savedVideoUrl, videoSync: savedVideoSync }) {
+  const [t, sT] = useState(""), [c, sC] = useState(""), [perf, setPerf] = useState(""), [vUrl, setVUrl] = useState(savedVideoUrl || ""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); const profile = { id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (perf.trim()) profile.performer = perf.trim(); if (vUrl.trim()) profile.videoUrl = vUrl.trim(); if (savedVideoSync) profile.videoSync = savedVideoSync; p.push(profile); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button></div>
     <input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
     <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
+    <input value={perf} onChange={e => setPerf(e.target.value)} placeholder="Performer / Ensemble (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 13, color: C.textMuted }} />
     <input value={vUrl} onChange={e => setVUrl(e.target.value)} placeholder="Video URL (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 13, color: C.textMuted }} />
     <button onClick={go} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button>
   </div></div>);
 }
 function LibP({ onLoad, onClose }) {
   const [p, sP] = useState(ldP()), [s, sS] = useState("");
-  const f = p.filter(x => x.title.toLowerCase().includes(s.toLowerCase()) || x.composer.toLowerCase().includes(s.toLowerCase()));
+  const f = p.filter(x => x.title.toLowerCase().includes(s.toLowerCase()) || x.composer.toLowerCase().includes(s.toLowerCase()) || (x.performer || "").toLowerCase().includes(s.toLowerCase()));
   const [confirmDelId, setConfirmDelId] = useState(null);
   const confirmDelTimer = useRef(null);
   const del = id => {
@@ -655,7 +851,7 @@ function LibP({ onLoad, onClose }) {
       <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
       {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
     </div>
-    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}><div style={{ opacity: 0.2 }}>{I.folder(48)}</div><div>{p.length === 0 ? "No saved pieces yet" : "No results"}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}><div style={{ opacity: 0.2 }}>{I.folder(48)}</div><div>{p.length === 0 ? "No saved pieces yet" : "No results"}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null, x.videoSync || null); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}{x.performer ? ` · ${x.performer}` : ""}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
   </div></div>);
 }
 
@@ -712,6 +908,7 @@ export default function Tempus() {
   const [showSave, setShowSave] = useState(false);
   const [showLib, setShowLib] = useState(false);
   const [videoUrl, setVideoUrl] = useState(null);
+  const [videoSync, setVideoSync] = useState(null); // { start, end }
   const [showVideo, setShowVideo] = useState(false);
   const [showPrac, setShowPrac] = useState(false);
   const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default" }; });
@@ -872,7 +1069,7 @@ export default function Tempus() {
     if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
     setConfirmClear(false);
     const backup = [...sections];
-    setSections([mkM()]); setEditId(null); setVideoUrl(null);
+    setSections([mkM()]); setEditId(null); setVideoUrl(null); setVideoSync(null);
     setUndoToast({ section: backup, index: -1 });
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
@@ -986,29 +1183,10 @@ export default function Tempus() {
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={(barNum) => { met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
-      {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} />}
-      {showLib && <LibP onLoad={(s, v) => { setSections(s); setVideoUrl(v || null); }} onClose={() => setShowLib(false)} />}
+      {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} videoUrl={videoUrl} videoSync={videoSync} />}
+      {showLib && <LibP onLoad={(s, v, vs) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); }} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
-      {showVideo && videoUrl && (() => { const embedUrl = getEmbedUrl(videoUrl); return (
-        <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }} onClick={() => setShowVideo(false)}>
-          <div className="modal-content" style={{ width: "100%", maxWidth: 640, background: C.bg, borderRadius: 16, padding: 16, margin: 16 }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-              <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 14, color: C.text, fontWeight: 600 }}>Video Reference</div>
-              <button onClick={() => setShowVideo(false)} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
-            </div>
-            {embedUrl ? (
-              <div style={{ position: "relative", paddingBottom: "56.25%", borderRadius: 10, overflow: "hidden", background: "#000" }}>
-                <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-              </div>
-            ) : (
-              <div style={{ padding: 20, textAlign: "center" }}>
-                <div style={{ fontSize: 13, color: C.textMuted, marginBottom: 12 }}>Could not embed this URL</div>
-                <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 13, fontFamily: "'DM Mono',monospace", wordBreak: "break-all" }}>{videoUrl}</a>
-              </div>
-            )}
-          </div>
-        </div>
-      ); })()}
+      {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} />}
       {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
         <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
         <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
