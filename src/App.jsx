@@ -49,15 +49,13 @@ function svP(p) { _setLS(SK, JSON.stringify(p)); try { const sec = JSON.parse(_g
 
 // ============ FIREBASE SILENT BACKUP ============
 // TODO: Replace with your Firebase config
-let _env = {};
-try { _env = import.meta.env || {}; } catch {}
 const FIREBASE_CONFIG = {
-  apiKey: _env.VITE_FIREBASE_API_KEY || "YOUR_API_KEY",
-  authDomain: _env.VITE_FIREBASE_AUTH_DOMAIN || "tempus-acc0e.firebaseapp.com",
-  projectId: _env.VITE_FIREBASE_PROJECT_ID || "tempus-acc0e",
-  storageBucket: _env.VITE_FIREBASE_STORAGE_BUCKET || "tempus-acc0e.firebasestorage.app",
-  messagingSenderId: _env.VITE_FIREBASE_MESSAGING_SENDER_ID || "290765368525",
-  appId: _env.VITE_FIREBASE_APP_ID || "1:290765368525:web:cc481f657d9e7ae7e18d84"
+  apiKey: "AIzaSyA9LAg1iywIxG1KEbrwNQhrpfqELK3SOeY",
+  authDomain: "tempus-acc0e.firebaseapp.com",
+  projectId: "tempus-acc0e",
+  storageBucket: "tempus-acc0e.firebasestorage.app",
+  messagingSenderId: "290765368525",
+  appId: "1:290765368525:web:cc481f657d9e7ae7e18d84"
 };
 const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY" && FIREBASE_CONFIG.apiKey !== "disabled";
 
@@ -615,8 +613,16 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   // Refs for YouTube callback (avoids stale closures)
   const syncActiveRef = useRef(false);
   const syncBarRef = useRef(null);
+  const tlRef = useRef(tl);
+  const metRef = useRef(met);
+  const settingsRef = useRef(settings);
+  const mutedRef = useRef(muted);
   useEffect(() => { syncActiveRef.current = syncActive; }, [syncActive]);
   useEffect(() => { syncBarRef.current = syncBar; }, [syncBar]);
+  useEffect(() => { tlRef.current = tl; }, [tl]);
+  useEffect(() => { metRef.current = met; }, [met]);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
 
   const ytId = useMemo(() => {
     if (!videoUrl) return null;
@@ -655,14 +661,15 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
             const isPause = e.data === window.YT.PlayerState.PAUSED;
             setVidPlaying(isPlay);
             // Two-way sync using refs for current values
-            if (isPlay && !syncActiveRef.current && tl.length > 0) {
-              met.setCb(syncCbRef.current); met.tap();
+            const m = metRef.current, t = tlRef.current, st = settingsRef.current;
+            if (isPlay && !syncActiveRef.current && t && t.length > 0) {
+              m.setCb(syncCbRef.current); m.tap();
               const bar = syncBarRef.current;
-              const fromBar = bar ? tl.findIndex(b => b.ab === bar.ab) : 0;
-              met.start(tl, Math.max(0, fromBar), 0, { accented: settings.accented, pitched: settings.pitched, muted });
+              const fromBar = bar ? t.findIndex(b => b.ab === bar.ab) : 0;
+              m.start(t, Math.max(0, fromBar), 0, { accented: st.accented, pitched: st.pitched, muted: mutedRef.current });
               setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
             } else if (isPause && syncActiveRef.current) {
-              met.stop(); setSyncActive(false); syncActiveRef.current = false;
+              m.stop(); setSyncActive(false); syncActiveRef.current = false;
             }
           }
         }
