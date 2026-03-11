@@ -1140,6 +1140,8 @@ export default function Tempus() {
   const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
+  const [confirmClear, setConfirmClear] = useState(false);
+  const confirmTimer = useRef(null);
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
@@ -1206,8 +1208,6 @@ export default function Tempus() {
   const moveSec = (i, d) => { if (moveSecTimer.current) return; moveSecTimer.current = setTimeout(() => { moveSecTimer.current = null; }, 150); setSections(p => { const a = [...p]; if (i + d >= 0 && i + d < a.length) [a[i], a[i + d]] = [a[i + d], a[i]]; return a; }); };
   const editSec = sections.find(s => s.id === editId);
 
-  const [confirmClear, setConfirmClear] = useState(false);
-  const confirmTimer = useRef(null);
   const handleClear = () => {
     if (sections.length <= 1 && sections[0]?.tempo === 120 && sections[0]?.tsNum === 4) return;
     if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
