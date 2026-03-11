@@ -1132,10 +1132,11 @@ export default function Tempus() {
     });
   }, [met, tl, pracSections, pracStep]);
 
-  const go = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); }, [tl, settings, met, muted, pracSections, pracStep]);
+  const prePlayTempos = useRef(null);
+  const go = useCallback((fi = 0) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
   const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
   useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
-  const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); }, [met]);
+  const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); if (prePlayTempos.current) { setSections(prev => prev.map((s, i) => ({ ...s, tempo: prePlayTempos.current[i] ?? s.tempo }))); prePlayTempos.current = null; } }, [met]);
   const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
@@ -1165,12 +1166,12 @@ export default function Tempus() {
   const handleSplit = useCallback(barNum => {
     if (mode !== "record") return;
     const now = Date.now();
-    if (now - lastSplitTime.current < 500 || barNum === lastSplitBar.current) return;
+    if (now - lastSplitTime.current < 800 || barNum === lastSplitBar.current) return;
     lastSplitTime.current = now;
     lastSplitBar.current = barNum;
     splitPoints.current.push(barNum);
-    // Find which section this bar belongs to, split it
     setSections(prev => {
+      if (prev.length > 50) return prev; // safety cap
       const tempTl = buildTL(prev);
       const barInfo = tempTl.find(b => b.ab === barNum);
       if (!barInfo) return prev;
@@ -1179,7 +1180,6 @@ export default function Tempus() {
       if (!sec || sec.type === "timed") return prev;
       const barInSec = barInfo.bin;
       if (barInSec <= 1 || barInSec >= sec.bars) return prev;
-      // Split: first part = bars 1 to barInSec-1, second part = barInSec to end
       const elapsed1 = barInSec - 1, elapsed2 = sec.bars - (barInSec - 1);
       const s1 = { ...sec, id: Date.now() + Math.random(), bars: elapsed1, capturedDuration: elapsed1 * gCD(sec.tempo, sec.beatUnit, sec.dotted, sec.tsDen) * sec.tsNum };
       const s2 = { ...sec, id: Date.now() + Math.random() + 1, bars: elapsed2, capturedDuration: elapsed2 * gCD(sec.tempo, sec.beatUnit, sec.dotted, sec.tsDen) * sec.tsNum };
@@ -1202,7 +1202,8 @@ export default function Tempus() {
   }, [sections, go]);
 
   const addSec = () => { const ns = mkM(); if (sections.length > 0) { const l = sections[sections.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } } setSections(p => [...p, ns]); setEditIsNew(true); setEditId(ns.id); };
-  const moveSec = (i, d) => { setSections(p => { const a = [...p]; if (i + d >= 0 && i + d < a.length) [a[i], a[i + d]] = [a[i + d], a[i]]; return a; }); };
+  const moveSecTimer = useRef(null);
+  const moveSec = (i, d) => { if (moveSecTimer.current) return; moveSecTimer.current = setTimeout(() => { moveSecTimer.current = null; }, 150); setSections(p => { const a = [...p]; if (i + d >= 0 && i + d < a.length) [a[i], a[i + d]] = [a[i + d], a[i]]; return a; }); };
   const editSec = sections.find(s => s.id === editId);
 
   const [confirmClear, setConfirmClear] = useState(false);
