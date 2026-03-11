@@ -546,10 +546,9 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
             {upN && <div style={{ color: C.downbeat, fontSize: 13, fontWeight: 600, animation: "pulse 2s infinite" }}>Up Next: {upN}</div>}
           </>}
         </div>
-        {/* Beat dots - reserved height */}
         <div style={{ height: 24, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
-          {showD && !isT && !isCI && !isEnded && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />; })}</div>}
-          {showD && isT && !isEnded && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, transition: "all 0.06s", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent" }} />; })}</div>}
+          {showD && !isT && !isCI && !isEnded && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)", border: on ? `2px solid ${c}` : "2px solid transparent", transform: on ? "scale(1.1)" : "scale(1)", boxShadow: on ? `0 0 10px ${c}66` : "none" }} />; })}</div>}
+          {showD && isT && !isEnded && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent", transform: on ? "scale(1.1)" : "scale(1)", boxShadow: on ? `0 0 10px ${C.downbeat}66` : "none" }} />; })}</div>}
         </div>
         {/* Record hint - reserved height */}
         <div style={{ height: 20, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
@@ -985,7 +984,7 @@ function LibP({ onLoad, onClose }) {
       <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
       {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
     </div>
-    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}><div style={{ opacity: 0.2 }}>{I.folder(48)}</div><div>{p.length === 0 ? "No saved pieces yet" : "No results"}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null, x.videoSync || null); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}{x.performer ? ` · ${x.performer}` : ""}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}><div style={{ opacity: 0.15, transform: "scale(1.2)" }}>{I.folder(48)}</div><div style={{ fontSize: 16, color: C.textMuted }}>{p.length === 0 ? "Your Library is empty" : "No pieces found"}</div><div style={{ fontSize: 13, color: C.border, maxWidth: "80%" }}>{p.length === 0 ? "Save your sections into profiles to quickly load them later." : "Try adjusting your search query."}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null, x.videoSync || null); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}{x.performer ? ` · ${x.performer}` : ""}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
   </div></div>);
 }
 
@@ -1143,13 +1142,21 @@ export default function Tempus() {
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if (e.code === "Space") { e.preventDefault(); if (isP) { met.stop(); setIsP(false); } else if (ps && (ps.ended || ps.countIn)) { met.tap(); go(0); } else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } } else { met.tap(); go(0); } }
-      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); }
+      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear;
+      if (e.code === "Space") {
+        if (anyModalOpen) return;
+        e.preventDefault();
+        if (isP) { met.stop(); setIsP(false); }
+        else if (ps && (ps.ended || ps.countIn)) { met.tap(); go(0); }
+        else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }
+        else { met.tap(); go(0); }
+      }
+      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setConfirmClear(false); }
       else if (isP && e.code === "ArrowLeft") jumpSec(-1);
       else if (isP && e.code === "ArrowRight") jumpSec(1);
     };
     window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
-  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted]);
+  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, confirmClear]);
 
   const lastSplitTime = useRef(0);
   const lastSplitBar = useRef(0);
@@ -1278,6 +1285,8 @@ export default function Tempus() {
         button:active:not(:disabled) { opacity: 0.7; transform: scale(0.98); }
         .close-btn { background: none; border: none; color: ${C.textMuted}; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
         .close-btn:hover { background: ${C.surfaceHover}; color: ${C.text}; }
+        .transport-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.05) !important; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important; }
+        .transport-btn:active:not(:disabled) { transform: scale(0.95) !important; }
 
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
@@ -1311,10 +1320,10 @@ export default function Tempus() {
 
       {/* Bottom buttons: Play / Record / Practice */}
       <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
-        <div className="glass-pill" style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
-          {settings.appMode !== "basic" && <button onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}` }}>{I.rec(18)}</button>}
-          <button className="btn-ripple" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 56, height: 56, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}` }}>{I.play(24)}</button>
-          {settings.appMode !== "basic" && <button onClick={() => setShowPrac(true)} data-tip="Practice" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}` }}>{I.target(18)}</button>}
+        <div className="glass-pill" style={{ display: "flex", gap: 20, alignItems: "center", pointerEvents: "auto", padding: "10px 24px" }}>
+          {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
+          <button className="btn-ripple transport-btn" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 64, height: 64, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.play(28)}</button>
+          {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip="Practice Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
         </div>
       </div>
 
