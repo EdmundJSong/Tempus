@@ -639,7 +639,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         if (evt.type === "beat") {
           const bar = { ab: evt.ab, bei: evt.beatIdx, bt: evt.bt, tsN: evt.tsN, tsD: evt.tsD, tempo: evt.tempo, si: evt.si };
           setSyncBar(bar); syncBarRef.current = bar;
-        } else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); syncActiveRef.current = false; met.stop(); }
+        } else if (evt.type === "ended") { setSyncEnded(true); setSyncActive(false); syncActiveRef.current = false; met.stop(); try { if (playerRef.current?.pauseVideo) playerRef.current.pauseVideo(); } catch {} }
       } catch {}
     };
   }, [met]);
@@ -673,6 +673,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
                 setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
               } else if (isPause && syncActiveRef.current) {
                 m.stop(); setSyncActive(false); syncActiveRef.current = false;
+                setSyncBar(null); syncBarRef.current = null;
               }
             } catch {}
           }
@@ -693,11 +694,33 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
 
   const seekTo = useCallback(t => { if (playerRef.current?.seekTo) { playerRef.current.seekTo(t, true); setCurrentTime(t); } }, []);
 
-  // Sync play from start (restart)
+  // Calculate elapsed time to a given bar index from tl
+  const getElapsedToBar = useCallback((tlArr, barIdx) => {
+    let t = 0;
+    for (let i = 0; i < barIdx && i < tlArr.length; i++) {
+      const b = tlArr[i];
+      if (b.isT) { t += b.tDur || 0; } else {
+        const pbc = b.perBeatCd;
+        for (let j = 0; j < b.cpb; j++) t += pbc ? (pbc[j]?.cd ?? pbc[0]?.cd ?? 0.5) : (b.cd ?? 0.5);
+      }
+    }
+    return t;
+  }, []);
+
+  // Seek video to match metronome position
+  const seekVideoToBar = useCallback((barIdx) => {
+    if (!playerRef.current?.seekTo) return;
+    const elapsed = getElapsedToBar(tl, barIdx);
+    const videoTime = (startPt || 0) + elapsed;
+    playerRef.current.seekTo(videoTime, true);
+    setCurrentTime(videoTime);
+  }, [tl, startPt, getElapsedToBar]);
+
+  // Sync play from start (restart) — Fix 3: reset video too
   const syncPlayFromStart = () => {
     if (!isYT || !tl.length) return;
     met.setCb(syncCbRef.current);
-    if (startPt != null) seekTo(startPt);
+    seekTo(startPt || 0);
     setSyncBar(null); syncBarRef.current = null;
     setTimeout(() => {
       if (playerRef.current) playerRef.current.playVideo();
@@ -706,33 +729,39 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
     }, 200);
   };
 
-  // Toggle play/pause — resumes from current bar
+  // Toggle play/pause — Fix 2: clear syncBar on pause so sections reappear
   const syncToggle = () => {
     if (syncActive) {
       if (playerRef.current) playerRef.current.pauseVideo();
       met.stop(); setSyncActive(false); syncActiveRef.current = false;
+      setSyncBar(null); syncBarRef.current = null;
     } else {
       if (!tl.length) return;
       met.setCb(syncCbRef.current);
+      // Fix 1: seek video to match bar position
       const fromBar = syncBar ? tl.findIndex(b => b.ab === syncBar.ab) : 0;
-      if (playerRef.current) playerRef.current.playVideo();
-      met.tap(); met.start(tl, Math.max(0, fromBar), 0, { accented: settings.accented, pitched: settings.pitched, muted });
-      setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+      const idx = Math.max(0, fromBar >= 0 ? fromBar : 0);
+      seekVideoToBar(idx);
+      setTimeout(() => {
+        if (playerRef.current) playerRef.current.playVideo();
+        met.tap(); met.start(tl, idx, 0, { accented: settings.accented, pitched: settings.pitched, muted });
+        setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
+      }, 150);
     }
   };
 
-  // Section navigation
+  // Section navigation — Fix 1: seek video to match section start
   const jumpSec = d => {
-    if (!syncBar) return;
-    const ns = Math.max(0, Math.min(sections.length - 1, syncBar.si + d));
+    const curSi = syncBar ? syncBar.si : 0;
+    const ns = Math.max(0, Math.min(sections.length - 1, curSi + d));
     const i = tl.findIndex(b => b.si === ns);
     if (i >= 0) {
       const b = tl[i];
       const bar = { ab: b.ab, bei: 0, bt: 0, tsN: b.tsN, tsD: b.tsD, tempo: b.tempo, si: b.si };
       setSyncBar(bar); syncBarRef.current = bar;
       setSyncEnded(false);
-      // Stop if playing
       if (syncActive) { met.stop(); if (playerRef.current) playerRef.current.pauseVideo(); setSyncActive(false); syncActiveRef.current = false; }
+      seekVideoToBar(i);
     }
   };
 
