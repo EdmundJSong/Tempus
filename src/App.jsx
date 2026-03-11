@@ -784,6 +784,32 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   useEffect(() => () => { met.stop(); met.setCb(null); }, [met]);
   const curSec = syncBar != null ? sections[syncBar.si] : null;
 
+  // Edit mode
+  const [editMode, setEditMode] = useState(false);
+  const [goBar, setGoBar] = useState("");
+
+  // TAP tempo for video sync
+  const { tap: vidTap, tapBpm: vidTapBpm, tapFlash: vidTapFlash } = useTapTempo(useCallback(bpm => {
+    if (!syncBar || !onUpdateSections) return;
+    const si = syncBar.si;
+    onUpdateSections(prev => prev.map((s, i) => i === si && s.type === "metered" ? { ...s, tempo: bpm } : s));
+  }, [syncBar, onUpdateSections]));
+
+  // Go to bar
+  const handleGoToBar = () => {
+    const v = parseInt(goBar);
+    if (isNaN(v) || v < 1 || !tl.length) return;
+    const i = tl.findIndex(b => b.ab === v);
+    if (i < 0) return;
+    const b = tl[i];
+    const bar = { ab: b.ab, bei: 0, bt: 0, tsN: b.tsN, tsD: b.tsD, tempo: b.tempo, si: b.si };
+    setSyncBar(bar); syncBarRef.current = bar;
+    setSyncEnded(false);
+    if (syncActive) { met.stop(); if (playerRef.current) playerRef.current.pauseVideo(); setSyncActive(false); syncActiveRef.current = false; }
+    seekVideoToBar(i);
+    setGoBar("");
+  };
+
   return (
     <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, display: "flex", justifyContent: "center", fontFamily: "'DM Mono',monospace" }}>
       <div style={{ width: "100%", maxWidth: 540, display: "flex", flexDirection: "column", height: "100%" }}>
@@ -835,7 +861,10 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
 
       {/* Middle: Sections (stopped) or Metronome (playing/paused-with-bar) */}
       {(syncActive || (syncBar && !syncEnded)) && syncBar ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px", minHeight: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px", minHeight: 0, position: "relative" }}>
+          {/* Edit toggle */}
+          <button onClick={() => setEditMode(e => !e)} style={{ position: "absolute", top: 4, right: 16, background: "none", border: `1px solid ${editMode ? C.accent + "55" : C.border}`, borderRadius: 6, color: editMode ? C.accent : C.textMuted, cursor: "pointer", padding: "3px 8px", fontSize: 10, fontFamily: "'DM Mono',monospace" }}>{editMode ? "🔓" : "🔒"}</button>
+
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1 }}>
               <span style={{ fontSize: 16, color: C.textMuted, fontWeight: 700 }}>{syncBar.tsN}</span>
@@ -855,15 +884,33 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
             })}
           </div>}
           <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>Sec {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}</div>
-          {!syncActive && curSec && curSec.type === "metered" && (
-            <div style={{ background: C.surface, borderRadius: 10, padding: 10, marginTop: 12, border: `1px solid ${C.accent}44`, width: "100%", maxWidth: 280 }}>
-              <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>Section {syncBar.si + 1} Tempo</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-5</button>
-                <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-1</button>
-                <div style={{ fontSize: 22, color: C.text, fontWeight: 700, minWidth: 50, textAlign: "center" }}>{curSec.tempo}</div>
-                <button onClick={() => adjustTempo(1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+1</button>
-                <button onClick={() => adjustTempo(5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+5</button>
+
+          {/* Edit mode controls */}
+          {editMode && (
+            <div style={{ width: "100%", maxWidth: 300, marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+              {/* Tempo adjust */}
+              {curSec && curSec.type === "metered" && (
+                <div style={{ background: C.surface, borderRadius: 10, padding: 10, border: `1px solid ${C.accent}44` }}>
+                  <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>Section {syncBar.si + 1} Tempo</div>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                    <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-5</button>
+                    <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-1</button>
+                    <div style={{ fontSize: 22, color: C.text, fontWeight: 700, minWidth: 50, textAlign: "center" }}>{curSec.tempo}</div>
+                    <button onClick={() => adjustTempo(1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+1</button>
+                    <button onClick={() => adjustTempo(5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>+5</button>
+                  </div>
+                </div>
+              )}
+              {/* TAP + Go to Bar row */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                  {vidTapBpm && <span style={{ fontSize: 10, color: C.downbeat, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{vidTapBpm}</span>}
+                  <button onClick={vidTap} style={{ background: vidTapFlash ? C.downbeat : C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: vidTapFlash ? "#000" : C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12, transition: "background 0.1s, color 0.1s" }}>TAP</button>
+                </div>
+                <div style={{ flex: 1, display: "flex", gap: 4, alignItems: "center" }}>
+                  <input value={goBar} onChange={e => setGoBar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleGoToBar(); }} placeholder="Bar #" inputMode="numeric" style={{ ...nI, flex: 1, textAlign: "center", padding: "0 8px", fontSize: 13, height: 38 }} />
+                  <button onClick={handleGoToBar} style={{ ...tS, width: 38, height: 38, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Go</button>
+                </div>
               </div>
             </div>
           )}
@@ -903,12 +950,10 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         </div>
       )}
 
-      {/* Transport with section navigation */}
-      <div style={{ display: "flex", gap: 8, justifyContent: "center", alignItems: "center", padding: "8px 0 20px", flexShrink: 0 }}>
-        <button onClick={() => jumpSec(-1)} disabled={!syncBar || syncBar.si <= 0} style={{ ...tS, width: 36, height: 36, color: (!syncBar || syncBar.si <= 0) ? C.border : C.text }}>{I.chevL(16)}</button>
-        <button onClick={syncPlayFromStart} style={{ ...tS, width: 36, height: 36 }}>{I.restart(16)}</button>
+      {/* Transport */}
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "center", padding: "8px 0 20px", flexShrink: 0 }}>
+        <button onClick={syncPlayFromStart} style={{ ...tS, width: 40, height: 40 }}>{I.restart(18)}</button>
         <button onClick={syncToggle} style={{ width: 52, height: 52, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{syncActive ? I.pause(20) : I.play(20)}</button>
-        <button onClick={() => jumpSec(1)} disabled={!syncBar || syncBar.si >= sections.length - 1} style={{ ...tS, width: 36, height: 36, color: (!syncBar || syncBar.si >= sections.length - 1) ? C.border : C.text }}>{I.chevR(16)}</button>
       </div>
 
       {!isYT && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube videos only.</div></div>}
