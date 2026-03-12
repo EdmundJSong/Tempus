@@ -161,24 +161,14 @@ async function calibrateClock() {
     const fs = await getFS();
     const deviceId = getDeviceId();
     const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
-    const offsets = [];
-    for (let i = 0; i < 3; i++) {
-      const localBefore = Date.now();
-      await fs.setDoc(calRef, { t: fs.serverTimestamp() });
-      const localAfter = Date.now();
-      const snap = await fs.getDoc(calRef);
-      const serverMs = snap.data()?.t?.toMillis?.();
-      if (serverMs) {
-        const localMid = (localBefore + localAfter) / 2;
-        offsets.push(localMid - serverMs);
-      }
-    }
-    // Clean up calibration doc
+    const localBefore = Date.now();
+    await fs.setDoc(calRef, { t: fs.serverTimestamp() });
+    const localAfter = Date.now();
+    const snap = await fs.getDoc(calRef);
+    const serverMs = snap.data()?.t?.toMillis?.();
     try { await fs.deleteDoc(calRef); } catch {}
-    if (offsets.length === 0) return 0;
-    // Use median for robustness against outliers
-    offsets.sort((a, b) => a - b);
-    return offsets[Math.floor(offsets.length / 2)];
+    if (serverMs) return ((localBefore + localAfter) / 2) - serverMs;
+    return 0;
   } catch { return 0; }
 }
 
@@ -351,7 +341,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const doKick = useCallback((id) => roomCode && kickMember(roomCode, id), [roomCode]);
   const doKickAll = useCallback(() => roomCode && kickAll(roomCode), [roomCode]);
 
-  const SYNC_LEAD_MS = 2000; // buffer for Firestore propagation to members
+  const SYNC_LEAD_MS = 1000; // buffer for Firestore propagation to members
 
   const doStart = useCallback(async () => {
     if (!roomCode) return; try { metRef.current.tap(); } catch {}
