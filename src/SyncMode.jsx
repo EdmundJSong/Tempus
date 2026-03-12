@@ -220,12 +220,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const toastTimer = useRef(null);
   const clockOffsetRef = useRef(0); // local - server (ms)
   const serverNow = useCallback(() => Date.now() - clockOffsetRef.current, []);
-  const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const pauseRef = useRef(pause); const sectionsRef = useRef(sections);
+  const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const pauseRef = useRef(pause); const sectionsRef = useRef(sections); const settingsRef = useRef(settings);
   useEffect(() => { goRef.current = go; }, [go]);
   useEffect(() => { metRef.current = met; }, [met]);
   useEffect(() => { exitPlayRef.current = exitPlay; }, [exitPlay]);
   useEffect(() => { pauseRef.current = pause; }, [pause]);
   useEffect(() => { sectionsRef.current = sections; }, [sections]);
+  useEffect(() => { settingsRef.current = settings; }, [settings]);
 
   const deviceId = useMemo(() => getDeviceId(), []);
   const isHost = syncState?.role === "host";
@@ -354,17 +355,17 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       setSyncReady(false);
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
       clockOffsetRef.current = await calibrateClock();
-      const code = await createRoom(sectionsRef.current, settings);
+      const code = await createRoom(sectionsRef.current, settingsRef.current);
       const db = await fbInit(); const fs = await getFS();
       await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { hostName: displayName, [`members.${deviceId}.name`]: displayName });
       lastCmdSeq.current = 0; originalSections.current = null;
       setSyncState({ code, role: "host", hostId: deviceId, hostName: displayName, status: "lobby",
         members: { [deviceId]: { name: displayName, joinedAt: Date.now(), lastSeen: Date.now() } },
         pending: {}, sections: sectionsRef.current, commandSeq: 0, command: null,
-        startAtMs: null, resumeFromBar: 1, countInBars: settings.countIn || 1, isPending: false, isAdmitted: true });
+        startAtMs: null, resumeFromBar: 1, countInBars: settingsRef.current.countIn || 1, isPending: false, isAdmitted: true });
       await subscribeToRoom(code, "host"); return code;
     } catch (err) { showToast(err.message || "Failed to create room"); return null; }
-  }, [settings, deviceId, subscribeToRoom, showToast]);
+  }, [deviceId, subscribeToRoom, showToast]);
 
   const doJoinRoom = useCallback(async (code, displayName) => {
     try {
@@ -397,14 +398,14 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doStart = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
-    const ci = settings.countIn ?? 1;
+    const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS; // expressed in server time
     // Call go() immediately — audio scheduler handles precise timing via syncDelayMs
     goRef.current(0, ci, SYNC_LEAD_MS);
     // Write to Firestore for members (fire-and-forget)
     sendCommand(roomCode, "start", { startAtMs: t, countInBars: ci });
-  }, [roomCode, settings.countIn]);
+  }, [roomCode]);
 
   const doPause = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return;
@@ -430,12 +431,12 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doRestart = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
-    const ci = settings.countIn ?? 1;
+    const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS;
     goRef.current(0, ci, SYNC_LEAD_MS);
     sendCommand(roomCode, "restart", { startAtMs: t, countInBars: ci });
-  }, [roomCode, settings.countIn]);
+  }, [roomCode]);
 
   // Auto-send sections to Firestore with debounce when host edits (Fix 4)
   const autoSendTimer = useRef(null);
