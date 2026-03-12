@@ -193,10 +193,39 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   }, []);
 
   const roomSectionsJsonRef = useRef(null);
+  const roleRef = useRef(null); // track role in refs for snapshot callback
+
+  // Process command directly in snapshot callback (not useEffect) to avoid React batching issues
+  const processCommand = useCallback((d, isAdmitted) => {
+    if (!isAdmitted || roleRef.current === "host") return;
+    const seq = d.commandSeq || 0;
+    const cmd = d.command;
+    const startAtMs = d.startAtMs;
+    if (seq <= lastCmdSeq.current) return;
+    lastCmdSeq.current = seq;
+    const sNow = Date.now() - clockOffsetRef.current;
+    if (cmd === "start" || cmd === "restart") {
+      if (!startAtMs) return;
+      const delay = startAtMs - sNow;
+      if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, delay);
+      else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }
+    } else if (cmd === "pause") {
+      pauseRef.current();
+    } else if (cmd === "resume") {
+      const delay = (startAtMs || sNow) - sNow;
+      const tl = buildTL(sectionsRef.current);
+      const idx = tl.findIndex(b => b.ab === (d.resumeFromBar || 1));
+      const doIt = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); };
+      if (delay > 0 && delay < 10000) setTimeout(doIt, delay); else doIt();
+    } else if (cmd === "stop") exitPlayRef.current();
+    else if (cmd === "sync-reset") { exitPlayRef.current(); }
+  }, []);
 
   const subscribeToRoom = useCallback(async (code, role) => {
     const db = await fbInit(); if (!db) return; const fs = await getFS();
     if (unsubRef.current) unsubRef.current();
+    roleRef.current = role;
+    let firstSnapshot = true;
     unsubRef.current = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
       if (!snap.exists()) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
@@ -208,7 +237,15 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
         showToast("You were removed by the host"); return;
       }
-      // Only update sections reference when content actually changes
+      // On first snapshot, initialize lastCmdSeq to current value so we don't process stale commands
+      if (firstSnapshot) {
+        lastCmdSeq.current = d.commandSeq || 0;
+        firstSnapshot = false;
+      }
+      const isAdmitted = !!(d.members?.[myId]);
+      // Process commands synchronously in the snapshot callback — not in useEffect
+      processCommand(d, isAdmitted);
+      // Update React state for UI
       const newSJ = JSON.stringify(d.sections);
       const sectionsChanged = newSJ !== roomSectionsJsonRef.current;
       if (sectionsChanged) roomSectionsJsonRef.current = newSJ;
@@ -219,35 +256,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
         commandSeq: d.commandSeq || 0, command: d.command, startAtMs: d.startAtMs,
         resumeFromBar: d.resumeFromBar, countInBars: d.countInBars,
         isPending: !!(d.pending?.[myId]) && !(d.members?.[myId]),
-        isAdmitted: !!(d.members?.[myId])
+        isAdmitted
       }));
     });
-  }, [showToast]);
-
-  // Handle incoming commands — MEMBERS ONLY (host acts locally in doStart/doPause/etc.)
-  useEffect(() => {
-    if (!syncState || !syncState.isAdmitted || isHost) return;
-    const { commandSeq, command, startAtMs } = syncState;
-    if (commandSeq <= lastCmdSeq.current) return;
-    lastCmdSeq.current = commandSeq;
-    // Use calibrated server time for scheduling
-    const sNow = Date.now() - clockOffsetRef.current;
-    if (command === "start" || command === "restart") {
-      if (!startAtMs) return;
-      const delay = startAtMs - sNow;
-      if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, delay);
-      else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }
-    } else if (command === "pause") {
-      pauseRef.current();
-    } else if (command === "resume") {
-      const delay = (startAtMs || sNow) - sNow;
-      const tl = buildTL(sectionsRef.current || syncState.sections);
-      const idx = tl.findIndex(b => b.ab === (syncState.resumeFromBar || 1));
-      const doIt = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); };
-      if (delay > 0 && delay < 10000) setTimeout(doIt, delay); else doIt();
-    } else if (command === "stop") exitPlayRef.current();
-    else if (command === "sync-reset") { exitPlayRef.current(); }
-  }, [syncState?.commandSeq, syncState?.command, syncState?.isAdmitted, isHost]);
+  }, [showToast, processCommand]);
 
   // Section updates from host (member side) — pulse glow instead of toast
   const lastSectionsJson = useRef(null);
@@ -311,7 +323,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     const restore = originalSections.current;
-    setSyncState(null); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0;
+    setSyncState(null); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null;
     return restore;
   }, [roomCode]);
 
