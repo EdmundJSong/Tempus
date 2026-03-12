@@ -153,6 +153,8 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
     toastTimer.current = setTimeout(() => setToast(null), dur);
   }, []);
 
+  const roomSectionsJsonRef = useRef(null);
+
   const subscribeToRoom = useCallback(async (code, role) => {
     const db = await fbInit(); if (!db) return; const fs = await getFS();
     if (unsubRef.current) unsubRef.current();
@@ -167,9 +169,14 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
         showToast("You were removed by the host"); return;
       }
+      // Only update sections reference when content actually changes
+      const newSJ = JSON.stringify(d.sections);
+      const sectionsChanged = newSJ !== roomSectionsJsonRef.current;
+      if (sectionsChanged) roomSectionsJsonRef.current = newSJ;
       setSyncState(prev => ({
         ...prev, code, role, hostId: d.hostId, hostName: d.hostName || "Host", status: d.status,
-        members: d.members || {}, pending: d.pending || {}, sections: d.sections,
+        members: d.members || {}, pending: d.pending || {},
+        sections: sectionsChanged ? d.sections : (prev?.sections || d.sections),
         commandSeq: d.commandSeq || 0, command: d.command, startAtMs: d.startAtMs,
         resumeFromBar: d.resumeFromBar, countInBars: d.countInBars,
         isPending: !!(d.pending?.[myId]) && !(d.members?.[myId]),
@@ -187,13 +194,16 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
     if (command === "start" || command === "restart") {
       if (!startAtMs) return;
       const delay = startAtMs - Date.now();
-      if (delay > 0 && delay < 10000) setTimeout(() => goRef.current(0), delay);
-      else if (delay <= 0) goRef.current(0);
+      if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0); }, delay);
+      else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0); }
     } else if (command === "pause") metRef.current.stop();
     else if (command === "resume") {
+      const startAt = startAtMs || Date.now();
+      const delay = startAt - Date.now();
       const tl = buildTL(syncState.sections || sectionsRef.current);
       const idx = tl.findIndex(b => b.ab === (syncState.resumeFromBar || 1));
-      if (idx >= 0) goRef.current(idx);
+      const doResume = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx); };
+      if (delay > 0 && delay < 10000) setTimeout(doResume, delay); else doResume();
     } else if (command === "stop") exitPlayRef.current();
   }, [syncState?.commandSeq, syncState?.command, syncState?.isAdmitted]);
 
@@ -221,6 +231,7 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
 
   const doCreateRoom = useCallback(async (displayName) => {
     try {
+      try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
       const code = await createRoom(sectionsRef.current, settings);
       const db = await fbInit(); const fs = await getFS();
       await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { hostName: displayName, [`members.${deviceId}.name`]: displayName });
@@ -235,6 +246,7 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
 
   const doJoinRoom = useCallback(async (code, displayName) => {
     try {
+      try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
       const { admitted } = await joinRoomPending(code, displayName);
       lastCmdSeq.current = 0; originalSections.current = [...sectionsRef.current];
       setSyncState({ code, role: "member", status: "lobby", members: {}, pending: {},
@@ -248,7 +260,7 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     const restore = originalSections.current;
-    setSyncState(null); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null;
+    setSyncState(null); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null;
     return restore;
   }, [roomCode]);
 
@@ -258,9 +270,10 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
   const doKickAll = useCallback(() => roomCode && kickAll(roomCode), [roomCode]);
 
   const doStart = useCallback(async () => {
-    if (!roomCode) return; const t = Date.now() + 1500;
+    if (!roomCode) return; try { metRef.current.tap(); } catch {}
+    const t = Date.now() + 1500;
     await sendCommand(roomCode, "start", { startAtMs: t });
-    setTimeout(() => goRef.current(0), Math.max(0, t - Date.now()));
+    setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0); }, Math.max(0, t - Date.now()));
   }, [roomCode]);
 
   const doPause = useCallback(async () => {
@@ -268,10 +281,11 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
-    if (!roomCode) return; const t = Date.now() + 1500;
+    if (!roomCode) return; try { metRef.current.tap(); } catch {}
+    const t = Date.now() + 1500;
     await sendCommand(roomCode, "resume", { startAtMs: t, resumeFromBar: barNum });
     const tl = buildTL(sectionsRef.current); const idx = tl.findIndex(b => b.ab === barNum);
-    setTimeout(() => { if (idx >= 0) goRef.current(idx); else goRef.current(0); }, Math.max(0, t - Date.now()));
+    setTimeout(() => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx); else goRef.current(0); }, Math.max(0, t - Date.now()));
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
@@ -279,9 +293,10 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
-    if (!roomCode) return; const t = Date.now() + 1500;
+    if (!roomCode) return; try { metRef.current.tap(); } catch {}
+    const t = Date.now() + 1500;
     await sendCommand(roomCode, "restart", { startAtMs: t });
-    setTimeout(() => goRef.current(0), Math.max(0, t - Date.now()));
+    setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0); }, Math.max(0, t - Date.now()));
   }, [roomCode]);
 
   const doSendSections = useCallback(async () => {
@@ -396,14 +411,11 @@ export function SyncLobby({ sync, onLoadSections }) {
   const pendingList = Object.entries(pending);
   const memberCount = Object.keys(members).length;
 
-  // Member: load sections when admitted, then auto-close lobby
+  // Member: auto-close lobby once admitted (section loading handled by App.jsx)
   useEffect(() => {
     if (!isInRoom || isHost) return;
-    if (syncState?.isAdmitted && syncState?.sections?.length > 0) {
-      onLoadSections(syncState.sections);
-      setTimeout(() => setShowLobby(false), 400);
-    }
-  }, [syncState?.isAdmitted, syncState?.sections, isHost, isInRoom]);
+    if (syncState?.isAdmitted) setTimeout(() => setShowLobby(false), 400);
+  }, [syncState?.isAdmitted, isHost, isInRoom]);
 
   const mBg = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" };
   const mBox = { width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" };
@@ -441,7 +453,8 @@ export function SyncLobby({ sync, onLoadSections }) {
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
       <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Join Room</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
       <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name" autoFocus style={inp} />
-      <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="4-digit room code" inputMode="numeric" style={{ ...inp, letterSpacing: 8, textAlign: "center", fontSize: 24, fontFamily: "'DM Mono',monospace" }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
+      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 6 }}>Room code</div>
+      <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="0000" inputMode="numeric" style={{ ...inp, letterSpacing: code ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
       <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "Joining..." : "Join Room"}</button>
     </div></div>
@@ -481,7 +494,7 @@ export function SyncLobby({ sync, onLoadSections }) {
       <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Room {syncState?.code}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
-        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 32, color: SYNC_COLOR, letterSpacing: 8, fontWeight: 700 }}>{syncState?.code}</div>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 28, color: SYNC_COLOR, letterSpacing: 6, fontWeight: 700 }}>{syncState?.code}</div>
         <button onClick={() => navigator.clipboard?.writeText(syncState?.code || "")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: 6, display: "flex" }}>{I.copy(14)}</button>
       </div>
       <div style={{ textAlign: "center", fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace", marginBottom: 16 }}>{memberCount}/{MAX_MEMBERS} members</div>
