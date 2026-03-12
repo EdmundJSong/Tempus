@@ -1359,6 +1359,17 @@ export default function Tempus() {
   // ============ SYNC MODE ============
   const sync = useSync({ sections, settings, met, go, exitPlay });
   const handleSyncLoadSections = useCallback((s) => { if (Array.isArray(s) && s.length > 0) setSections(s); }, []);
+
+  // Member: always load sections from host (must be in App, not lobby — lobby unmounts after admit)
+  const lastSyncSectionsJson = useRef(null);
+  useEffect(() => {
+    if (!sync.isInRoom || sync.isHost) { lastSyncSectionsJson.current = null; return; }
+    if (!sync.syncState?.isAdmitted || !sync.syncState?.sections?.length) return;
+    const j = JSON.stringify(sync.syncState.sections);
+    if (j === lastSyncSectionsJson.current) return; // no actual change
+    lastSyncSectionsJson.current = j;
+    setSections(sync.syncState.sections);
+  }, [sync.syncState?.sections, sync.isHost, sync.isInRoom, sync.syncState?.isAdmitted]);
   const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
