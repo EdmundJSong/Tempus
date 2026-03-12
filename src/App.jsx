@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useSync, SyncLobby, SyncToast, SyncIcon } from "./SyncMode";
+import { useSync, SyncLobby, SyncStatusBar, SyncToast, SyncIcon } from "./SyncMode";
 
 // ============ ICONS ============
 const Icon = ({ d, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 24 24" }) => (
@@ -1479,8 +1479,8 @@ export default function Tempus() {
   }, [ps]));
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative" }}>
-      <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : undefined, transition: "box-shadow 0.4s ease" }}>
+      <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${sync.isInRoom ? sync.SYNC_COLOR + '15' : mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet" />
       <style>{`
         *{box-sizing:border-box;margin:0;padding:0} html{touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
@@ -1529,6 +1529,7 @@ export default function Tempus() {
           {videoUrl && <button onClick={() => setShowVideo(true)} data-tip-b="Video" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
           {settings.appMode !== "basic" && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
           {settings.appMode !== "basic" && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b="Sync" style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}><SyncIcon size={18} /></button>}
           <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
         </div>
       </div>
@@ -1537,6 +1538,8 @@ export default function Tempus() {
         <span>{sections.length} section{sections.length !== 1 ? "s" : ""}</span><span>{totalBars} bar{totalBars !== 1 ? "s" : ""}</span>
         {totalBars > 0 && <span>{Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur)}s</span>}
       </div>
+
+      {sync.isInRoom && <SyncStatusBar sync={sync} onOpenLobby={() => sync.setShowLobby(true)} />}
 
       <div style={{ padding: "8px 16px 120px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
         {sections.map((sec, i) => <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={() => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={() => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={d => moveSec(i, d)} onDelete={sections.length > 1 ? handleDelete : null} onDragStart={handleDragStart} onDragEnter={handleDragEnter} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDrop={handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={onGripTouchStart} cancelTouchDrag={cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} />)}
@@ -1549,7 +1552,6 @@ export default function Tempus() {
           {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
           <button className="btn-ripple transport-btn" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 64, height: 64, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.play(28)}</button>
           {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip="Practice Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
-          {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => sync.setShowLobby(true)} data-tip="Sync Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: sync.isInRoom ? sync.SYNC_COLOR : C.surface, border: sync.isInRoom ? "none" : `1px solid ${C.border}`, color: sync.isInRoom ? "#000" : C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: sync.isInRoom ? `0 0 16px ${sync.SYNC_GLOW}` : "none", transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, background 0.2s" }}><SyncIcon size={18} /></button>}
         </div>
       </div>
 
