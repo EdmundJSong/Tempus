@@ -491,7 +491,8 @@ const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total:
 });
 
 // ============ PLAY VIEW ============
-function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, tapBpm, tapFlash, settings, onSettings }) {
+function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, tapBpm, tapFlash, settings, onSettings, syncLocked }) {
+  const SYNC_COLOR = "#06b6d4";
   const { absoluteBar: ab, beatIndex: bei, beatType: bt, tsNum: tsN, tsDen: tsD, sectionIndex: si, flash, isTimed: isT, countIn: isCI, ended: isEnded } = ps;
   const fc = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.text, fo = flash ? (bt === 0 ? 0.35 : bt === 1 ? 0.2 : 0.08) : 0;
   const [goBar, setGoBar] = useState("");
@@ -503,7 +504,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
   const guardedAction = fn => () => { const now = Date.now(); if (!mountReady.current || now - lastAction.current < 250) return; lastAction.current = now; fn(); };
   useEffect(() => () => { if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); }, []);
   const showF = vis === "flash" || vis === "dots+flash", showD = vis === "dots" || vis === "dots+flash";
-  const borderColor = mode === "record" ? C.record : mode === "practice" ? C.practice : null;
+  const borderColor = mode === "record" ? C.record : mode === "practice" ? C.practice : mode === "sync" ? SYNC_COLOR : null;
   const nxt = sections[si + 1]; let upN = null;
   if (nxt && !isCI) { if (isT) { if (ps.remaining != null && ps.remaining <= 10) upN = nxt.type === "timed" ? `${nxt.duration}s Free` : `${nxt.tsNum}/${nxt.tsDen} at ${nxt.tempo}`; } else { const bis = tl.filter(b => b.si === si); if (bis.length > 0 && bis[bis.length - 1].ab - ab <= 1) upN = nxt.type === "timed" ? `${nxt.duration}s Free` : `${nxt.tsNum}/${nxt.tsDen} at ${nxt.tempo}`; } }
   const isRec = mode === "record";
@@ -569,6 +570,14 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
       </div>
 
       {/* BOTTOM CONTROLS - fixed */}
+      {syncLocked ? (
+        <div style={{ position: "absolute", bottom: 24, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 2 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 20, background: SYNC_COLOR + "15", border: `1px solid ${SYNC_COLOR}33` }}>
+            <div style={{ width: 6, height: 6, borderRadius: "50%", background: SYNC_COLOR, boxShadow: `0 0 6px ${SYNC_COLOR}` }} />
+            <span style={{ fontSize: 11, color: SYNC_COLOR, fontFamily: "'Outfit',sans-serif", fontWeight: 600 }}>Synced</span>
+          </div>
+        </div>
+      ) : (
       <div style={{ position: "absolute", bottom: 24, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 2, pointerEvents: "none" }}>
         {/* Nav row - visibility hidden during play */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, visibility: showNav ? "visible" : "hidden", pointerEvents: showNav ? "auto" : "none", opacity: showNav ? 1 : 0, transition: "opacity 0.15s" }}>
@@ -596,7 +605,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
             </div> : null}
           </div>
         </div>
-      </div>
+      </div>)}
     </div>);
 }
 const nv = { padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", justifyContent: "center" };
@@ -1351,7 +1360,7 @@ export default function Tempus() {
   }, [met, tl, pracSections, pracStep]);
 
   const prePlayTempos = useRef(null);
-  const go = useCallback((fi = 0) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
+  const go = useCallback((fi = 0, countInOverride) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const ci = countInOverride !== undefined ? countInOverride : settings.countIn; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, ci, { accented: settings.accented, pitched: settings.pitched, muted }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
   const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
   useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
   const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => prev.map((s, i) => ({ ...s, tempo: i < saved.length ? (saved[i] ?? s.tempo) : s.tempo }))); } } catch {} prePlayTempos.current = null; }, [met]);
@@ -1395,8 +1404,8 @@ export default function Tempus() {
         }
       }
       else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setConfirmClear(false); sync.setShowLobby(false); }
-      else if (isP && e.code === "ArrowLeft") jumpSec(-1);
-      else if (isP && e.code === "ArrowRight") jumpSec(1);
+      else if (isP && !sync.isMemberLocked && e.code === "ArrowLeft") jumpSec(-1);
+      else if (isP && !sync.isMemberLocked && e.code === "ArrowRight") jumpSec(1);
     };
     window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
   }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, confirmClear, sync.showLobby, sync.isMemberLocked]);
@@ -1497,7 +1506,7 @@ export default function Tempus() {
   }, [ps]));
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : undefined, transition: "box-shadow 0.4s ease" }}>
+    <div className={sync.syncGlowPulse ? "sync-glow-pulse" : ""} style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : undefined, transition: sync.syncGlowPulse ? undefined : "box-shadow 0.4s ease" }}>
       <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${sync.isInRoom ? sync.SYNC_COLOR + '15' : mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet" />
       <style>{`
@@ -1538,6 +1547,8 @@ export default function Tempus() {
         .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes syncPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
         .sync-pulse { animation: syncPulse 1.5s ease-in-out infinite; }
+        @keyframes syncGlowBright { 0% { box-shadow: inset 0 0 0 3px rgba(6,182,212,0.4), inset 0 0 30px rgba(6,182,212,0.13); } 50% { box-shadow: inset 0 0 0 4px rgba(6,182,212,0.9), inset 0 0 60px rgba(6,182,212,0.35); } 100% { box-shadow: inset 0 0 0 3px rgba(6,182,212,0.4), inset 0 0 30px rgba(6,182,212,0.13); } }
+        .sync-glow-pulse { animation: syncGlowBright 1.2s ease-in-out; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
@@ -1573,7 +1584,7 @@ export default function Tempus() {
         </div>
       </div>}
 
-      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} />}
+      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
