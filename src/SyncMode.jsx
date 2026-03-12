@@ -133,6 +133,36 @@ async function leaveRoom(code) {
   } catch {}
 }
 
+// ============ CLOCK CALIBRATION ============
+// Measures offset between local Date.now() and Firestore server clock.
+// offset = localTime - serverTime. To get server-equivalent time: Date.now() - offset
+async function calibrateClock() {
+  try {
+    const db = await fbInit(); if (!db) return 0;
+    const fs = await getFS();
+    const deviceId = getDeviceId();
+    const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
+    const offsets = [];
+    for (let i = 0; i < 3; i++) {
+      const localBefore = Date.now();
+      await fs.setDoc(calRef, { t: fs.serverTimestamp() });
+      const localAfter = Date.now();
+      const snap = await fs.getDoc(calRef);
+      const serverMs = snap.data()?.t?.toMillis?.();
+      if (serverMs) {
+        const localMid = (localBefore + localAfter) / 2;
+        offsets.push(localMid - serverMs);
+      }
+    }
+    // Clean up calibration doc
+    try { await fs.deleteDoc(calRef); } catch {}
+    if (offsets.length === 0) return 0;
+    // Use median for robustness against outliers
+    offsets.sort((a, b) => a - b);
+    return offsets[Math.floor(offsets.length / 2)];
+  } catch { return 0; }
+}
+
 // ============ useSync HOOK ============
 export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const [syncState, setSyncState] = useState(null);
@@ -143,6 +173,8 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const lastCmdSeq = useRef(0);
   const originalSections = useRef(null);
   const toastTimer = useRef(null);
+  const clockOffsetRef = useRef(0); // local - server (ms)
+  const serverNow = useCallback(() => Date.now() - clockOffsetRef.current, []);
   const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const pauseRef = useRef(pause); const sectionsRef = useRef(sections);
   useEffect(() => { goRef.current = go; }, [go]);
   useEffect(() => { metRef.current = met; }, [met]);
@@ -192,28 +224,30 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     });
   }, [showToast]);
 
-  // Handle incoming commands (host AND members — both react to snapshot for perfect sync)
+  // Handle incoming commands — MEMBERS ONLY (host acts locally in doStart/doPause/etc.)
   useEffect(() => {
-    if (!syncState || !syncState.isAdmitted) return;
+    if (!syncState || !syncState.isAdmitted || isHost) return;
     const { commandSeq, command, startAtMs } = syncState;
     if (commandSeq <= lastCmdSeq.current) return;
     lastCmdSeq.current = commandSeq;
+    // Use calibrated server time for scheduling
+    const sNow = Date.now() - clockOffsetRef.current;
     if (command === "start" || command === "restart") {
       if (!startAtMs) return;
-      const delay = startAtMs - Date.now();
+      const delay = startAtMs - sNow;
       if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, delay);
       else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }
     } else if (command === "pause") {
       pauseRef.current();
     } else if (command === "resume") {
-      const delay = (startAtMs || Date.now()) - Date.now();
+      const delay = (startAtMs || sNow) - sNow;
       const tl = buildTL(sectionsRef.current || syncState.sections);
       const idx = tl.findIndex(b => b.ab === (syncState.resumeFromBar || 1));
       const doIt = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); };
       if (delay > 0 && delay < 10000) setTimeout(doIt, delay); else doIt();
     } else if (command === "stop") exitPlayRef.current();
     else if (command === "sync-reset") { exitPlayRef.current(); }
-  }, [syncState?.commandSeq, syncState?.command, syncState?.isAdmitted]);
+  }, [syncState?.commandSeq, syncState?.command, syncState?.isAdmitted, isHost]);
 
   // Section updates from host (member side) — pulse glow instead of toast
   const lastSectionsJson = useRef(null);
@@ -247,6 +281,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const doCreateRoom = useCallback(async (displayName) => {
     try {
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
+      clockOffsetRef.current = await calibrateClock();
       const code = await createRoom(sectionsRef.current, settings);
       const db = await fbInit(); const fs = await getFS();
       await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { hostName: displayName, [`members.${deviceId}.name`]: displayName });
@@ -262,6 +297,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const doJoinRoom = useCallback(async (code, displayName) => {
     try {
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
+      clockOffsetRef.current = await calibrateClock();
       const { admitted } = await joinRoomPending(code, displayName);
       lastCmdSeq.current = 0; originalSections.current = JSON.parse(JSON.stringify(sectionsRef.current));
       setSyncState({ code, role: "member", status: "lobby", members: {}, pending: {},
@@ -275,7 +311,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     const restore = originalSections.current;
-    setSyncState(null); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null;
+    setSyncState(null); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0;
     return restore;
   }, [roomCode]);
 
@@ -284,37 +320,46 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const doKick = useCallback((id) => roomCode && kickMember(roomCode, id), [roomCode]);
   const doKickAll = useCallback(() => roomCode && kickAll(roomCode), [roomCode]);
 
+  const SYNC_LEAD_MS = 2000; // buffer for Firestore propagation to members
+
   const doStart = useCallback(async () => {
     if (!roomCode) return; try { metRef.current.tap(); } catch {}
-    const t = Date.now() + 1500;
-    await sendCommand(roomCode, "start", { startAtMs: t });
-    // Host playback triggered by snapshot handler, same as members
+    const sNow = Date.now() - clockOffsetRef.current;
+    const t = sNow + SYNC_LEAD_MS; // expressed in server time
+    // Host starts local timer immediately — SYNC_LEAD_MS real wall-clock delay
+    setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, SYNC_LEAD_MS);
+    // Write to Firestore for members (fire-and-forget)
+    sendCommand(roomCode, "start", { startAtMs: t });
   }, [roomCode]);
 
   const doPause = useCallback(async () => {
     if (!roomCode) return;
-    await sendCommand(roomCode, "pause");
-    // Host pause triggered by snapshot handler
+    pauseRef.current();
+    sendCommand(roomCode, "pause");
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
     if (!roomCode) return; try { metRef.current.tap(); } catch {}
-    const t = Date.now() + 1500;
-    await sendCommand(roomCode, "resume", { startAtMs: t, resumeFromBar: barNum });
-    // Host playback triggered by snapshot handler
+    const sNow = Date.now() - clockOffsetRef.current;
+    const t = sNow + SYNC_LEAD_MS;
+    const tl = buildTL(sectionsRef.current);
+    const idx = tl.findIndex(b => b.ab === barNum);
+    setTimeout(() => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); }, SYNC_LEAD_MS);
+    sendCommand(roomCode, "resume", { startAtMs: t, resumeFromBar: barNum });
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
     if (!roomCode) return;
-    await sendCommand(roomCode, "stop");
-    // Host stop triggered by snapshot handler
+    exitPlayRef.current();
+    sendCommand(roomCode, "stop");
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
     if (!roomCode) return; try { metRef.current.tap(); } catch {}
-    const t = Date.now() + 1500;
-    await sendCommand(roomCode, "restart", { startAtMs: t });
-    // Host playback triggered by snapshot handler
+    const sNow = Date.now() - clockOffsetRef.current;
+    const t = sNow + SYNC_LEAD_MS;
+    setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, SYNC_LEAD_MS);
+    sendCommand(roomCode, "restart", { startAtMs: t });
   }, [roomCode]);
 
   // Auto-send sections to Firestore with debounce when host edits (Fix 4)
@@ -334,9 +379,12 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doSyncReset = useCallback(async () => {
     if (!roomCode || !isHost) return;
-    await updateRoomSections(roomCode, sectionsRef.current);
-    await sendCommand(roomCode, "sync-reset");
+    // Host stops locally immediately
+    exitPlayRef.current();
     showToast("Sync reset — all devices reloaded");
+    // Write to Firestore for members
+    updateRoomSections(roomCode, sectionsRef.current);
+    sendCommand(roomCode, "sync-reset");
   }, [roomCode, isHost, showToast]);
 
   const isMemberLocked = isInRoom && !isHost;
@@ -353,7 +401,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
 // ============ SYNC STATUS BAR (persistent strip below header when in room) ============
 export function SyncStatusBar({ sync, onOpenLobby }) {
-  const { syncState, isHost, doSyncReset, doStart, doStop, doRestart, doResume, doLeaveRoom, SYNC_COLOR } = sync;
+  const { syncState, isHost, doSyncReset, doStop, doRestart, doResume, doLeaveRoom, SYNC_COLOR } = sync;
   const members = syncState?.members || {};
   const pending = syncState?.pending || {};
   const memberCount = Object.keys(members).length;
@@ -391,7 +439,6 @@ export function SyncStatusBar({ sync, onOpenLobby }) {
       <div style={{ flex: 1 }} />
 
       {isHost && <button onClick={handleSyncReset} style={sb(confirmReset ? "#000" : SYNC_COLOR, confirmReset ? SYNC_COLOR : SYNC_COLOR + "15", SYNC_COLOR + (confirmReset ? "" : "55"))}>{confirmReset ? "Confirm?" : "Sync Reset"}</button>}
-      {isHost && (status === "lobby" || status === "stopped") && <button onClick={doStart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>Start</button>}
       {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>Stop</button>}
       {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>Resume</button>}
       {isHost && status === "paused" && <button onClick={doRestart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>Restart</button>}
