@@ -177,6 +177,9 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const [syncState, setSyncState] = useState(null);
   const [showLobby, setShowLobby] = useState(false);
   const [toast, setToast] = useState(null);
+  const [syncReady, setSyncReady] = useState(false);
+  const syncReadyRef = useRef(false);
+  useEffect(() => { syncReadyRef.current = syncReady; }, [syncReady]);
   const unsubRef = useRef(null);
   const heartbeatRef = useRef(null);
   const lastCmdSeq = useRef(0);
@@ -246,10 +249,11 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
         showToast("You were removed by the host"); return;
       }
-      // On first snapshot, initialize lastCmdSeq to current value so we don't process stale commands
+      // On first snapshot, initialize lastCmdSeq and mark connection as ready
       if (firstSnapshot) {
         lastCmdSeq.current = d.commandSeq || 0;
         firstSnapshot = false;
+        setSyncReady(true);
       }
       const isAdmitted = !!(d.members?.[myId]);
       // Process commands synchronously in the snapshot callback — not in useEffect
@@ -301,6 +305,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doCreateRoom = useCallback(async (displayName) => {
     try {
+      setSyncReady(false);
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
       clockOffsetRef.current = await calibrateClock();
       const code = await createRoom(sectionsRef.current, settings);
@@ -317,6 +322,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doJoinRoom = useCallback(async (code, displayName) => {
     try {
+      setSyncReady(false);
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
       clockOffsetRef.current = await calibrateClock();
       const { admitted } = await joinRoomPending(code, displayName);
@@ -332,7 +338,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     const restore = originalSections.current;
-    setSyncState(null); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null;
+    setSyncState(null); setSyncReady(false); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null;
     return restore;
   }, [roomCode]);
 
@@ -344,7 +350,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const SYNC_LEAD_MS = 1000; // buffer for Firestore propagation to members
 
   const doStart = useCallback(async () => {
-    if (!roomCode) return; try { metRef.current.tap(); } catch {}
+    if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS; // expressed in server time
     // Host starts local timer immediately — SYNC_LEAD_MS real wall-clock delay
@@ -354,13 +360,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   }, [roomCode]);
 
   const doPause = useCallback(async () => {
-    if (!roomCode) return;
+    if (!roomCode || !syncReadyRef.current) return;
     pauseRef.current();
     sendCommand(roomCode, "pause");
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
-    if (!roomCode) return; try { metRef.current.tap(); } catch {}
+    if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS;
     const tl = buildTL(sectionsRef.current);
@@ -370,13 +376,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
-    if (!roomCode) return;
+    if (!roomCode || !syncReadyRef.current) return;
     exitPlayRef.current();
     sendCommand(roomCode, "stop");
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
-    if (!roomCode) return; try { metRef.current.tap(); } catch {}
+    if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS;
     setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, SYNC_LEAD_MS);
@@ -411,7 +417,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const isMemberLocked = isInRoom && !isHost;
 
   return {
-    syncState, showLobby, setShowLobby, toast, syncGlowPulse,
+    syncState, showLobby, setShowLobby, toast, syncGlowPulse, syncReady,
     isHost, isInRoom, isMemberLocked, roomCode, deviceId,
     doCreateRoom, doJoinRoom, doLeaveRoom,
     doAdmit, doAdmitAll, doKick, doKickAll,
