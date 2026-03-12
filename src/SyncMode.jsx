@@ -151,7 +151,7 @@ async function leaveRoom(code) {
 }
 
 // ============ CLOCK CALIBRATION ============
-// Measures offset between local Date.now() and Firestore server clock.
+// Multi-ping: 7 Firestore round-trips, discard worst RTTs, take median offset.
 // offset = localTime - serverTime. To get server-equivalent time: Date.now() - offset
 async function calibrateClock() {
   try {
@@ -159,14 +159,31 @@ async function calibrateClock() {
     const fs = await getFS();
     const deviceId = getDeviceId();
     const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
-    const localBefore = Date.now();
-    await fs.setDoc(calRef, { t: fs.serverTimestamp() });
-    const localAfter = Date.now();
-    const snap = await fs.getDoc(calRef);
-    const serverMs = snap.data()?.t?.toMillis?.();
+    const PINGS = 7;
+    const samples = [];
+    for (let p = 0; p < PINGS; p++) {
+      const localBefore = Date.now();
+      await fs.setDoc(calRef, { t: fs.serverTimestamp() });
+      const localAfter = Date.now();
+      const snap = await fs.getDoc(calRef);
+      const serverMs = snap.data()?.t?.toMillis?.();
+      if (serverMs) {
+        const rtt = localAfter - localBefore;
+        const offset = ((localBefore + localAfter) / 2) - serverMs;
+        samples.push({ rtt, offset });
+      }
+    }
     try { await fs.deleteDoc(calRef); } catch {}
-    if (serverMs) return ((localBefore + localAfter) / 2) - serverMs;
-    return 0;
+    if (samples.length === 0) return 0;
+    // Discard highest and lowest RTT samples (outliers from network jitter)
+    if (samples.length >= 5) {
+      samples.sort((a, b) => a.rtt - b.rtt);
+      samples.splice(-1, 1); // remove worst RTT
+      samples.splice(0, 1);  // remove best RTT (can also be anomalous)
+    }
+    // Return median offset from remaining samples
+    samples.sort((a, b) => a.offset - b.offset);
+    return samples[Math.floor(samples.length / 2)].offset;
   } catch { return 0; }
 }
 
@@ -183,7 +200,6 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const lastCmdSeq = useRef(0);
   const originalSections = useRef(null);
   const toastTimer = useRef(null);
-  const syncTimerRef = useRef(null); // guards against dangling start/resume timeouts
   const clockOffsetRef = useRef(0); // local - server (ms)
   const serverNow = useCallback(() => Date.now() - clockOffsetRef.current, []);
   const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const pauseRef = useRef(pause); const sectionsRef = useRef(sections);
@@ -219,16 +235,18 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       if (!startAtMs) return;
       const ci = d.countInBars ?? 0;
       const delay = startAtMs - sNow;
-      if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, ci); }, delay);
-      else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0, ci); }
+      if (delay > -2000 && delay < 10000) {
+        goRef.current(0, ci, Math.max(50, delay));
+      }
     } else if (cmd === "pause") {
       pauseRef.current();
     } else if (cmd === "resume") {
       const delay = (startAtMs || sNow) - sNow;
       const tl = buildTL(sectionsRef.current);
       const idx = tl.findIndex(b => b.ab === (d.resumeFromBar || 1));
-      const doIt = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); };
-      if (delay > 0 && delay < 10000) setTimeout(doIt, delay); else doIt();
+      if (idx >= 0 && delay > -2000 && delay < 10000) {
+        goRef.current(idx, 0, Math.max(50, delay));
+      }
     } else if (cmd === "stop") exitPlayRef.current();
     else if (cmd === "sync-reset") { exitPlayRef.current(); }
   }, []);
@@ -301,7 +319,6 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     if (glowPulseTimer.current) clearTimeout(glowPulseTimer.current);
-    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
   }, []);
 
   const doCreateRoom = useCallback(async (displayName) => {
@@ -338,7 +355,6 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (roomCode) await leaveRoom(roomCode);
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
-    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     const restore = originalSections.current;
     setSyncState(null); setSyncReady(false); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null;
     return restore;
@@ -353,48 +369,43 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doStart = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
-    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     const ci = settings.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS; // expressed in server time
-    // Host starts local timer immediately — SYNC_LEAD_MS real wall-clock delay
-    syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; try { metRef.current.tap(); } catch {} goRef.current(0, ci); }, SYNC_LEAD_MS);
+    // Call go() immediately — audio scheduler handles precise timing via syncDelayMs
+    goRef.current(0, ci, SYNC_LEAD_MS);
     // Write to Firestore for members (fire-and-forget)
     sendCommand(roomCode, "start", { startAtMs: t, countInBars: ci });
   }, [roomCode, settings.countIn]);
 
   const doPause = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return;
-    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     pauseRef.current();
     sendCommand(roomCode, "pause");
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
-    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS;
     const tl = buildTL(sectionsRef.current);
     const idx = tl.findIndex(b => b.ab === barNum);
-    syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); }, SYNC_LEAD_MS);
+    if (idx >= 0) goRef.current(idx, 0, SYNC_LEAD_MS);
     sendCommand(roomCode, "resume", { startAtMs: t, resumeFromBar: barNum });
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return;
-    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     exitPlayRef.current();
     sendCommand(roomCode, "stop");
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
-    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     const ci = settings.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS;
-    syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; try { metRef.current.tap(); } catch {} goRef.current(0, ci); }, SYNC_LEAD_MS);
+    goRef.current(0, ci, SYNC_LEAD_MS);
     sendCommand(roomCode, "restart", { startAtMs: t, countInBars: ci });
   }, [roomCode, settings.countIn]);
 
@@ -415,7 +426,6 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doSyncReset = useCallback(async () => {
     if (!roomCode || !isHost) return;
-    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     // Host stops locally immediately
     exitPlayRef.current();
     showToast("Sync reset — all devices reloaded");
