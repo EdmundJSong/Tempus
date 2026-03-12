@@ -267,18 +267,13 @@ function useMetronome() {
       }
     }
   }, [clk]);
-  const pendingStart = useRef(null);
-  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } if (pendingStart.current) { clearTimeout(pendingStart.current); pendingStart.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; silentStart.current = 0; rlwl(); }, [rlwl]);
+  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; silentStart.current = 0; rlwl(); }, [rlwl]);
   const start = useCallback((tl, from = 0, ci = 0, s = {}) => {
     stop(); const { syncDelayMs, ...audioSettings } = s; sR.current = { accented: true, pitched: true, muted: false, downbeatOnly: false, silentInterval: 0, ...sR.current, ...audioSettings }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false;
-    const ctx = init();
+    const ctx = init(); if (ctx.state === "suspended") ctx.resume();
     if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { sa.current.play().catch(() => {}); } catch {}
     try { if ("wakeLock" in navigator) navigator.wakeLock.request("screen").then(l => { wl.current = l; }).catch(() => {}); } catch {}
-    const bar = tl[from]; if (!bar) return; ciL.current = bar.isT ? 0 : ci * bar.cpb; pl.current = true;
-    // Defer scheduler start until AudioContext is running so ctx.currentTime is live
-    const launch = () => { if (!pl.current || tmr.current) return; if (pendingStart.current) { clearTimeout(pendingStart.current); pendingStart.current = null; } nb.current = ctx.currentTime + (syncDelayMs != null ? Math.max(0.05, syncDelayMs / 1000) : 0.1); tmr.current = setInterval(sched, 20); };
-    if (ctx.state === "running") { launch(); }
-    else { ctx.resume().then(launch).catch(launch); pendingStart.current = setTimeout(launch, 200); }
+    const bar = tl[from]; if (!bar) return; ciL.current = bar.isT ? 0 : ci * bar.cpb; pl.current = true; nb.current = ctx.currentTime + (syncDelayMs != null ? Math.max(0.05, syncDelayMs / 1000) : 0.1); tmr.current = setInterval(sched, 20);
   }, [stop, init, sched]);
   const updS = useCallback(s => { sR.current = { ...sR.current, ...s }; }, []);
   const setCb = useCallback(cb => { cbR.current = cb; }, []);
