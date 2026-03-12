@@ -108,7 +108,7 @@ async function sendCommand(code, command, extra = {}) {
   const snap = await fs.getDoc(fs.doc(db, "tempus_rooms", code)); if (!snap.exists()) return;
   await fs.updateDoc(fs.doc(db, "tempus_rooms", code), {
     command, commandSeq: (snap.data().commandSeq || 0) + 1,
-    status: command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" ? "stopped" : snap.data().status,
+    status: command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" || command === "sync-reset" ? "stopped" : snap.data().status,
     ...extra
   });
 }
@@ -201,27 +201,34 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (command === "start" || command === "restart") {
       if (!startAtMs) return;
       const delay = startAtMs - Date.now();
-      if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0); }, delay);
-      else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0); }
+      if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, delay);
+      else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }
     } else if (command === "pause") {
       pauseRef.current();
     } else if (command === "resume") {
       const delay = (startAtMs || Date.now()) - Date.now();
       const tl = buildTL(sectionsRef.current || syncState.sections);
       const idx = tl.findIndex(b => b.ab === (syncState.resumeFromBar || 1));
-      const doIt = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx); };
+      const doIt = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); };
       if (delay > 0 && delay < 10000) setTimeout(doIt, delay); else doIt();
     } else if (command === "stop") exitPlayRef.current();
+    else if (command === "sync-reset") { exitPlayRef.current(); }
   }, [syncState?.commandSeq, syncState?.command, syncState?.isAdmitted]);
 
-  // Section updates from host (member side)
+  // Section updates from host (member side) — pulse glow instead of toast
   const lastSectionsJson = useRef(null);
+  const [syncGlowPulse, setSyncGlowPulse] = useState(false);
+  const glowPulseTimer = useRef(null);
   useEffect(() => {
     if (!syncState || isHost || !syncState.isAdmitted) return;
     const j = JSON.stringify(syncState.sections);
-    if (lastSectionsJson.current && lastSectionsJson.current !== j) showToast("Host updated sections");
+    if (lastSectionsJson.current && lastSectionsJson.current !== j) {
+      setSyncGlowPulse(true);
+      if (glowPulseTimer.current) clearTimeout(glowPulseTimer.current);
+      glowPulseTimer.current = setTimeout(() => setSyncGlowPulse(false), 1200);
+    }
     lastSectionsJson.current = j;
-  }, [syncState?.sections, isHost, syncState?.isAdmitted, showToast]);
+  }, [syncState?.sections, isHost, syncState?.isAdmitted]);
 
   // Heartbeat
   useEffect(() => {
@@ -234,6 +241,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (unsubRef.current) unsubRef.current();
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     if (toastTimer.current) clearTimeout(toastTimer.current);
+    if (glowPulseTimer.current) clearTimeout(glowPulseTimer.current);
   }, []);
 
   const doCreateRoom = useCallback(async (displayName) => {
@@ -309,39 +317,62 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     // Host playback triggered by snapshot handler
   }, [roomCode]);
 
-  const doSendSections = useCallback(async () => {
+  // Auto-send sections to Firestore with debounce when host edits (Fix 4)
+  const autoSendTimer = useRef(null);
+  const lastAutoSendJson = useRef(null);
+  useEffect(() => {
+    if (!roomCode || !isHost) return;
+    const j = JSON.stringify(sections);
+    if (j === lastAutoSendJson.current) return;
+    lastAutoSendJson.current = j;
+    if (autoSendTimer.current) clearTimeout(autoSendTimer.current);
+    autoSendTimer.current = setTimeout(async () => {
+      try { await updateRoomSections(roomCode, sections); } catch {}
+    }, 2000);
+    return () => { if (autoSendTimer.current) clearTimeout(autoSendTimer.current); };
+  }, [sections, roomCode, isHost]);
+
+  const doSyncReset = useCallback(async () => {
     if (!roomCode || !isHost) return;
     await updateRoomSections(roomCode, sectionsRef.current);
-    showToast("Sections sent to all members");
+    await sendCommand(roomCode, "sync-reset");
+    showToast("Sync reset — all devices reloaded");
   }, [roomCode, isHost, showToast]);
 
   const isMemberLocked = isInRoom && !isHost;
 
   return {
-    syncState, showLobby, setShowLobby, toast,
+    syncState, showLobby, setShowLobby, toast, syncGlowPulse,
     isHost, isInRoom, isMemberLocked, roomCode, deviceId,
     doCreateRoom, doJoinRoom, doLeaveRoom,
     doAdmit, doAdmitAll, doKick, doKickAll,
-    doStart, doPause, doResume, doStop, doRestart, doSendSections,
+    doStart, doPause, doResume, doStop, doRestart, doSyncReset,
     SYNC_COLOR, SYNC_GLOW
   };
 }
 
 // ============ SYNC STATUS BAR (persistent strip below header when in room) ============
 export function SyncStatusBar({ sync, onOpenLobby }) {
-  const { syncState, isHost, doSendSections, doStart, doStop, doRestart, doResume, doLeaveRoom, SYNC_COLOR } = sync;
+  const { syncState, isHost, doSyncReset, doStart, doStop, doRestart, doResume, doLeaveRoom, SYNC_COLOR } = sync;
   const members = syncState?.members || {};
   const pending = syncState?.pending || {};
   const memberCount = Object.keys(members).length;
   const pendingCount = Object.keys(pending).length;
   const status = syncState?.status || "lobby";
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const lt = useRef(null);
-  useEffect(() => () => { if (lt.current) clearTimeout(lt.current); }, []);
+  const rt = useRef(null);
+  useEffect(() => () => { if (lt.current) clearTimeout(lt.current); if (rt.current) clearTimeout(rt.current); }, []);
 
   const handleLeave = () => {
     if (confirmLeave) { doLeaveRoom(); setConfirmLeave(false); }
     else { setConfirmLeave(true); if (lt.current) clearTimeout(lt.current); lt.current = setTimeout(() => setConfirmLeave(false), 3000); }
+  };
+
+  const handleSyncReset = () => {
+    if (confirmReset) { doSyncReset(); setConfirmReset(false); if (rt.current) clearTimeout(rt.current); }
+    else { setConfirmReset(true); if (rt.current) clearTimeout(rt.current); rt.current = setTimeout(() => setConfirmReset(false), 3000); }
   };
 
   const sb = (clr = C.textMuted, bg = "transparent", bdr = C.border) => ({
@@ -359,7 +390,7 @@ export function SyncStatusBar({ sync, onOpenLobby }) {
       <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{memberCount}</span>
       <div style={{ flex: 1 }} />
 
-      {isHost && <button onClick={doSendSections} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>Send</button>}
+      {isHost && <button onClick={handleSyncReset} style={sb(confirmReset ? "#000" : SYNC_COLOR, confirmReset ? SYNC_COLOR : SYNC_COLOR + "15", SYNC_COLOR + (confirmReset ? "" : "55"))}>{confirmReset ? "Confirm?" : "Sync Reset"}</button>}
       {isHost && (status === "lobby" || status === "stopped") && <button onClick={doStart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>Start</button>}
       {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>Stop</button>}
       {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>Resume</button>}
@@ -424,10 +455,14 @@ export function SyncLobby({ sync, onLoadSections }) {
   const pendingList = Object.entries(pending);
   const memberCount = Object.keys(members).length;
 
-  // Member: auto-close lobby once admitted (section loading handled by App.jsx)
+  // Member: auto-close lobby once admitted (fire only on pending→admitted transition)
+  const admitClosedRef = useRef(false);
   useEffect(() => {
-    if (!isInRoom || isHost) return;
-    if (syncState?.isAdmitted) setTimeout(() => setShowLobby(false), 400);
+    if (!isInRoom || isHost) { admitClosedRef.current = false; return; }
+    if (syncState?.isAdmitted && !admitClosedRef.current) {
+      admitClosedRef.current = true;
+      setTimeout(() => setShowLobby(false), 400);
+    }
   }, [syncState?.isAdmitted, isHost, isInRoom]);
 
   const mBg = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" };
