@@ -25,14 +25,20 @@ async function getFS() {
 
 function genRoomCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
 
-async function createRoom(sections, settings) {
+async function createRoom(sections, settings, _retries = 0) {
+  if (_retries >= 10) throw new Error("Could not generate a unique room code");
   const db = await fbInit(); if (!db) throw new Error("Firebase not available");
   const fs = await getFS();
   const code = genRoomCode();
   const deviceId = getDeviceId();
   const existing = await fs.getDoc(fs.doc(db, "tempus_rooms", code));
-  if (existing.exists() && existing.data().createdAt && (Date.now() - existing.data().createdAt) < 3600000) {
-    return createRoom(sections, settings);
+  if (existing.exists()) {
+    const d = existing.data();
+    const isRecent = d.createdAt && (Date.now() - d.createdAt) < 3600000;
+    const hasActiveMembers = d.members && Object.values(d.members).some(m => m.lastSeen && (Date.now() - m.lastSeen) < STALE_MS * 2);
+    if (isRecent || hasActiveMembers) {
+      return createRoom(sections, settings, _retries + 1);
+    }
   }
   await fs.setDoc(fs.doc(db, "tempus_rooms", code), {
     code, hostId: deviceId, hostName: "", status: "lobby",
@@ -128,7 +134,7 @@ async function leaveRoom(code) {
 }
 
 // ============ useSync HOOK ============
-export function useSync({ sections, settings, met, go, exitPlay }) {
+export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const [syncState, setSyncState] = useState(null);
   const [showLobby, setShowLobby] = useState(false);
   const [toast, setToast] = useState(null);
@@ -137,10 +143,11 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
   const lastCmdSeq = useRef(0);
   const originalSections = useRef(null);
   const toastTimer = useRef(null);
-  const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const sectionsRef = useRef(sections);
+  const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const pauseRef = useRef(pause); const sectionsRef = useRef(sections);
   useEffect(() => { goRef.current = go; }, [go]);
   useEffect(() => { metRef.current = met; }, [met]);
   useEffect(() => { exitPlayRef.current = exitPlay; }, [exitPlay]);
+  useEffect(() => { pauseRef.current = pause; }, [pause]);
   useEffect(() => { sectionsRef.current = sections; }, [sections]);
 
   const deviceId = useMemo(() => getDeviceId(), []);
@@ -185,9 +192,9 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
     });
   }, [showToast]);
 
-  // Handle incoming commands (member side)
+  // Handle incoming commands (host AND members — both react to snapshot for perfect sync)
   useEffect(() => {
-    if (!syncState || isHost || !syncState.isAdmitted) return;
+    if (!syncState || !syncState.isAdmitted) return;
     const { commandSeq, command, startAtMs } = syncState;
     if (commandSeq <= lastCmdSeq.current) return;
     lastCmdSeq.current = commandSeq;
@@ -196,14 +203,14 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
       const delay = startAtMs - Date.now();
       if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0); }, delay);
       else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0); }
-    } else if (command === "pause") metRef.current.stop();
-    else if (command === "resume") {
-      const startAt = startAtMs || Date.now();
-      const delay = startAt - Date.now();
-      const tl = buildTL(syncState.sections || sectionsRef.current);
+    } else if (command === "pause") {
+      pauseRef.current();
+    } else if (command === "resume") {
+      const delay = (startAtMs || Date.now()) - Date.now();
+      const tl = buildTL(sectionsRef.current || syncState.sections);
       const idx = tl.findIndex(b => b.ab === (syncState.resumeFromBar || 1));
-      const doResume = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx); };
-      if (delay > 0 && delay < 10000) setTimeout(doResume, delay); else doResume();
+      const doIt = () => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx); };
+      if (delay > 0 && delay < 10000) setTimeout(doIt, delay); else doIt();
     } else if (command === "stop") exitPlayRef.current();
   }, [syncState?.commandSeq, syncState?.command, syncState?.isAdmitted]);
 
@@ -248,7 +255,7 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
     try {
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
       const { admitted } = await joinRoomPending(code, displayName);
-      lastCmdSeq.current = 0; originalSections.current = [...sectionsRef.current];
+      lastCmdSeq.current = 0; originalSections.current = JSON.parse(JSON.stringify(sectionsRef.current));
       setSyncState({ code, role: "member", status: "lobby", members: {}, pending: {},
         sections: [], commandSeq: 0, command: null, isPending: !admitted, isAdmitted: admitted });
       await subscribeToRoom(code, "member"); return true;
@@ -273,30 +280,33 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
     if (!roomCode) return; try { metRef.current.tap(); } catch {}
     const t = Date.now() + 1500;
     await sendCommand(roomCode, "start", { startAtMs: t });
-    setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0); }, Math.max(0, t - Date.now()));
+    // Host playback triggered by snapshot handler, same as members
   }, [roomCode]);
 
   const doPause = useCallback(async () => {
-    if (!roomCode) return; await sendCommand(roomCode, "pause"); metRef.current.stop();
+    if (!roomCode) return;
+    await sendCommand(roomCode, "pause");
+    // Host pause triggered by snapshot handler
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
     if (!roomCode) return; try { metRef.current.tap(); } catch {}
     const t = Date.now() + 1500;
     await sendCommand(roomCode, "resume", { startAtMs: t, resumeFromBar: barNum });
-    const tl = buildTL(sectionsRef.current); const idx = tl.findIndex(b => b.ab === barNum);
-    setTimeout(() => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx); else goRef.current(0); }, Math.max(0, t - Date.now()));
+    // Host playback triggered by snapshot handler
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
-    if (!roomCode) return; await sendCommand(roomCode, "stop"); exitPlayRef.current();
+    if (!roomCode) return;
+    await sendCommand(roomCode, "stop");
+    // Host stop triggered by snapshot handler
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
     if (!roomCode) return; try { metRef.current.tap(); } catch {}
     const t = Date.now() + 1500;
     await sendCommand(roomCode, "restart", { startAtMs: t });
-    setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0); }, Math.max(0, t - Date.now()));
+    // Host playback triggered by snapshot handler
   }, [roomCode]);
 
   const doSendSections = useCallback(async () => {
@@ -305,9 +315,11 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
     showToast("Sections sent to all members");
   }, [roomCode, isHost, showToast]);
 
+  const isMemberLocked = isInRoom && !isHost;
+
   return {
     syncState, showLobby, setShowLobby, toast,
-    isHost, isInRoom, roomCode, deviceId,
+    isHost, isInRoom, isMemberLocked, roomCode, deviceId,
     doCreateRoom, doJoinRoom, doLeaveRoom,
     doAdmit, doAdmitAll, doKick, doKickAll,
     doStart, doPause, doResume, doStop, doRestart, doSendSections,
@@ -317,7 +329,7 @@ export function useSync({ sections, settings, met, go, exitPlay }) {
 
 // ============ SYNC STATUS BAR (persistent strip below header when in room) ============
 export function SyncStatusBar({ sync, onOpenLobby }) {
-  const { syncState, isHost, doSendSections, doStart, doStop, doRestart, doLeaveRoom, SYNC_COLOR } = sync;
+  const { syncState, isHost, doSendSections, doStart, doStop, doRestart, doResume, doLeaveRoom, SYNC_COLOR } = sync;
   const members = syncState?.members || {};
   const pending = syncState?.pending || {};
   const memberCount = Object.keys(members).length;
@@ -350,6 +362,7 @@ export function SyncStatusBar({ sync, onOpenLobby }) {
       {isHost && <button onClick={doSendSections} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>Send</button>}
       {isHost && (status === "lobby" || status === "stopped") && <button onClick={doStart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>Start</button>}
       {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>Stop</button>}
+      {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>Resume</button>}
       {isHost && status === "paused" && <button onClick={doRestart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>Restart</button>}
       {isHost && (pendingCount > 0 || memberCount > 1) && <button onClick={onOpenLobby} style={sb(SYNC_COLOR, "transparent", SYNC_COLOR + "55")}>{pendingCount > 0 ? `${pendingCount} pending` : "Manage"}</button>}
       <button onClick={handleLeave} style={sb(confirmLeave ? C.danger : C.textMuted, confirmLeave ? C.danger + "15" : "transparent", confirmLeave ? C.danger + "55" : C.border)}>{confirmLeave ? "Leave?" : I.x(12)}</button>
