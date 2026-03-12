@@ -187,6 +187,24 @@ async function calibrateClock() {
   } catch { return 0; }
 }
 
+// Lightweight single-ping recalibration (for periodic refresh, not initial setup)
+async function recalibrateSingle() {
+  try {
+    const db = await fbInit(); if (!db) return null;
+    const fs = await getFS();
+    const deviceId = getDeviceId();
+    const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
+    const localBefore = Date.now();
+    await fs.setDoc(calRef, { t: fs.serverTimestamp() });
+    const localAfter = Date.now();
+    const snap = await fs.getDoc(calRef);
+    const serverMs = snap.data()?.t?.toMillis?.();
+    try { await fs.deleteDoc(calRef); } catch {}
+    if (serverMs) return ((localBefore + localAfter) / 2) - serverMs;
+    return null;
+  } catch { return null; }
+}
+
 // ============ useSync HOOK ============
 export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const [syncState, setSyncState] = useState(null);
@@ -307,10 +325,20 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     lastSectionsJson.current = j;
   }, [syncState?.sections, isHost, syncState?.isAdmitted]);
 
-  // Heartbeat
+  // Heartbeat + periodic clock recalibration
+  const heartbeatCount = useRef(0);
   useEffect(() => {
     if (!roomCode) return;
-    heartbeatRef.current = setInterval(() => heartbeat(roomCode), HEARTBEAT_MS);
+    heartbeatCount.current = 0;
+    heartbeatRef.current = setInterval(async () => {
+      heartbeat(roomCode);
+      heartbeatCount.current++;
+      // Recalibrate every 3rd heartbeat (~30s) to combat clock drift
+      if (heartbeatCount.current % 3 === 0) {
+        const newOffset = await recalibrateSingle();
+        if (newOffset != null) clockOffsetRef.current = newOffset;
+      }
+    }, HEARTBEAT_MS);
     return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
   }, [roomCode]);
 
