@@ -5,7 +5,7 @@ import { fbInit, getDeviceId, C, I, buildTL, nI } from "./App";
 const SYNC_COLOR = "#06b6d4";
 const SYNC_GLOW = "rgba(6, 182, 212, 0.4)";
 const MAX_MEMBERS = 20;
-const HEARTBEAT_MS = 5000;
+const HEARTBEAT_MS = 10000;
 const STALE_MS = 15000;
 
 // ============ SYNC ICON ============
@@ -118,18 +118,37 @@ async function updateRoomSections(code, sections) {
   await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { sections: JSON.parse(JSON.stringify(sections)) });
 }
 
+// Heartbeats write to a SEPARATE subcollection to avoid triggering room snapshot on every tick
 async function heartbeat(code) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
-  try { await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${getDeviceId()}.lastSeen`]: Date.now() }); } catch {}
+  const deviceId = getDeviceId();
+  try {
+    await fs.setDoc(fs.doc(db, "tempus_rooms", code, "presence", deviceId), { lastSeen: Date.now() }, { merge: true });
+  } catch {}
+}
+
+// Read presence for stale detection (one-time read, not a listener)
+async function readPresence(code) {
+  try {
+    const db = await fbInit(); if (!db) return {};
+    const fs = await getFS();
+    const snap = await fs.getDocs(fs.collection(db, "tempus_rooms", code, "presence"));
+    const result = {};
+    snap.forEach(doc => { result[doc.id] = doc.data(); });
+    return result;
+  } catch { return {}; }
 }
 
 async function leaveRoom(code) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
   const ref = fs.doc(db, "tempus_rooms", code);
+  const deviceId = getDeviceId();
   try {
+    // Clean up presence subcollection doc
+    try { await fs.deleteDoc(fs.doc(db, "tempus_rooms", code, "presence", deviceId)); } catch {}
     const snap = await fs.getDoc(ref); if (!snap.exists()) return;
-    if (snap.data().hostId === getDeviceId()) await fs.deleteDoc(ref);
-    else await fs.updateDoc(ref, { [`members.${getDeviceId()}`]: fs.deleteField(), [`pending.${getDeviceId()}`]: fs.deleteField() });
+    if (snap.data().hostId === deviceId) await fs.deleteDoc(ref);
+    else await fs.updateDoc(ref, { [`members.${deviceId}`]: fs.deleteField(), [`pending.${deviceId}`]: fs.deleteField() });
   } catch {}
 }
 
@@ -473,9 +492,20 @@ export function SyncLobby({ sync, onLoadSections }) {
   const [confirmKickId, setConfirmKickId] = useState(null);
   const [confirmKickAll, setConfirmKickAll] = useState(false);
   const kt = useRef(null); const kat = useRef(null);
+  const [presence, setPresence] = useState({});
 
   useEffect(() => { if (isInRoom) setView("room"); }, [isInRoom]);
   useEffect(() => () => { if (kt.current) clearTimeout(kt.current); if (kat.current) clearTimeout(kat.current); }, []);
+
+  // Poll presence subcollection when viewing room (for stale detection)
+  useEffect(() => {
+    if (view !== "room" || !syncState?.code) return;
+    let active = true;
+    const poll = async () => { const p = await readPresence(syncState.code); if (active) setPresence(p); };
+    poll();
+    const iv = setInterval(poll, 12000);
+    return () => { active = false; clearInterval(iv); };
+  }, [view, syncState?.code]);
 
   const handleCreate = async () => {
     if (!name.trim()) { setError("Enter your display name"); return; }
@@ -630,7 +660,8 @@ export function SyncLobby({ sync, onLoadSections }) {
           <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || "Host"}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>HOST</span></div>
         </div>
         {memberList.map(([id, info]) => {
-          const stale = info.lastSeen && (Date.now() - info.lastSeen) > STALE_MS;
+          const pres = presence[id];
+          const stale = pres?.lastSeen ? (Date.now() - pres.lastSeen) > STALE_MS : false;
           return (<div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: stale ? C.textMuted : SYNC_COLOR, flexShrink: 0, boxShadow: stale ? "none" : `0 0 6px ${SYNC_COLOR}` }} />
             <div style={{ flex: 1, fontSize: 13, color: stale ? C.textMuted : C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "Unknown"}</div>
