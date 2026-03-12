@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
+import { useSync, SyncLobby, SyncToast, SyncIcon } from "./SyncMode";
 
 // ============ ICONS ============
 const Icon = ({ d, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 24 24" }) => (
@@ -7,7 +8,7 @@ const Icon = ({ d, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 2
       : React.isValidElement(d) ? d : <path d={d} vectorEffect="non-scaling-stroke" />}
   </svg>
 );
-const I = {
+export const I = {
   play: s => <Icon size={s || 18} d="M5 3l14 9-14 9V3z" fill="none" strokeWidth={1.5} />,
   pause: s => <Icon size={s || 18} d={[<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />, <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />]} />,
   chevL: s => <Icon size={s || 18} d="M15 18l-6-6 6-6" />,
@@ -37,7 +38,7 @@ const I = {
 // ============ CONSTANTS ============
 const BU = [{ id: "w", q: 4 }, { id: "h", q: 2 }, { id: "q", q: 1 }, { id: "e", q: 0.5 }, { id: "16", q: 0.25 }, { id: "32", q: 0.125 }];
 const D2Q = { 1: 4, 2: 2, 4: 1, 8: 0.5, 16: 0.25, 32: 0.125 };
-const C = { bg: "#07070a", surface: "#111116", surfaceHover: "#1a1a22", border: "#25252e", text: "#eeeef0", textMuted: "#848492", downbeat: "#f0a030", accent: "#8b7cf6", sub: "#3a3a45", danger: "#ef4444", record: "#ef4444", practice: "#22c55e", glowDownbeat: "rgba(240, 160, 48, 0.4)", glowPractice: "rgba(34, 197, 94, 0.4)", glowRecord: "rgba(239, 68, 68, 0.4)" };
+export const C = { bg: "#07070a", surface: "#111116", surfaceHover: "#1a1a22", border: "#25252e", text: "#eeeef0", textMuted: "#848492", downbeat: "#f0a030", accent: "#8b7cf6", sub: "#3a3a45", danger: "#ef4444", record: "#ef4444", practice: "#22c55e", glowDownbeat: "rgba(240, 160, 48, 0.4)", glowPractice: "rgba(34, 197, 94, 0.4)", glowRecord: "rgba(239, 68, 68, 0.4)" };
 const mkM = () => ({ id: Date.now() + Math.random(), type: "metered", tsNum: 4, tsDen: 4, beatUnit: "q", dotted: false, tempo: 120, bars: 8, grouping: "1+1+1+1", curve: "constant", endTempo: 120, loop: false, expressive: false, beatMap: null });
 const mkT = () => ({ id: Date.now() + Math.random(), type: "timed", duration: 10, markers: "" });
 const SK = "tempus_profiles";
@@ -60,7 +61,7 @@ const FIREBASE_CONFIG = {
 const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY" && FIREBASE_CONFIG.apiKey !== "disabled";
 
 let _fb = null, _fbDb = null;
-async function fbInit() {
+export async function fbInit() {
   if (_fb) return _fbDb;
   if (!FB_ENABLED) return null;
   try {
@@ -74,7 +75,7 @@ async function fbInit() {
 
 function _getCookie(k) { const m = document.cookie.match(new RegExp("(?:^|; )" + k + "=([^;]*)")); return m ? decodeURIComponent(m[1]) : null; }
 function _setCookie(k, v) { const d = new Date(); d.setFullYear(d.getFullYear() + 2); document.cookie = k + "=" + encodeURIComponent(v) + ";expires=" + d.toUTCString() + ";path=/;SameSite=Lax"; }
-function getDeviceId() {
+export function getDeviceId() {
   let id = _getLS("tempus_device_id") || _getCookie("tempus_device_id");
   if (!id) { id = "t_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8); }
   _setLS("tempus_device_id", id); _setCookie("tempus_device_id", id);
@@ -147,7 +148,7 @@ function getEmbedUrl(url) {
   return null;
 }
 
-function buildTL(sections) {
+export function buildTL(sections) {
   const bars = []; let at = 0, ab = 1;
   sections.forEach((s, si) => {
     if (s.type === "timed") { bars.push({ si, bin: 1, ab: ab, st: at, dur: s.duration, cd: s.duration, tempo: 0, tsN: 0, tsD: 0, bts: [0], cpb: 1, isT: true, tDur: s.duration, mk: pM(s.markers) }); at += s.duration; ab++; return; }
@@ -205,8 +206,19 @@ function useMetronome() {
   const rwl = useCallback(async () => { try { if ("wakeLock" in navigator) wl.current = await navigator.wakeLock.request("screen"); } catch { } if (sa.current && sa.current.paused) { try { await sa.current.play(); } catch { } } }, []);
   const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) { sa.current.pause(); sa.current.currentTime = 0; } }, []);
   const prime = useCallback(async () => { const ctx = init(); if (ctx.state === "suspended") await ctx.resume(); return ctx; }, [init]);
+  const silentStart = useRef(0);
   const clk = useCallback((ctx, time, bt) => {
-    const { accented, pitched, muted } = sR.current; if (muted) return; const e = accented ? bt : 2;
+    const { accented, pitched, muted, downbeatOnly, silentInterval } = sR.current; if (muted) return;
+    // Downbeat-only: skip non-downbeats
+    if (downbeatOnly && bt !== 0) return;
+    // Silent interval: alternate audible/silent in equal durations
+    if (silentInterval > 0) {
+      if (silentStart.current === 0) silentStart.current = ctx.currentTime;
+      const elapsed = ctx.currentTime - silentStart.current;
+      const phase = elapsed % (silentInterval * 2);
+      if (phase >= silentInterval) return; // in silent phase
+    }
+    const e = accented ? bt : 2;
     if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
     if (pitched) { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.08); }
     else { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++)d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(time); src.stop(time + 0.06); }
@@ -255,9 +267,9 @@ function useMetronome() {
       }
     }
   }, [clk]);
-  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; rlwl(); }, [rlwl]);
+  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; silentStart.current = 0; rlwl(); }, [rlwl]);
   const start = useCallback((tl, from = 0, ci = 0, s = {}) => {
-    stop(); sR.current = { accented: true, pitched: true, muted: false, ...s }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false;
+    stop(); sR.current = { accented: true, pitched: true, muted: false, downbeatOnly: false, silentInterval: 0, ...sR.current, ...s }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false;
     const ctx = init(); if (ctx.state === "suspended") ctx.resume();
     if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { sa.current.play().catch(() => {}); } catch {}
     try { if ("wakeLock" in navigator) navigator.wakeLock.request("screen").then(l => { wl.current = l; }).catch(() => {}); } catch {}
@@ -271,7 +283,7 @@ function useMetronome() {
 }
 
 // ============ STYLES ============
-const nI = { width: 62, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.text, textAlign: "center", fontSize: 18, borderRadius: 8, fontFamily: "'DM Mono',monospace", outline: "none", margin: "0 6px" };
+export const nI = { width: 62, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.text, textAlign: "center", fontSize: 18, borderRadius: 8, fontFamily: "'DM Mono',monospace", outline: "none", margin: "0 6px" };
 const sB = { width: 48, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" };
 const oB = on => ({ padding: "8px 16px", borderRadius: 8, border: `1px solid ${on ? C.downbeat : C.border}`, background: on ? C.downbeat + "15" : "transparent", color: on ? C.downbeat : C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" });
 
@@ -595,7 +607,7 @@ const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border
 // ============ VIDEO VIEW ============
 function fmtTime(s) { if (s == null) return "--:--.-"; const m = Math.floor(s / 60), sec = s % 60; return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`; }
 
-function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, settings, muted, onUpdateSections, videoSync: initSync, onEditSection, onAddSection, onDeleteSection, onMoveSection }) {
+function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, settings, muted, onUpdateSections, videoSync: initSync, onEditSection, onAddSection, onDeleteSection, onMoveSection, loadedProfileId }) {
   const containerRef = useRef(null);
   const playerRef = useRef(null);
   const [ready, setReady] = useState(false);
@@ -604,6 +616,17 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   const [duration, setDuration] = useState(0);
   const [startPt, setStartPt] = useState(initSync?.start ?? null);
   const [endPt, setEndPt] = useState(initSync?.end ?? null);
+  // Dirty tracking: snapshot initial state to detect unsaved changes
+  const initSnap = useRef({ sections: JSON.stringify(sections), startPt: initSync?.start ?? null, endPt: initSync?.end ?? null });
+  const isDirty = useCallback(() => {
+    return JSON.stringify(sections) !== initSnap.current.sections || startPt !== initSnap.current.startPt || endPt !== initSnap.current.endPt;
+  }, [sections, startPt, endPt]);
+  const [showClosePrompt, setShowClosePrompt] = useState(false);
+  const handleClose = () => {
+    if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); syncActiveRef.current = false; }
+    if (isDirty()) { setShowClosePrompt(true); return; }
+    onClose();
+  };
   const pollRef = useRef(null);
   const [syncActive, setSyncActive] = useState(false);
   const [syncBar, setSyncBar] = useState(null);
@@ -611,6 +634,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   const [syncCountIn, setSyncCountIn] = useState(false); // true during count-in
   const syncCbRef = useRef(null);
   const [vidCountIn, setVidCountIn] = useState(settings.countIn || 1); // 0, 1, 2 bars
+  const [showVidSave, setShowVidSave] = useState(false);
   // Refs for YouTube callback (avoids stale closures)
   const syncActiveRef = useRef(false);
   const syncBarRef = useRef(null);
@@ -845,9 +869,13 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       const fromBar = syncBar ? tl.findIndex(b => b.ab === syncBar.ab) : 0;
       const idx = Math.max(0, fromBar >= 0 ? fromBar : 0);
       seekVideoToBar(idx);
+      const useCI = vidCountIn > 0;
+      countingInRef.current = useCI;
+      setSyncCountIn(useCI);
       setTimeout(() => {
-        if (playerRef.current) playerRef.current.playVideo();
-        met.tap(); met.start(tl, idx, 0, { accented: settings.accented, pitched: settings.pitched, muted });
+        // Don't start video yet if counting in — callback will start it after count-in
+        if (!useCI && playerRef.current) playerRef.current.playVideo();
+        met.tap(); met.start(tl, idx, vidCountIn, { accented: settings.accented, pitched: settings.pitched, muted });
         setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
       }, 150);
     }
@@ -921,9 +949,9 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px", flexShrink: 0 }}>
         <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
         <div style={{ display: "flex", gap: 6 }}>
-          <button onClick={() => setVidCountIn(v => (v + 1) % 3)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${vidCountIn > 0 ? C.accent + "55" : C.border}`, background: "transparent", color: vidCountIn > 0 ? C.accent : C.textMuted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace" }}>{vidCountIn === 0 ? "No CI" : `${vidCountIn} CI`}</button>
-          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Save</button>}
-          <button className="close-btn" onClick={() => { if (syncActive) { if (playerRef.current) playerRef.current.pauseVideo(); met.stop(); setSyncActive(false); syncActiveRef.current = false; } onClose(); }}>{I.x(18)}</button>
+          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Sync</button>}
+          <button onClick={() => setShowVidSave(true)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(14)}</button>
+          <button className="close-btn" onClick={handleClose}>{I.x(18)}</button>
         </div>
       </div>
 
@@ -1070,36 +1098,62 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
 
       {/* Transport */}
       <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "center", padding: "8px 0 20px", flexShrink: 0 }}>
-        <button onClick={syncPlayFromStart} style={{ ...tS, width: 40, height: 40 }}>{I.restart(18)}</button>
-        <button onClick={syncToggle} style={{ width: 52, height: 52, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{syncActive ? I.pause(20) : I.play(20)}</button>
+        <button onClick={syncPlayFromStart} style={{ ...tS, width: 40, height: 40, flexShrink: 0 }}>{I.restart(18)}</button>
+        <button onClick={syncToggle} style={{ width: 52, height: 52, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{syncActive ? I.pause(20) : I.play(20)}</button>
+        <button onClick={() => setVidCountIn(v => (v + 1) % 3)} style={{ padding: "4px 6px", borderRadius: 8, border: `1px solid ${vidCountIn > 0 ? C.accent + "55" : C.border}`, background: vidCountIn > 0 ? C.accent + "15" : "transparent", color: vidCountIn > 0 ? C.accent : C.textMuted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace", width: 48, textAlign: "center", flexShrink: 0 }}>{vidCountIn === 0 ? "Off" : vidCountIn === 1 ? "1 Bar" : "2 Bars"}</button>
       </div>
 
       {!hasSync && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube, Vimeo, and SoundCloud.</div></div>}
       </div>
+      {showVidSave && <SaveM sections={sections} onClose={() => { setShowVidSave(false); initSnap.current = { sections: JSON.stringify(sections), startPt, endPt }; if (showClosePrompt) { setShowClosePrompt(false); onClose(); } }} onSaved={() => {}} videoUrl={videoUrl} videoSync={{ start: startPt, end: endPt }} loadedProfileId={loadedProfileId} />}
+      {showClosePrompt && !showVidSave && <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowClosePrompt(false)}>
+        <div className="modal-content" style={{ width: "100%", maxWidth: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, padding: "24px 20px", textAlign: "center" }} onClick={e => e.stopPropagation()}>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>Unsaved Changes</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20, fontFamily: "'Outfit',sans-serif" }}>You have unsaved changes in this session.</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <button onClick={() => { setShowClosePrompt(false); setShowVidSave(true); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Save Changes</button>
+            <button onClick={() => { setShowClosePrompt(false); onClose(); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.danger}55`, background: "transparent", color: C.danger, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Discard</button>
+            <button onClick={() => setShowClosePrompt(false)} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Cancel</button>
+          </div>
+        </div>
+      </div>}
     </div>
   );
 }
 
 // ============ SETTINGS / SAVE / LIBRARY ============
+// AGENT NOTE: Do NOT add inline description text beneath settings rows.
+// All setting explanations should use data-tip or data-tip-b tooltip attributes only.
+// Keep the settings UI clean and minimal — no prose descriptions.
 function SetP({ settings: s, onChange, onClose }) {
   const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
     <SR l="Mode">{["basic", "default", "advanced"].map(v => <button key={v} onClick={() => u("appMode", v)} style={{ ...oB(s.appMode === v), textTransform: "capitalize" }}>{v}</button>)}</SR>
-    <div style={{ fontSize: 11, color: C.textMuted, marginTop: -8, marginBottom: 14, marginLeft: 82, fontFamily: "'Outfit',sans-serif", lineHeight: 1.5 }}>{s.appMode === "basic" ? "Tempo, time signature, bars, and loop only" : s.appMode === "advanced" ? "Per-beat tempo mapping, fermata, grouping builder" : "Grouping, curves, record, practice, library"}</div>
-    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? "Accented" : "Flat"}</button>)}</SR><SR l="Sound">{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "Pitched" : "Unpitched"}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR>
+    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} data-tip={v === "accented" ? "Accented" : "Flat"} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>)}{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} data-tip={v === "pitched" ? "Pitched" : "Unpitched"} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "♪" : "✕"}</button>)}</SR><SR l="Beats">{[false, true].map(v => <button key={String(v)} onClick={() => u("downbeatOnly", v)} style={oB(s.downbeatOnly === v)}>{v ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR>
+    {s.appMode === "advanced" && <SR l="Silent Cycle"><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[0, 4, 8, 12, 16].map(v => <button key={v} onClick={() => u("silentInterval", v)} data-tip={v === 0 ? "Always audible" : `${v}s on, ${v}s off, repeating`} style={{ ...oB(s.silentInterval === v), fontSize: 11 }}>{v === 0 ? "Off" : `${v}s`}</button>)}</div></SR>}
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
       <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>Device ID: {getDeviceId()}</div>
       <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>Your data is stored locally and backed up anonymously.</div>
     </div></div></div>);
 }
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
-function SaveM({ sections, onClose, onSaved, videoUrl: savedVideoUrl, videoSync: savedVideoSync }) {
-  const [t, sT] = useState(""), [c, sC] = useState(""), [perf, setPerf] = useState(""), [vUrl, setVUrl] = useState(savedVideoUrl || ""); const ok = t.trim() && c.trim(); const go = () => { if (!ok) return; const p = ldP(); const profile = { id: Date.now(), title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (perf.trim()) profile.performer = perf.trim(); if (vUrl.trim()) profile.videoUrl = vUrl.trim(); if (savedVideoSync) profile.videoSync = savedVideoSync; p.push(profile); svP(p); onSaved(); onClose(); }; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Save Piece</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
+function SaveM({ sections, onClose, onSaved, videoUrl: savedVideoUrl, videoSync: savedVideoSync, loadedProfileId }) {
+  const existing = useMemo(() => { if (!loadedProfileId) return null; const p = ldP(); return p.find(x => x.id === loadedProfileId) || null; }, [loadedProfileId]);
+  const [t, sT] = useState(existing?.title || ""), [c, sC] = useState(existing?.composer || ""), [perf, setPerf] = useState(existing?.performer || ""), [vUrl, setVUrl] = useState(savedVideoUrl || existing?.videoUrl || "");
+  const ok = t.trim() && c.trim();
+  const saveNew = () => { if (!ok) return; const p = ldP(); const id = Date.now(); const profile = { id, title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (perf.trim()) profile.performer = perf.trim(); if (vUrl.trim()) profile.videoUrl = vUrl.trim(); if (savedVideoSync) profile.videoSync = savedVideoSync; p.push(profile); svP(p); onSaved(id); onClose(); };
+  const overwrite = () => { if (!ok || !loadedProfileId) return; const p = ldP(); const idx = p.findIndex(x => x.id === loadedProfileId); if (idx < 0) { saveNew(); return; } p[idx] = { ...p[idx], title: t.trim(), composer: c.trim(), performer: perf.trim() || undefined, videoUrl: vUrl.trim() || undefined, videoSync: savedVideoSync || p[idx].videoSync, sections, updatedAt: new Date().toISOString() }; svP(p); onSaved(loadedProfileId); onClose(); };
+  return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{existing ? "Update Piece" : "Save Piece"}</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
     <input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
     <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
     <input value={perf} onChange={e => setPerf(e.target.value)} placeholder="Performer / Ensemble (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 13, color: C.textMuted }} />
     <input value={vUrl} onChange={e => setVUrl(e.target.value)} placeholder="Video URL (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 13, color: C.textMuted }} />
-    <button onClick={go} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button>
+    {existing ? (<div style={{ display: "flex", gap: 8 }}>
+      <button onClick={overwrite} style={{ flex: 1, padding: "12px", borderRadius: 8, border: "none", background: ok ? C.accent : C.sub, color: ok ? "#fff" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Update</button>
+      <button onClick={saveNew} style={{ flex: 1, padding: "12px", borderRadius: 8, border: `1px solid ${ok ? C.downbeat : C.sub}`, background: "transparent", color: ok ? C.downbeat : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save New</button>
+    </div>) : (
+      <button onClick={saveNew} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button>
+    )}
   </div></div>);
 }
 function LibP({ onLoad, onClose }) {
@@ -1147,7 +1201,7 @@ function LibP({ onLoad, onClose }) {
       <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
       {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
     </div>
-    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}><div style={{ opacity: 0.15, transform: "scale(1.2)" }}>{I.folder(48)}</div><div style={{ fontSize: 16, color: C.textMuted }}>{p.length === 0 ? "Your Library is empty" : "No pieces found"}</div><div style={{ fontSize: 13, color: C.border, maxWidth: "80%" }}>{p.length === 0 ? "Save your sections into profiles to quickly load them later." : "Try adjusting your search query."}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null, x.videoSync || null); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}{x.performer ? ` · ${x.performer}` : ""}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}><div style={{ opacity: 0.15, transform: "scale(1.2)" }}>{I.folder(48)}</div><div style={{ fontSize: 16, color: C.textMuted }}>{p.length === 0 ? "Your Library is empty" : "No pieces found"}</div><div style={{ fontSize: 13, color: C.border, maxWidth: "80%" }}>{p.length === 0 ? "Save your sections into profiles to quickly load them later." : "Try adjusting your search query."}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null, x.videoSync || null, x.id); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}{x.performer ? ` · ${x.performer}` : ""}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
   </div></div>);
 }
 
@@ -1206,10 +1260,11 @@ export default function Tempus() {
   const [videoUrl, setVideoUrl] = useState(() => _getLS("tempus_videoUrl") || null);
   const [videoSync, setVideoSync] = useState(() => { try { const s = _getLS("tempus_videoSync"); return s ? JSON.parse(s) : null; } catch { return null; } });
   const [showVideo, setShowVideo] = useState(false);
+  const [loadedProfileId, setLoadedProfileId] = useState(null);
   useEffect(() => { if (videoUrl) _setLS("tempus_videoUrl", videoUrl); else { try { localStorage.removeItem("tempus_videoUrl"); } catch {} } }, [videoUrl]);
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
-  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default" }; });
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0 }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
@@ -1281,7 +1336,7 @@ export default function Tempus() {
   const totalBars = tl.length;
 
   useEffect(() => { met.updS({ muted }); }, [muted]);
-  useEffect(() => { met.updS({ accented: settings.accented, pitched: settings.pitched }); }, [settings.accented, settings.pitched]);
+  useEffect(() => { met.updS({ accented: settings.accented, pitched: settings.pitched, downbeatOnly: settings.downbeatOnly, silentInterval: settings.silentInterval }); }, [settings.accented, settings.pitched, settings.downbeatOnly, settings.silentInterval]);
 
   useEffect(() => {
     met.setCb(evt => {
@@ -1300,6 +1355,10 @@ export default function Tempus() {
   const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
   useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
   const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => { if (prev.length !== saved.length) return prev; return prev.map((s, i) => ({ ...s, tempo: saved[i] ?? s.tempo })); }); } } catch {} prePlayTempos.current = null; }, [met]);
+
+  // ============ SYNC MODE ============
+  const sync = useSync({ sections, settings, met, go, exitPlay });
+  const handleSyncLoadSections = useCallback((s) => { if (Array.isArray(s) && s.length > 0) setSections(s); }, []);
   const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
@@ -1308,7 +1367,7 @@ export default function Tempus() {
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear;
+      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear || sync.showLobby;
       if (e.code === "Space") {
         if (anyModalOpen) return;
         e.preventDefault();
@@ -1317,12 +1376,12 @@ export default function Tempus() {
         else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }
         else { met.tap(); go(0); }
       }
-      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setConfirmClear(false); }
+      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setConfirmClear(false); sync.setShowLobby(false); }
       else if (isP && e.code === "ArrowLeft") jumpSec(-1);
       else if (isP && e.code === "ArrowRight") jumpSec(1);
     };
     window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
-  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, confirmClear]);
+  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, confirmClear, sync.showLobby]);
 
   const lastSplitTime = useRef(0);
   const lastSplitBar = useRef(0);
@@ -1376,7 +1435,7 @@ export default function Tempus() {
     if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
     setConfirmClear(false);
     const backup = [...sections];
-    setSections([mkM()]); setEditId(null); setVideoUrl(null); setVideoSync(null);
+    setSections([mkM()]); setEditId(null); setVideoUrl(null); setVideoSync(null); setLoadedProfileId(null);
     setUndoToast({ section: backup, index: -1 });
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
@@ -1459,6 +1518,8 @@ export default function Tempus() {
         .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
         @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes syncPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+        .sync-pulse { animation: syncPulse 1.5s ease-in-out infinite; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
@@ -1488,16 +1549,19 @@ export default function Tempus() {
           {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
           <button className="btn-ripple transport-btn" onClick={() => { met.tap(); setMode("normal"); go(0); }} disabled={!sections.length} data-tip="Play" style={{ width: 64, height: 64, borderRadius: "50%", background: C.downbeat, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.play(28)}</button>
           {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip="Practice Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
+          {settings.appMode !== "basic" && <button className="transport-btn" onClick={() => sync.setShowLobby(true)} data-tip="Sync Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: sync.isInRoom ? sync.SYNC_COLOR : C.surface, border: sync.isInRoom ? "none" : `1px solid ${C.border}`, color: sync.isInRoom ? "#000" : C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: sync.isInRoom ? `0 0 16px ${sync.SYNC_GLOW}` : "none", transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, background 0.2s" }}><SyncIcon size={18} /></button>}
         </div>
       </div>
 
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { met.stop(); setIsP(false); }} onResume={(barNum) => { met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={exitPlay} mode={mode} onSplit={handleSplit} onTapTempo={handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
-      {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={() => { }} videoUrl={videoUrl} videoSync={videoSync} />}
-      {showLib && <LibP onLoad={(s, v, vs) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); }} onClose={() => setShowLib(false)} />}
+      {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
+      {showLib && <LibP onLoad={(s, v, vs, pid) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); setLoadedProfileId(pid || null); }} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
-      {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} onEditSection={id => { setEditIsNew(false); setEditId(id); }} onAddSection={addSec} onDeleteSection={handleDelete} onMoveSection={moveSec} />}
+      {sync.showLobby && <SyncLobby sync={sync} onLoadSections={handleSyncLoadSections} />}
+      <SyncToast message={sync.toast} />
+      {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} onEditSection={id => { setEditIsNew(false); setEditId(id); }} onAddSection={addSec} onDeleteSection={handleDelete} onMoveSection={moveSec} loadedProfileId={loadedProfileId} />}
       {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
         <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
         <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
