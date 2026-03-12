@@ -105,12 +105,10 @@ async function kickAll(code) {
 
 async function sendCommand(code, command, extra = {}) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
-  const snap = await fs.getDoc(fs.doc(db, "tempus_rooms", code)); if (!snap.exists()) return;
-  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), {
-    command, commandSeq: (snap.data().commandSeq || 0) + 1,
-    status: command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" || command === "sync-reset" ? "stopped" : snap.data().status,
-    ...extra
-  });
+  const status = command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" || command === "sync-reset" ? "stopped" : undefined;
+  const updates = { command, commandSeq: fs.increment(1), ...extra };
+  if (status) updates.status = status;
+  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), updates);
 }
 
 async function updateRoomSections(code, sections) {
@@ -185,6 +183,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const lastCmdSeq = useRef(0);
   const originalSections = useRef(null);
   const toastTimer = useRef(null);
+  const syncTimerRef = useRef(null); // guards against dangling start/resume timeouts
   const clockOffsetRef = useRef(0); // local - server (ms)
   const serverNow = useCallback(() => Date.now() - clockOffsetRef.current, []);
   const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const pauseRef = useRef(pause); const sectionsRef = useRef(sections);
@@ -218,9 +217,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     const sNow = Date.now() - clockOffsetRef.current;
     if (cmd === "start" || cmd === "restart") {
       if (!startAtMs) return;
+      const ci = d.countInBars ?? 0;
       const delay = startAtMs - sNow;
-      if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, delay);
-      else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }
+      if (delay > 0 && delay < 10000) setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, ci); }, delay);
+      else if (delay <= 0) { try { metRef.current.tap(); } catch {} goRef.current(0, ci); }
     } else if (cmd === "pause") {
       pauseRef.current();
     } else if (cmd === "resume") {
@@ -301,6 +301,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (heartbeatRef.current) clearInterval(heartbeatRef.current);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     if (glowPulseTimer.current) clearTimeout(glowPulseTimer.current);
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
   }, []);
 
   const doCreateRoom = useCallback(async (displayName) => {
@@ -337,6 +338,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (roomCode) await leaveRoom(roomCode);
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     const restore = originalSections.current;
     setSyncState(null); setSyncReady(false); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null;
     return restore;
@@ -351,43 +353,50 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doStart = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
+    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
+    const ci = settings.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS; // expressed in server time
     // Host starts local timer immediately — SYNC_LEAD_MS real wall-clock delay
-    setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, SYNC_LEAD_MS);
+    syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; try { metRef.current.tap(); } catch {} goRef.current(0, ci); }, SYNC_LEAD_MS);
     // Write to Firestore for members (fire-and-forget)
-    sendCommand(roomCode, "start", { startAtMs: t });
-  }, [roomCode]);
+    sendCommand(roomCode, "start", { startAtMs: t, countInBars: ci });
+  }, [roomCode, settings.countIn]);
 
   const doPause = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return;
+    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     pauseRef.current();
     sendCommand(roomCode, "pause");
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
+    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS;
     const tl = buildTL(sectionsRef.current);
     const idx = tl.findIndex(b => b.ab === barNum);
-    setTimeout(() => { try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); }, SYNC_LEAD_MS);
+    syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; try { metRef.current.tap(); } catch {} if (idx >= 0) goRef.current(idx, 0); }, SYNC_LEAD_MS);
     sendCommand(roomCode, "resume", { startAtMs: t, resumeFromBar: barNum });
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return;
+    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     exitPlayRef.current();
     sendCommand(roomCode, "stop");
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
+    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
+    const ci = settings.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
     const t = sNow + SYNC_LEAD_MS;
-    setTimeout(() => { try { metRef.current.tap(); } catch {} goRef.current(0, 0); }, SYNC_LEAD_MS);
-    sendCommand(roomCode, "restart", { startAtMs: t });
-  }, [roomCode]);
+    syncTimerRef.current = setTimeout(() => { syncTimerRef.current = null; try { metRef.current.tap(); } catch {} goRef.current(0, ci); }, SYNC_LEAD_MS);
+    sendCommand(roomCode, "restart", { startAtMs: t, countInBars: ci });
+  }, [roomCode, settings.countIn]);
 
   // Auto-send sections to Firestore with debounce when host edits (Fix 4)
   const autoSendTimer = useRef(null);
@@ -406,6 +415,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doSyncReset = useCallback(async () => {
     if (!roomCode || !isHost) return;
+    if (syncTimerRef.current) { clearTimeout(syncTimerRef.current); syncTimerRef.current = null; }
     // Host stops locally immediately
     exitPlayRef.current();
     showToast("Sync reset — all devices reloaded");
