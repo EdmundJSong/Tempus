@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useSync, SyncLobby, SyncStatusBar, SyncToast, SyncIcon } from "./SyncMode";
+import { useSync, SyncLobby, SyncStatusBar, SyncToast } from "./SyncMode";
 
 // ============ ICONS ============
 const Icon = ({ d, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 24 24" }) => (
@@ -7,6 +7,10 @@ const Icon = ({ d, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 2
     {Array.isArray(d) ? d.map((p, i) => React.isValidElement(p) ? React.cloneElement(p, { key: i }) : <path key={i} d={p} vectorEffect="non-scaling-stroke" />)
       : React.isValidElement(d) ? d : <path d={d} vectorEffect="non-scaling-stroke" />}
   </svg>
+);
+
+export const SyncIcon = ({ size = 18 }) => (
+  <Icon size={size} d={["M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71", "M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"]} />
 );
 export const I = {
   play: s => <Icon size={s || 18} d="M5 3l14 9-14 9V3z" fill="none" strokeWidth={1.5} />,
@@ -21,17 +25,18 @@ export const I = {
   x: s => <Icon size={s || 18} d={["M18 6L6 18", "M6 6l12 12"]} />,
   volOn: s => <Icon size={s || 18} d={["M11 5L6 9H2v6h4l5 4V5z", "M19.07 4.93a10 10 0 010 14.14", "M15.54 8.46a5 5 0 010 7.07"]} />,
   volOff: s => <Icon size={s || 18} d={["M11 5L6 9H2v6h4l5 4V5z", "M23 9l-6 6", "M17 9l6 6"]} />,
-  clock: s => (<svg width={s || 18} height={s || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>),
+  clock: s => <Icon size={s || 18} d={[<circle cx="12" cy="12" r="10" />, <path d="M12 6v6l4 2" />]} />,
   music: s => <Icon size={s || 14} d={["M9 18V5l12-2v13", "M9 18a3 3 0 11-6 0 3 3 0 016 0z", "M21 16a3 3 0 11-6 0 3 3 0 016 0z"]} />,
-  gear: s => (<svg width={s || 18} height={s || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" /></svg>),
+  gear: s => <Icon size={s || 18} d={[<circle cx="12" cy="12" r="3" />, <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />]} />,
   arrow: s => <Icon size={s || 14} d="M5 12h14m-7-7l7 7-7 7" />,
   restart: s => <Icon size={s || 18} d={["M1 4v6h6", "M3.51 15a9 9 0 102.13-9.36L1 10"]} />,
   save: s => <Icon size={s || 18} d={["M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z", "M17 21v-8H7v8", "M7 3v5h8"]} />,
   folder: s => <Icon size={s || 18} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />,
   search: s => <Icon size={s || 18} d={["M11 17a6 6 0 100-12 6 6 0 000 12z", "M21 21l-4.35-4.35"]} />,
-  rec: s => (<svg width={s || 18} height={s || 18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" /></svg>),
-  target: s => <Icon size={s || 18} d={["M12 22a10 10 0 100-20 10 10 0 000 20z", "M12 18a6 6 0 100-12 6 6 0 000 12z", "M12 14a2 2 0 100-4 2 2 0 000 4z"]} strokeWidth={1.5} />,
+  rec: s => <Icon size={s || 18} d={[<circle cx="12" cy="12" r="10" />, <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />]} />,
+  target: s => <Icon size={s || 18} d={["M12 22a10 10 0 100-20 10 10 0 000 20z", "M12 18a6 6 0 100-12 6 6 0 000 12z", "M12 14a2 2 0 100-4 2 2 0 000 4z"]} />,
   loop: s => <Icon size={s || 16} d={["M17 1l4 4-4 4", "M3 11V9a4 4 0 014-4h14", "M7 23l-4-4 4-4", "M21 13v2a4 4 0 01-4 4H3"]} />,
+  sync: s => <SyncIcon size={s || 18} />,
   fileNew: s => <Icon size={s || 18} d={["M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z", "M14 2v6h6", "M12 18v-6", "M9 15h6"]} />,
 };
 
@@ -1517,9 +1522,12 @@ export default function Tempus() {
         ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:2px}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
         @keyframes ripple { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.6); opacity: 0; } }
-        .sec-card { transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background 0.15s; }
-        .sec-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.4); border-color: ${C.textMuted}44; background: ${C.surfaceHover} !important; }
-        .glass-pill { background: rgba(17, 17, 22, 0.92); border-radius: 40px; border: 1px solid rgba(255,255,255,0.05); padding: 8px 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); }
+        .sec-card { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease, background 0.15s; position: relative; overflow: hidden; }
+        .sec-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 100%); opacity: 0; transition: opacity 0.3s; }
+        .sec-card:hover { transform: translateY(-2px) scale(1.005); box-shadow: 0 12px 30px rgba(0,0,0,0.5); border-color: ${C.textMuted}66; background: ${C.surfaceHover} !important; }
+        .sec-card:hover::before { opacity: 1; }
+        .sec-card:active { transform: translateY(0) scale(0.995); }
+        .glass-pill { background: rgba(20, 20, 28, 0.8); border-radius: 40px; border: 1px solid rgba(255,255,255,0.08); padding: 8px 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
         .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
         .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
         .pump { transform: scale(1.05); }
@@ -1536,13 +1544,13 @@ export default function Tempus() {
         button:active:not(:disabled) { opacity: 0.7; transform: scale(0.98); }
         .close-btn { background: none; border: none; color: ${C.textMuted}; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
         .close-btn:hover { background: ${C.surfaceHover}; color: ${C.text}; }
-        .transport-btn:hover:not(:disabled) { transform: translateY(-2px) scale(1.05) !important; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important; }
-        .transport-btn:active:not(:disabled) { transform: scale(0.95) !important; }
+        .transport-btn:hover:not(:disabled) { transform: translateY(-3px) scale(1.08) !important; box-shadow: 0 12px 36px rgba(0,0,0,0.6) !important; filter: brightness(1.1); }
+        .transport-btn:active:not(:disabled) { transform: scale(0.92) !important; filter: brightness(0.9); }
 
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.6) !important; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
-        .modal-content { animation: modalSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(17, 17, 22, 0.85) !important; border: 1px solid rgba(255,255,255,0.08) !important; border-top: 1px solid rgba(255,255,255,0.15) !important; box-shadow: 0 -16px 40px rgba(139, 124, 246, 0.05), 0 -8px 30px rgba(0,0,0,0.6); backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px); }
+        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.7) !important; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .modal-content { animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(19, 19, 26, 0.85) !important; border: 1px solid rgba(255,255,255,0.1) !important; border-top: 1px solid rgba(255,255,255,0.2) !important; box-shadow: 0 -20px 50px rgba(139, 124, 246, 0.1), 0 -10px 40px rgba(0,0,0,0.7); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); }
         .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
         @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
         .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -1559,7 +1567,7 @@ export default function Tempus() {
           {videoUrl && !sync.isMemberLocked && <button onClick={() => setShowVideo(true)} data-tip-b="Video" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
-          {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b="Sync" style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}><SyncIcon size={18} /></button>}
+          {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b="Sync" style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
           <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
         </div>
       </div>
