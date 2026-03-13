@@ -1,6 +1,221 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useSync, SyncLobby, SyncStatusBar, SyncToast } from "./SyncMode";
 
+// ============ i18n ============
+// Supported: en, zh-CN, zh-TW (ja, ko planned)
+let _lang = "en";
+export function setAppLang(l) { _lang = l; }
+
+const S = {
+  // --- General units ---
+  "unit.sec": { en: "section", "zh-CN": "段落", "zh-TW": "段落" },
+  "unit.bar": { en: "bar", "zh-CN": "小节", "zh-TW": "小節" },
+  "unit.cue": { en: "cue", "zh-CN": "提示", "zh-TW": "提示" },
+  "unit.member": { en: "member", "zh-CN": "成员", "zh-TW": "成員" },
+  "unit.device": { en: "device", "zh-CN": "设备", "zh-TW": "設備" },
+  "sec": { en: "sec", "zh-CN": "段", "zh-TW": "段" },
+  "bpm": { en: "BPM", "zh-CN": "BPM", "zh-TW": "BPM" },
+
+  // --- Toolbar ---
+  "toolbar.new": { en: "New", "zh-CN": "新建", "zh-TW": "新建" },
+  "toolbar.tapAgain": { en: "Tap again", "zh-CN": "再点一次", "zh-TW": "再點一次" },
+  "toolbar.clearQ": { en: "Clear?", "zh-CN": "清除?", "zh-TW": "清除?" },
+  "toolbar.video": { en: "Video", "zh-CN": "视频", "zh-TW": "影片" },
+  "toolbar.library": { en: "Library", "zh-CN": "曲库", "zh-TW": "曲庫" },
+  "toolbar.save": { en: "Save", "zh-CN": "保存", "zh-TW": "儲存" },
+  "toolbar.sync": { en: "Sync", "zh-CN": "同步", "zh-TW": "同步" },
+  "toolbar.settings": { en: "Settings", "zh-CN": "设置", "zh-TW": "設定" },
+  "toolbar.record": { en: "Record", "zh-CN": "录制", "zh-TW": "錄製" },
+  "toolbar.play": { en: "Play", "zh-CN": "播放", "zh-TW": "播放" },
+  "toolbar.syncStart": { en: "Sync Start", "zh-CN": "同步开始", "zh-TW": "同步開始" },
+  "toolbar.connecting": { en: "Connecting...", "zh-CN": "连接中...", "zh-TW": "連接中..." },
+  "toolbar.practiceMode": { en: "Practice Mode", "zh-CN": "练习模式", "zh-TW": "練習模式" },
+
+  // --- Section Editor ---
+  "secEd.new": { en: "New Section", "zh-CN": "新段落", "zh-TW": "新段落" },
+  "secEd.edit": { en: "Edit Section", "zh-CN": "编辑段落", "zh-TW": "編輯段落" },
+  "secEd.metered": { en: "Metered", "zh-CN": "有拍号", "zh-TW": "有拍號" },
+  "secEd.timed": { en: "Timed", "zh-CN": "自由计时", "zh-TW": "自由計時" },
+  "secEd.bars": { en: "Bars", "zh-CN": "小节数", "zh-TW": "小節數" },
+  "secEd.grouping": { en: "Grouping", "zh-CN": "分组", "zh-TW": "分組" },
+  "secEd.curve": { en: "Curve", "zh-CN": "速度曲线", "zh-TW": "速度曲線" },
+  "secEd.expressive": { en: "Expressive", "zh-CN": "表情", "zh-TW": "表情" },
+  "secEd.on": { en: "On", "zh-CN": "开", "zh-TW": "開" },
+  "secEd.off": { en: "Off", "zh-CN": "关", "zh-TW": "關" },
+  "secEd.duration": { en: "Duration", "zh-CN": "时长", "zh-TW": "時長" },
+  "secEd.markers": { en: "Markers", "zh-CN": "标记", "zh-TW": "標記" },
+  "secEd.markersPlaceholder": { en: "e.g. 3, 7.5, 12", "zh-CN": "如 3, 7.5, 12", "zh-TW": "如 3, 7.5, 12" },
+  "secEd.add": { en: "Add", "zh-CN": "添加", "zh-TW": "新增" },
+  "secEd.save": { en: "Save", "zh-CN": "保存", "zh-TW": "儲存" },
+  "secEd.delete": { en: "Delete", "zh-CN": "删除", "zh-TW": "刪除" },
+  "secEd.duplicate": { en: "Duplicate", "zh-CN": "复制", "zh-TW": "複製" },
+  "secEd.loop": { en: "Loop", "zh-CN": "循环", "zh-TW": "循環" },
+  "secEd.beatUnit": { en: "Beat Unit", "zh-CN": "拍号单位", "zh-TW": "拍號單位" },
+  "secEd.fermata": { en: "Fermata", "zh-CN": "Fermata", "zh-TW": "Fermata" },
+
+  // --- PlayView ---
+  "play.countIn": { en: "Count-in", "zh-CN": "预备拍", "zh-TW": "預備拍" },
+  "play.bar": { en: "Bar", "zh-CN": "小节", "zh-TW": "小節" },
+  "play.free": { en: "FREE", "zh-CN": "自由", "zh-TW": "自由" },
+  "play.end": { en: "END", "zh-CN": "结束", "zh-TW": "結束" },
+  "play.upNext": { en: "Up Next:", "zh-CN": "下一段:", "zh-TW": "下一段:" },
+  "play.synced": { en: "Synced", "zh-CN": "已同步", "zh-TW": "已同步" },
+  "play.tapToMark": { en: "Tap anywhere to mark section", "zh-CN": "点击任意处标记段落", "zh-TW": "點擊任意處標記段落" },
+  "play.accent": { en: "Accent", "zh-CN": "重音", "zh-TW": "重音" },
+  "play.flat": { en: "Flat", "zh-CN": "平均", "zh-TW": "平均" },
+  "play.pitch": { en: "Pitch", "zh-CN": "音高", "zh-TW": "音高" },
+  "play.noise": { en: "Noise", "zh-CN": "噪声", "zh-TW": "噪音" },
+  "play.noCountIn": { en: "No Count-in", "zh-CN": "无预备拍", "zh-TW": "無預備拍" },
+  "play.1countIn": { en: "1 Count-in", "zh-CN": "1小节预备", "zh-TW": "1小節預備" },
+  "play.2countIn": { en: "2 Count-in", "zh-CN": "2小节预备", "zh-TW": "2小節預備" },
+  "play.tap": { en: "TAP", "zh-CN": "TAP", "zh-TW": "TAP" },
+  "play.rec": { en: "REC", "zh-CN": "录制", "zh-TW": "錄製" },
+  "play.barHash": { en: "Bar #", "zh-CN": "小节 #", "zh-TW": "小節 #" },
+  "play.mute": { en: "Mute", "zh-CN": "静音", "zh-TW": "靜音" },
+  "play.unmute": { en: "Unmute", "zh-CN": "取消静音", "zh-TW": "取消靜音" },
+  "play.exit": { en: "Exit", "zh-CN": "退出", "zh-TW": "退出" },
+  "play.previous": { en: "Previous", "zh-CN": "上一段", "zh-TW": "上一段" },
+  "play.next": { en: "Next", "zh-CN": "下一段", "zh-TW": "下一段" },
+  "play.restart": { en: "Restart", "zh-CN": "重新开始", "zh-TW": "重新開始" },
+  "play.pause": { en: "Pause", "zh-CN": "暂停", "zh-TW": "暫停" },
+
+  // --- VideoView ---
+  "video.start": { en: "START", "zh-CN": "起点", "zh-TW": "起點" },
+  "video.end": { en: "END", "zh-CN": "终点", "zh-TW": "終點" },
+  "video.set": { en: "Set", "zh-CN": "设定", "zh-TW": "設定" },
+  "video.sync": { en: "Sync", "zh-CN": "同步", "zh-TW": "同步" },
+  "video.countIn": { en: "Count-in", "zh-CN": "预备拍", "zh-TW": "預備拍" },
+  "video.starting": { en: "Starting...", "zh-CN": "开始中...", "zh-TW": "開始中..." },
+  "video.endTitle": { en: "END", "zh-CN": "结束", "zh-TW": "結束" },
+  "video.tapRestart": { en: "Tap restart or go back to sections", "zh-CN": "点击重新开始或返回段落", "zh-TW": "點擊重新開始或返回段落" },
+  "video.backToSections": { en: "Back to sections", "zh-CN": "返回段落", "zh-TW": "返回段落" },
+  "video.secTempo": { en: "Section", "zh-CN": "段落", "zh-TW": "段落" },
+  "video.tempo": { en: "Tempo", "zh-CN": "速度", "zh-TW": "速度" },
+  "video.go": { en: "Go", "zh-CN": "跳转", "zh-TW": "跳轉" },
+  "video.off": { en: "Off", "zh-CN": "关", "zh-TW": "關" },
+  "video.1bar": { en: "1 Bar", "zh-CN": "1小节", "zh-TW": "1小節" },
+  "video.2bars": { en: "2 Bars", "zh-CN": "2小节", "zh-TW": "2小節" },
+  "video.syncAvailable": { en: "Sync is available for YouTube, Vimeo, and SoundCloud.", "zh-CN": "同步功能支持 YouTube、Vimeo 和 SoundCloud。", "zh-TW": "同步功能支援 YouTube、Vimeo 和 SoundCloud。" },
+  "video.unsaved": { en: "Unsaved Changes", "zh-CN": "未保存的更改", "zh-TW": "未儲存的變更" },
+  "video.unsavedDesc": { en: "You have unsaved changes in this session.", "zh-CN": "当前会话中有未保存的更改。", "zh-TW": "目前的工作階段有未儲存的變更。" },
+  "video.saveChanges": { en: "Save Changes", "zh-CN": "保存更改", "zh-TW": "儲存變更" },
+  "video.discard": { en: "Discard", "zh-CN": "放弃", "zh-TW": "捨棄" },
+  "video.cancel": { en: "Cancel", "zh-CN": "取消", "zh-TW": "取消" },
+  "video.openInBrowser": { en: "Open in browser", "zh-CN": "在浏览器中打开", "zh-TW": "在瀏覽器中開啟" },
+  "video.invalidUrl": { en: "Invalid URL Format", "zh-CN": "无效的 URL 格式", "zh-TW": "無效的 URL 格式" },
+
+  // --- Settings ---
+  "settings.title": { en: "Settings", "zh-CN": "设置", "zh-TW": "設定" },
+  "settings.language": { en: "Language", "zh-CN": "语言", "zh-TW": "語言" },
+  "settings.mode": { en: "Mode", "zh-CN": "模式", "zh-TW": "模式" },
+  "settings.click": { en: "Click", "zh-CN": "节拍器音色", "zh-TW": "節拍器音色" },
+  "settings.accented": { en: "Accented", "zh-CN": "重音", "zh-TW": "重音" },
+  "settings.flatTip": { en: "Flat", "zh-CN": "平均", "zh-TW": "平均" },
+  "settings.pitched": { en: "Pitched", "zh-CN": "音高", "zh-TW": "音高" },
+  "settings.unpitched": { en: "Unpitched", "zh-CN": "噪声", "zh-TW": "噪音" },
+  "settings.beats": { en: "Beats", "zh-CN": "节拍", "zh-TW": "節拍" },
+  "settings.visual": { en: "Visual", "zh-CN": "视觉", "zh-TW": "視覺" },
+  "settings.pulse": { en: "Pulse", "zh-CN": "脉冲", "zh-TW": "脈衝" },
+  "settings.full": { en: "Full", "zh-CN": "完整", "zh-TW": "完整" },
+  "settings.flash": { en: "Flash", "zh-CN": "闪烁", "zh-TW": "閃爍" },
+  "settings.countIn": { en: "Count-in", "zh-CN": "预备拍", "zh-TW": "預備拍" },
+  "settings.countInOff": { en: "Off", "zh-CN": "关", "zh-TW": "關" },
+  "settings.countIn1": { en: "1 bar", "zh-CN": "1小节", "zh-TW": "1小節" },
+  "settings.countIn2": { en: "2 bars", "zh-CN": "2小节", "zh-TW": "2小節" },
+  "settings.silentCycle": { en: "Silent Cycle", "zh-CN": "静音循环", "zh-TW": "靜音循環" },
+  "settings.alwaysAudible": { en: "Always audible", "zh-CN": "始终有声", "zh-TW": "始終有聲" },
+  "settings.silentTip": { en: "on", "zh-CN": "响", "zh-TW": "響" },
+  "settings.silentTip2": { en: "off, repeating", "zh-CN": "静, 循环", "zh-TW": "靜, 循環" },
+  "settings.deviceId": { en: "Device ID:", "zh-CN": "设备 ID:", "zh-TW": "裝置 ID:" },
+  "settings.basic": { en: "Basic", "zh-CN": "基础", "zh-TW": "基礎" },
+  "settings.default": { en: "Default", "zh-CN": "默认", "zh-TW": "預設" },
+  "settings.advanced": { en: "Advanced", "zh-CN": "高级", "zh-TW": "進階" },
+  "off": { en: "Off", "zh-CN": "关", "zh-TW": "關" },
+  "settings.privacy": { en: "Your data is stored locally and backed up anonymously.", "zh-CN": "您的数据存储在本地并匿名备份。", "zh-TW": "您的資料儲存在本機並匿名備份。" },
+
+  // --- Save ---
+  "save.savePiece": { en: "Save Piece", "zh-CN": "保存曲目", "zh-TW": "儲存曲目" },
+  "save.updatePiece": { en: "Update Piece", "zh-CN": "更新曲目", "zh-TW": "更新曲目" },
+  "save.title": { en: "Title", "zh-CN": "标题", "zh-TW": "標題" },
+  "save.composer": { en: "Composer / Arranger", "zh-CN": "作曲家 / 编曲家", "zh-TW": "作曲家 / 編曲家" },
+  "save.performer": { en: "Performer / Ensemble (optional)", "zh-CN": "演奏者 / 团体（可选）", "zh-TW": "演奏者 / 團體（可選）" },
+  "save.videoUrl": { en: "Video URL (optional)", "zh-CN": "视频链接（可选）", "zh-TW": "影片連結（可選）" },
+  "save.update": { en: "Update", "zh-CN": "更新", "zh-TW": "更新" },
+  "save.saveNew": { en: "Save New", "zh-CN": "另存为新", "zh-TW": "另存為新" },
+  "save.save": { en: "Save", "zh-CN": "保存", "zh-TW": "儲存" },
+  "close": { en: "Close", "zh-CN": "关闭", "zh-TW": "關閉" },
+
+  // --- Library ---
+  "lib.title": { en: "Library", "zh-CN": "曲库", "zh-TW": "曲庫" },
+  "lib.import": { en: "Import", "zh-CN": "导入", "zh-TW": "匯入" },
+  "lib.export": { en: "Export", "zh-CN": "导出", "zh-TW": "匯出" },
+  "lib.search": { en: "Search...", "zh-CN": "搜索...", "zh-TW": "搜尋..." },
+  "lib.empty": { en: "Your Library is empty", "zh-CN": "曲库为空", "zh-TW": "曲庫為空" },
+  "lib.noResults": { en: "No pieces found", "zh-CN": "未找到曲目", "zh-TW": "未找到曲目" },
+  "lib.emptyDesc": { en: "Save your sections into profiles to quickly load them later.", "zh-CN": "将段落保存为曲目，以便快速加载。", "zh-TW": "將段落儲存為曲目，以便快速載入。" },
+  "lib.noResultsDesc": { en: "Try adjusting your search query.", "zh-CN": "请尝试调整搜索关键词。", "zh-TW": "請嘗試調整搜尋關鍵字。" },
+  "lib.deleteQ": { en: "Delete?", "zh-CN": "删除?", "zh-TW": "刪除?" },
+
+  // --- Practice ---
+  "prac.title": { en: "Practice Mode", "zh-CN": "练习模式", "zh-TW": "練習模式" },
+  "prac.start": { en: "Start", "zh-CN": "起始", "zh-TW": "起始" },
+  "prac.target": { en: "Target", "zh-CN": "目标", "zh-TW": "目標" },
+  "prac.increment": { en: "Increment", "zh-CN": "递增", "zh-TW": "遞增" },
+  "prac.repeats": { en: "Repeats", "zh-CN": "重复", "zh-TW": "重複" },
+  "prac.startBtn": { en: "Start", "zh-CN": "开始", "zh-TW": "開始" },
+
+  // --- Undo ---
+  "undo.cleared": { en: "Sections cleared", "zh-CN": "段落已清除", "zh-TW": "段落已清除" },
+  "undo.deleted": { en: "Section deleted", "zh-CN": "段落已删除", "zh-TW": "段落已刪除" },
+  "undo.undo": { en: "Undo", "zh-CN": "撤销", "zh-TW": "復原" },
+
+  // --- Sync (used in SyncMode.jsx) ---
+  "sync.mode": { en: "Sync Mode", "zh-CN": "同步模式", "zh-TW": "同步模式" },
+  "sync.createRoom": { en: "Create Room", "zh-CN": "创建房间", "zh-TW": "建立房間" },
+  "sync.joinRoom": { en: "Join Room", "zh-CN": "加入房间", "zh-TW": "加入房間" },
+  "sync.maxDevices": { en: "devices can sync together.", "zh-CN": "台设备可同步。", "zh-TW": "台裝置可同步。" },
+  "sync.displayName": { en: "Your display name", "zh-CN": "您的显示名称", "zh-TW": "您的顯示名稱" },
+  "sync.roomCode": { en: "Room code", "zh-CN": "房间代码", "zh-TW": "房間代碼" },
+  "sync.creating": { en: "Creating...", "zh-CN": "创建中...", "zh-TW": "建立中..." },
+  "sync.joining": { en: "Joining...", "zh-CN": "加入中...", "zh-TW": "加入中..." },
+  "sync.waitingRoom": { en: "Waiting Room", "zh-CN": "等候室", "zh-TW": "等候室" },
+  "sync.waitingForHost": { en: "Waiting for the host to let you in...", "zh-CN": "等待主持人允许进入...", "zh-TW": "等待主持人允許進入..." },
+  "sync.room": { en: "Room", "zh-CN": "房间", "zh-TW": "房間" },
+  "sync.performanceInProgress": { en: "Performance in progress", "zh-CN": "演出进行中", "zh-TW": "演出進行中" },
+  "sync.waitingForNext": { en: "Waiting for next start...", "zh-CN": "等待下一次开始...", "zh-TW": "等待下一次開始..." },
+  "sync.leave": { en: "Leave", "zh-CN": "离开", "zh-TW": "離開" },
+  "sync.leaveRoom": { en: "Leave Room", "zh-CN": "离开房间", "zh-TW": "離開房間" },
+  "sync.pending": { en: "Pending", "zh-CN": "等候中", "zh-TW": "等候中" },
+  "sync.admitAll": { en: "Admit All", "zh-CN": "全部允许", "zh-TW": "全部允許" },
+  "sync.admit": { en: "Admit", "zh-CN": "允许", "zh-TW": "允許" },
+  "sync.decline": { en: "Decline", "zh-CN": "拒绝", "zh-TW": "拒絕" },
+  "sync.members": { en: "Members", "zh-CN": "成员", "zh-TW": "成員" },
+  "sync.host": { en: "HOST", "zh-CN": "主持人", "zh-TW": "主持人" },
+  "sync.unknown": { en: "Unknown", "zh-CN": "未知", "zh-TW": "未知" },
+  "sync.kickQ": { en: "Kick?", "zh-CN": "移除?", "zh-TW": "移除?" },
+  "sync.removeAll": { en: "Remove all members", "zh-CN": "移除所有成员", "zh-TW": "移除所有成員" },
+  "sync.removeAllConfirm": { en: "Tap again to remove everyone", "zh-CN": "再点一次以移除所有人", "zh-TW": "再點一次以移除所有人" },
+  "sync.backToSections": { en: "Back to sections", "zh-CN": "返回段落", "zh-TW": "返回段落" },
+  "sync.roomClosed": { en: "Room closed by host", "zh-CN": "房间已被主持人关闭", "zh-TW": "房間已被主持人關閉" },
+  "sync.removed": { en: "You were removed by the host", "zh-CN": "您已被主持人移除", "zh-TW": "您已被主持人移除" },
+  "sync.resetAll": { en: "Sync reset — all devices reloaded", "zh-CN": "同步重置 — 所有设备已重载", "zh-TW": "同步重置 — 所有裝置已重載" },
+  "sync.enterName": { en: "Enter your display name", "zh-CN": "请输入显示名称", "zh-TW": "請輸入顯示名稱" },
+  "sync.enter4Digit": { en: "Enter a 4-digit room code", "zh-CN": "请输入4位房间代码", "zh-TW": "請輸入4位房間代碼" },
+  "sync.couldNotJoin": { en: "Could not join room", "zh-CN": "无法加入房间", "zh-TW": "無法加入房間" },
+  "sync.syncReset": { en: "Sync Reset", "zh-CN": "同步重置", "zh-TW": "同步重置" },
+  "sync.confirmQ": { en: "Confirm?", "zh-CN": "确认?", "zh-TW": "確認?" },
+  "sync.stop": { en: "Stop", "zh-CN": "停止", "zh-TW": "停止" },
+  "sync.resume": { en: "Resume", "zh-CN": "继续", "zh-TW": "繼續" },
+  "sync.restart": { en: "Restart", "zh-CN": "重新开始", "zh-TW": "重新開始" },
+  "sync.manage": { en: "Manage", "zh-CN": "管理", "zh-TW": "管理" },
+  "sync.leaveQ": { en: "Leave?", "zh-CN": "离开?", "zh-TW": "離開?" },
+  "sync.upTo": { en: "Up to", "zh-CN": "最多", "zh-TW": "最多" },
+};
+export function t(key) { const e = S[key]; if (!e) return key; return e[_lang] || e.en || key; }
+export function tp(key, n) { const v = S[key]?.[_lang] || S[key]?.en || key; return _lang === "en" && n !== 1 ? v + "s" : v; }
+
+
+
 // ============ ICONS ============
 const Icon = ({ d, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 24 24" }) => (
   <svg width={size} height={size} viewBox={viewBox} fill={fill} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -329,7 +544,7 @@ function TapBtn({ onTap, size = "sm", flash = false }) {
 }
 
 // ============ BEAT UNIT PICKER ============
-function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip="Beat Unit" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
+function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip={t("secEd.beatUnit")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
 
 // ============ SECTION EDITOR ============
 function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew = false, editIndex = 0 }) {
@@ -359,13 +574,13 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew 
     <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{isNew ? "New Section" : `Edit Section ${editIndex}`}</div>
-          <button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{isNew ? t("secEd.new") : `${t("secEd.edit")} ${editIndex}`}</div>
+          <button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button>
         </div>
         {/* Type toggle - hidden in basic */}
         {!isBas && <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-          <button onClick={() => swT("metered")} style={{ ...oB(isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.music(14)} Metered</button>
-          <button onClick={() => swT("timed")} style={{ ...oB(!isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.clock(14)} Timed</button>
+          <button onClick={() => swT("metered")} style={{ ...oB(isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.music(14)} {t("secEd.metered")}</button>
+          <button onClick={() => swT("timed")} style={{ ...oB(!isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.clock(14)} {t("secEd.timed")}</button>
         </div>}
         {isMet ? (<>
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
@@ -382,14 +597,14 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew 
             </div>
           </div>
           {/* Bars + Loop */}
-          <Row label="Bars">
-            <button onClick={() => upd("loop", !s.loop)} data-tip="Loop" style={{ background: s.loop ? C.downbeat + "22" : "transparent", border: `1px solid ${s.loop ? C.downbeat : C.border}`, borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: s.loop ? C.downbeat : C.textMuted, display: "flex", alignItems: "center" }}>{I.loop(16)}</button>
+          <Row label={t("secEd.bars")}>
+            <button onClick={() => upd("loop", !s.loop)} data-tip={t("secEd.loop")} style={{ background: s.loop ? C.downbeat + "22" : "transparent", border: `1px solid ${s.loop ? C.downbeat : C.border}`, borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: s.loop ? C.downbeat : C.textMuted, display: "flex", alignItems: "center" }}>{I.loop(16)}</button>
             {!s.loop && <Stp value={s.bars} onChange={v => upd("bars", v)} min={1} max={999} />}
             {s.loop && <span style={{ color: C.downbeat, fontSize: 13, fontFamily: "'DM Mono',monospace" }}>∞</span>}
           </Row>
 
           {/* Grouping - pills always, number builder in advanced */}
-          {!isBas && <Row label="Grouping">
+          {!isBas && <Row label={t("secEd.grouping")}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 {gPresets.map(p => <button key={p} onClick={() => upd("grouping", p)} style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${s.grouping === p ? C.downbeat : C.border}`, background: s.grouping === p ? C.downbeat + "22" : "transparent", color: s.grouping === p ? C.downbeat : C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace", cursor: "pointer" }}>{p}</button>)}
@@ -407,12 +622,12 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew 
           </Row>}
 
           {/* Curve - hidden in basic */}
-          {!isBas && <Row label="Curve">{["constant", "accel", "rit"].map(c => <button key={c} onClick={() => upd("curve", c)} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`, background: s.curve === c ? C.downbeat + "22" : "transparent", color: s.curve === c ? C.downbeat : C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", cursor: "pointer" }}>{c === "constant" ? "—" : c === "accel" ? "accel." : "rit."}</button>)}</Row>}
+          {!isBas && <Row label={t("secEd.curve")}>{["constant", "accel", "rit"].map(c => <button key={c} onClick={() => upd("curve", c)} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`, background: s.curve === c ? C.downbeat + "22" : "transparent", color: s.curve === c ? C.downbeat : C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", cursor: "pointer" }}>{c === "constant" ? "—" : c === "accel" ? "accel." : "rit."}</button>)}</Row>}
           {!isBas && s.curve !== "constant" && <Row label={I.arrow(14)}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ color: C.text, display: "flex", alignItems: "center", minWidth: 30 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={18} /></div><span style={{ color: C.textMuted, fontSize: 18, fontFamily: "'DM Mono',monospace" }}>=</span><Stp value={s.endTempo} onChange={sET} min={10} max={400} /></div></Row>}
 
           {/* Expressive - advanced only */}
-          {isAdv && <Row label="Expressive">
-            <button onClick={() => upd("expressive", !s.expressive)} style={{ background: s.expressive ? C.accent + "22" : "transparent", border: `1px solid ${s.expressive ? C.accent : C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: s.expressive ? C.accent : C.textMuted, fontSize: 12, fontFamily: "'Outfit',sans-serif" }}>{s.expressive ? "On" : "Off"}</button>
+          {isAdv && <Row label={t("secEd.expressive")}>
+            <button onClick={() => upd("expressive", !s.expressive)} style={{ background: s.expressive ? C.accent + "22" : "transparent", border: `1px solid ${s.expressive ? C.accent : C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: s.expressive ? C.accent : C.textMuted, fontSize: 12, fontFamily: "'Outfit',sans-serif" }}>{s.expressive ? t("secEd.on") : t("secEd.off")}</button>
           </Row>}
           {isAdv && s.expressive && s.beatMap && <div style={{ marginBottom: 14, padding: 12, background: C.surface, borderRadius: 10, border: `1px solid ${C.accent}33` }}>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -420,7 +635,7 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew 
                 <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 56, marginBottom: 6 }}>
                   <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{idx + 1}</div>
                   <NI value={b.tempo} onChange={v => updBeat(idx, "tempo", v)} min={10} max={400} step={1} style={{ width: 52, height: 36, fontSize: 14 }} />
-                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} data-tip="Fermata" style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14 }}>𝄐</button>
+                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} data-tip={t("secEd.fermata")} style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14 }}>𝄐</button>
                   {b.fermata && <>
                     <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                       <NI value={b.fermataHold} onChange={v => updBeat(idx, "fermataHold", v)} min={0} max={16} step={0.5} style={{ width: 40, height: 24, fontSize: 11 }} />
@@ -433,15 +648,15 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew 
             </div>
           </div>}
         </>) : (<>
-          <Row label="Duration"><StpF value={s.duration} onChange={v => upd("duration", v)} min={0.5} max={600} /><span style={{ color: C.textMuted, fontSize: 15, fontFamily: "'DM Mono',monospace", marginLeft: 6 }}>s</span></Row>
-          <Row label="Markers"><input inputMode="decimal" value={s.markers} onChange={e => upd("markers", e.target.value)} style={{ ...nI, width: 200, textAlign: "left", padding: "0 12px", fontSize: 14 }} placeholder="e.g. 3, 7.5, 12" /></Row>
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14, marginLeft: 82, fontFamily: "'DM Mono',monospace" }}>{pM(s.markers).length} cue{pM(s.markers).length !== 1 ? "s" : ""}</div>
+          <Row label={t("secEd.duration")}><StpF value={s.duration} onChange={v => upd("duration", v)} min={0.5} max={600} /><span style={{ color: C.textMuted, fontSize: 15, fontFamily: "'DM Mono',monospace", marginLeft: 6 }}>s</span></Row>
+          <Row label={t("secEd.markers")}><input inputMode="decimal" value={s.markers} onChange={e => upd("markers", e.target.value)} style={{ ...nI, width: 200, textAlign: "left", padding: "0 12px", fontSize: 14 }} placeholder={t("secEd.markersPlaceholder")} /></Row>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14, marginLeft: 82, fontFamily: "'DM Mono',monospace" }}>{pM(s.markers).length} {tp("unit.cue", pM(s.markers).length)}</div>
         </>)}
         <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-          {onDelete && <button onClick={() => { onDelete(s.id); onClose(); }} data-tip="Delete" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`, background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.trash(16)}</button>}
-          <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }} data-tip="Duplicate" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.copy(16)}</button>
+          {onDelete && <button onClick={() => { onDelete(s.id); onClose(); }} data-tip={t("secEd.delete")} style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`, background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.trash(16)}</button>}
+          <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }} data-tip={t("secEd.duplicate")} style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.copy(16)}</button>
           <div style={{ flex: 1 }} />
-          <button onClick={() => { if (gV) { onSave(s); onClose(); } }} style={{ flex: 0, padding: "12px 24px", borderRadius: 8, border: "none", background: gV ? C.downbeat : C.sub, color: gV ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: gV ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>{isNew ? "Add" : "Save"}</button>
+          <button onClick={() => { if (gV) { onSave(s); onClose(); } }} style={{ flex: 0, padding: "12px 24px", borderRadius: 8, border: "none", background: gV ? C.downbeat : C.sub, color: gV ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: gV ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>{isNew ? t("secEd.add") : t("secEd.save")}</button>
         </div>
       </div>
     </div>);
@@ -531,11 +746,11 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
 
       {/* TOP BAR */}
       <div style={{ position: "absolute", top: 16, left: 16, right: 16, display: "flex", justifyContent: "space-between", zIndex: 2 }}>
-        <button onClick={onMute} data-tip-b={muted ? "Unmute" : "Mute"} style={tS}>{muted ? I.volOff(18) : I.volOn(18)}</button>
+        <button onClick={onMute} data-tip-b={muted ? t("play.unmute") : t("play.mute")} style={tS}>{muted ? I.volOff(18) : I.volOn(18)}</button>
         <div style={{ display: "flex", gap: 8 }}>
-          {isRec && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.record, display: "flex", alignItems: "center", gap: 4, animation: "pulse 2s infinite" }}>{I.rec(12)} REC</div>}
+          {isRec && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.record, display: "flex", alignItems: "center", gap: 4, animation: "pulse 2s infinite" }}>{I.rec(12)} {t("play.rec")}</div>}
           {mode === "practice" && ps.pctLabel && !isEnded && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.practice, fontWeight: 600 }}>{ps.pctLabel}</div>}
-          <button onClick={onExit} data-tip-b="Exit" style={tS}>{I.x(18)}</button>
+          <button onClick={onExit} data-tip-b={t("play.exit")} style={tS}>{I.x(18)}</button>
         </div>
       </div>
 
@@ -547,10 +762,10 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
             <circle cx={140} cy={140} r={cR} fill="none" stroke={borderColor || C.downbeat} strokeWidth={8} strokeDasharray={cC} strokeDashoffset={sDo} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.1s linear" }} />
           </svg>
           <div style={{ fontSize: 20, color: C.textMuted, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, position: "relative", zIndex: 1, marginBottom: 8 }}>
-            {isEnded ? "" : isCI ? <><span style={{ fontSize: 14 }}>Count-in</span><span style={{ fontSize: 14, color: C.downbeat, fontWeight: 600 }}>Bar {ab}</span></> : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} FREE</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
+            {isEnded ? "" : isCI ? <><span style={{ fontSize: 14 }}>{t("play.countIn")}</span><span style={{ fontSize: 14, color: C.downbeat, fontWeight: 600 }}>{t("play.bar")} {ab}</span></> : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} {t("play.free")}</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
           </div>
           <div className={`hdr-text ${ps.flash && ps.beatType === 0 ? 'pump' : ''}`} style={{ fontFamily: "'Bebas Neue','DM Mono',monospace", fontSize: isEnded ? 80 : 110, fontWeight: 400, color: isEnded ? C.downbeat : C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
-            {isEnded ? "END" : isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
+            {isEnded ? t("play.end") : isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
           </div>
         </div>
         {/* Split msg - reserved height */}
@@ -561,7 +776,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
         <div style={{ height: 40, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           {!isCI && !isEnded && <>
             <div style={{ fontSize: 12, color: C.textMuted }}>{si + 1}/{sections.length}{!isT && ps.tempo ? ` · ${Math.round(ps.tempo)}` : ""}</div>
-            {upN && <div style={{ color: C.downbeat, fontSize: 13, fontWeight: 600, animation: "pulse 2s infinite" }}>Up Next: {upN}</div>}
+            {upN && <div style={{ color: C.downbeat, fontSize: 13, fontWeight: 600, animation: "pulse 2s infinite" }}>{t("play.upNext")} {upN}</div>}
           </>}
         </div>
         <div style={{ height: 24, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
@@ -570,7 +785,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
         </div>
         {/* Record hint - reserved height */}
         <div style={{ height: 20, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
-          {isRec && isP && !isEnded && <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", opacity: 0.8, animation: "pulse 3s infinite" }}>Tap anywhere to mark section</span>}
+          {isRec && isP && !isEnded && <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", opacity: 0.8, animation: "pulse 3s infinite" }}>{t("play.tapToMark")}</span>}
         </div>
       </div>
 
@@ -579,34 +794,34 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
         <div style={{ position: "absolute", bottom: 24, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8, zIndex: 2 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 20, background: SYNC_COLOR + "15", border: `1px solid ${SYNC_COLOR}33` }}>
             <div style={{ width: 6, height: 6, borderRadius: "50%", background: SYNC_COLOR, boxShadow: `0 0 6px ${SYNC_COLOR}` }} />
-            <span style={{ fontSize: 11, color: SYNC_COLOR, fontFamily: "'Outfit',sans-serif", fontWeight: 600 }}>Synced</span>
+            <span style={{ fontSize: 11, color: SYNC_COLOR, fontFamily: "'Outfit',sans-serif", fontWeight: 600 }}>{t("play.synced")}</span>
           </div>
         </div>
       ) : (
       <div style={{ position: "absolute", bottom: 24, left: 0, right: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 12, zIndex: 2, pointerEvents: "none" }}>
         {/* Nav row - visibility hidden during play */}
         <div style={{ display: "flex", alignItems: "center", gap: 12, visibility: showNav ? "visible" : "hidden", pointerEvents: showNav ? "auto" : "none", opacity: showNav ? 1 : 0, transition: "opacity 0.15s" }}>
-          <button onClick={onPrevSec} data-tip="Previous" style={nv}>{I.chevL(18)}</button>
-          <input type="text" inputMode="numeric" value={goBar} onChange={e => setGoBar(e.target.value)} placeholder="Bar #" style={{ ...nI, width: 64, fontSize: 14 }} onKeyDown={e => { if (e.key === "Enter") { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); } } }} />
-          <button onClick={onNextSec} data-tip="Next" style={nv}>{I.chevR(18)}</button>
+          <button onClick={onPrevSec} data-tip={t("play.previous")} style={nv}>{I.chevL(18)}</button>
+          <input type="text" inputMode="numeric" value={goBar} onChange={e => setGoBar(e.target.value)} placeholder={t("play.barHash")} style={{ ...nI, width: 64, fontSize: 14 }} onKeyDown={e => { if (e.key === "Enter") { const v = parseInt(goBar); if (!isNaN(v) && v > 0) { onGoToBar(v); } } }} />
+          <button onClick={onNextSec} data-tip={t("play.next")} style={nv}>{I.chevR(18)}</button>
         </div>
         {/* Quick settings */}
         {settings && onSettings && <div style={{ display: "flex", gap: 6, justifyContent: "center", pointerEvents: "auto" }}>
-          <button onClick={() => onSettings({ ...settings, accented: !settings.accented })} style={qS}>{settings.accented ? "Accent" : "Flat"}</button>
-          <button onClick={() => onSettings({ ...settings, pitched: !settings.pitched })} style={qS}>{settings.pitched ? "Pitch" : "Noise"}</button>
+          <button onClick={() => onSettings({ ...settings, accented: !settings.accented })} style={qS}>{settings.accented ? t("play.accent") : t("play.flat")}</button>
+          <button onClick={() => onSettings({ ...settings, pitched: !settings.pitched })} style={qS}>{settings.pitched ? t("play.pitch") : t("play.noise")}</button>
           <button onClick={() => { const m = ["dots", "dots+flash", "flash"]; const i = (m.indexOf(settings.visualMode) + 1) % m.length; onSettings({ ...settings, visualMode: m[i] }); }} style={qS}><span style={{ opacity: settings.visualMode.includes("dots") ? 1 : 0.25 }}>●</span> <span style={{ opacity: settings.visualMode.includes("flash") ? 1 : 0.25 }}>◻</span></button>
-          <button onClick={() => onSettings({ ...settings, countIn: (settings.countIn + 1) % 3 })} style={qS}>{settings.countIn === 0 ? "No Count-in" : `${settings.countIn} Count-in`}</button>
+          <button onClick={() => onSettings({ ...settings, countIn: (settings.countIn + 1) % 3 })} style={qS}>{settings.countIn === 0 ? t("play.noCountIn") : settings.countIn === 1 ? t("play.1countIn") : t("play.2countIn")}</button>
         </div>}
         {/* Transport */}
         <div style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
           <div style={{ width: 44, display: "flex", justifyContent: "center" }}>
-            {showNav && <button onClick={onRestart} data-tip="Restart" style={tS}>{I.restart(18)}</button>}
+            {showNav && <button onClick={onRestart} data-tip={t("play.restart")} style={tS}>{I.restart(18)}</button>}
           </div>
-          <button onClick={guardedAction(() => { const v = parseInt(goBar); if (isP) { onPause(); } else { onResume(!isNaN(v) && v > 0 ? v : null); setGoBar(""); } })} data-tip={isP ? "Pause" : "Play"} style={tB}>{isP ? I.pause(22) : I.play(22)}</button>
+          <button onClick={guardedAction(() => { const v = parseInt(goBar); if (isP) { onPause(); } else { onResume(!isNaN(v) && v > 0 ? v : null); setGoBar(""); } })} data-tip={isP ? t("play.pause") : t("toolbar.play")} style={tB}>{isP ? I.pause(22) : I.play(22)}</button>
           <div style={{ width: 44, display: "flex", justifyContent: "center" }}>
             {mode === "normal" && onTapTempo ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, width: 44 }}>
               {tapBpm && <span style={{ fontSize: 10, color: C.downbeat, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{tapBpm}</span>}
-              <button onClick={onTapTempo} style={{ ...tS, background: tapFlash ? C.downbeat : C.surface, color: tapFlash ? "#000" : C.text, transition: "background 0.15s, color 0.15s" }}><span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace" }}>TAP</span></button>
+              <button onClick={onTapTempo} style={{ ...tS, background: tapFlash ? C.downbeat : C.surface, color: tapFlash ? "#000" : C.text, transition: "background 0.15s, color 0.15s" }}><span style={{ fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{t("play.tap")}</span></button>
             </div> : null}
           </div>
         </div>
@@ -963,7 +1178,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px", flexShrink: 0 }}>
         <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Sync</button>}
+          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>{t("video.sync")}</button>}
           <button onClick={() => setShowVidSave(true)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(14)}</button>
           <button className="close-btn" onClick={handleClose}>{I.x(18)}</button>
         </div>
@@ -976,7 +1191,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
             : isVimeo ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : isSC ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : embedUrl ? <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{isSafeUrl(videoUrl) ? <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>Open in browser</a> : <span style={{ color: C.danger, fontSize: 11 }}>Invalid URL Format</span>}</div>}
+              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{isSafeUrl(videoUrl) ? <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>{t("video.openInBrowser")}</a> : <span style={{ color: C.danger, fontSize: 11 }}>{t("video.invalidUrl")}</span>}</div>}
         </div>
       </div>
 
@@ -985,8 +1200,8 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         {/* Start */}
         <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${startPt != null ? C.practice + "44" : C.border}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: startPt != null ? 4 : 0 }}>
-            <span style={{ fontSize: 9, color: C.practice, fontWeight: 600 }}>START</span>
-            <button onClick={setStart} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.practice}44`, background: "transparent", color: C.practice, fontSize: 9, cursor: "pointer" }}>Set</button>
+            <span style={{ fontSize: 9, color: C.practice, fontWeight: 600 }}>{t("video.start")}</span>
+            <button onClick={setStart} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.practice}44`, background: "transparent", color: C.practice, fontSize: 9, cursor: "pointer" }}>{t("video.set")}</button>
           </div>
           {startPt != null && <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
             <button onClick={() => nudge("start", -NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>←</button>
@@ -997,8 +1212,8 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         {/* End */}
         <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${endPt != null ? C.record + "44" : C.border}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: endPt != null ? 4 : 0 }}>
-            <span style={{ fontSize: 9, color: C.record, fontWeight: 600 }}>END</span>
-            <button onClick={setEnd} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.record}44`, background: "transparent", color: C.record, fontSize: 9, cursor: "pointer" }}>Set</button>
+            <span style={{ fontSize: 9, color: C.record, fontWeight: 600 }}>{t("video.end")}</span>
+            <button onClick={setEnd} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.record}44`, background: "transparent", color: C.record, fontSize: 9, cursor: "pointer" }}>{t("video.set")}</button>
           </div>
           {endPt != null && <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
             <button onClick={() => nudge("end", -NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>←</button>
@@ -1011,7 +1226,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       {/* Middle: Sections (stopped) or Metronome (playing/paused-with-bar) */}
       {syncCountIn && syncBar ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>Count-in</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>{t("video.countIn")}</div>
           <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>{syncBar.beatsLeft || ""}</div>
           {syncBar.tsN > 0 && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
             {Array.from({ length: syncBar.tsN }).map((_, i) => {
@@ -1034,7 +1249,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
             <div style={{ fontSize: 64, fontWeight: 400, color: C.text, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2, minWidth: 70, textAlign: "center" }}>{syncBar.ab}</div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
               <span style={{ fontSize: 24, color: C.downbeat, fontWeight: 700 }}>{syncBar.tempo}</span>
-              <span style={{ fontSize: 9, color: C.textMuted }}>BPM</span>
+              <span style={{ fontSize: 9, color: C.textMuted }}>{t("bpm")}</span>
             </div>
           </div>
           {syncBar.tsN > 0 && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
@@ -1043,7 +1258,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
               return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
             })}
           </div>}
-          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>Sec {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}</div>
+          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>{t("sec")} {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}</div>
 
           {/* Edit mode controls */}
           {editMode && (
@@ -1051,7 +1266,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
               {/* Tempo adjust */}
               {curSec && curSec.type === "metered" && (
                 <div style={{ background: C.surface, borderRadius: 10, padding: 10, border: `1px solid ${C.accent}44` }}>
-                  <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>Section {syncBar.si + 1} Tempo</div>
+                  <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>{t("video.secTempo")} {syncBar.si + 1} {t("video.tempo")}</div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                     <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-5</button>
                     <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-1</button>
@@ -1065,11 +1280,11 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                   {vidTapBpm && <span style={{ fontSize: 10, color: C.downbeat, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{vidTapBpm}</span>}
-                  <button onClick={vidTap} style={{ background: vidTapFlash ? C.downbeat : C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: vidTapFlash ? "#000" : C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12, transition: "background 0.1s, color 0.1s" }}>TAP</button>
+                  <button onClick={vidTap} style={{ background: vidTapFlash ? C.downbeat : C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: vidTapFlash ? "#000" : C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12, transition: "background 0.1s, color 0.1s" }}>{t("play.tap")}</button>
                 </div>
                 <div style={{ flex: 1, display: "flex", gap: 4, alignItems: "center" }}>
                   <input value={goBar} onChange={e => setGoBar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleGoToBar(); }} placeholder="Bar #" inputMode="numeric" style={{ ...nI, flex: 1, textAlign: "center", padding: "0 8px", fontSize: 13, height: 38 }} />
-                  <button onClick={handleGoToBar} style={{ ...tS, width: 38, height: 38, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Go</button>
+                  <button onClick={handleGoToBar} style={{ ...tS, width: 38, height: 38, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{t("video.go")}</button>
                 </div>
               </div>
             </div>
@@ -1077,17 +1292,17 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         </div>
       ) : syncActive && !syncBar ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ fontSize: 14, color: C.textMuted }}>Starting...</div>
+          <div style={{ fontSize: 14, color: C.textMuted }}>{t("video.starting")}</div>
         </div>
       ) : syncEnded ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
-          <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>END</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>Tap restart or go back to sections</div>
-          <button onClick={() => { setSyncBar(null); setSyncEnded(false); }} style={{ marginTop: 12, padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>Back to sections</button>
+          <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>{t("video.endTitle")}</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>{t("video.tapRestart")}</div>
+          <button onClick={() => { setSyncBar(null); setSyncEnded(false); }} style={{ marginTop: 12, padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>{t("video.backToSections")}</button>
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: "auto", padding: "4px 12px 16px", minHeight: 0 }}>
-          <div style={{ display: "flex", gap: 8, fontSize: 11, color: C.textMuted, marginBottom: 6 }}><span>{sections.length} sec</span></div>
+          <div style={{ display: "flex", gap: 8, fontSize: 11, color: C.textMuted, marginBottom: 6 }}><span>{sections.length} {t("sec")}</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {sections.map((sec, i) => {
               const isT = sec.type === "timed";
@@ -1097,7 +1312,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
                   <span style={{ fontSize: 9, color: C.textMuted }}>{i + 1}</span>
                   <button onClick={e => { e.stopPropagation(); onMoveSection && onMoveSection(i, 1); }} disabled={i === sections.length - 1} style={{ background: "none", border: "none", color: i === sections.length - 1 ? C.border : C.textMuted, cursor: i === sections.length - 1 ? "default" : "pointer", padding: 1, display: "flex", fontSize: 10 }}>▼</button>
                 </div>
-                {isT ? <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.duration}s free</div> : (<>
+                {isT ? <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.duration}s {t("play.free").toLowerCase()}</div> : (<>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 24, textAlign: "center", lineHeight: 1 }}><div>{sec.tsNum}</div><div style={{ height: 1, background: C.textMuted, margin: "1px 0" }} /><div>{sec.tsDen}</div></div>
                   <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.tempo} BPM</div>
                   <div style={{ fontSize: 11, color: sec.loop ? C.downbeat : C.textMuted }}>{sec.loop ? "∞" : `${sec.bars}b`}</div>
@@ -1114,20 +1329,20 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "center", padding: "8px 0 20px", flexShrink: 0 }}>
         <button onClick={syncPlayFromStart} style={{ ...tS, width: 40, height: 40, flexShrink: 0 }}>{I.restart(18)}</button>
         <button onClick={syncToggle} style={{ width: 52, height: 52, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{syncActive ? I.pause(20) : I.play(20)}</button>
-        <button onClick={() => setVidCountIn(v => (v + 1) % 3)} style={{ padding: "4px 6px", borderRadius: 8, border: `1px solid ${vidCountIn > 0 ? C.accent + "55" : C.border}`, background: vidCountIn > 0 ? C.accent + "15" : "transparent", color: vidCountIn > 0 ? C.accent : C.textMuted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace", width: 48, textAlign: "center", flexShrink: 0 }}>{vidCountIn === 0 ? "Off" : vidCountIn === 1 ? "1 Bar" : "2 Bars"}</button>
+        <button onClick={() => setVidCountIn(v => (v + 1) % 3)} style={{ padding: "4px 6px", borderRadius: 8, border: `1px solid ${vidCountIn > 0 ? C.accent + "55" : C.border}`, background: vidCountIn > 0 ? C.accent + "15" : "transparent", color: vidCountIn > 0 ? C.accent : C.textMuted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace", width: 48, textAlign: "center", flexShrink: 0 }}>{vidCountIn === 0 ? t("video.off") : vidCountIn === 1 ? t("video.1bar") : t("video.2bars")}</button>
       </div>
 
-      {!hasSync && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube, Vimeo, and SoundCloud.</div></div>}
+      {!hasSync && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>{t("video.syncAvailable")}</div></div>}
       </div>
       {showVidSave && <SaveM sections={sections} onClose={() => { setShowVidSave(false); initSnap.current = { sections: JSON.stringify(sections), startPt, endPt }; if (showClosePrompt) { setShowClosePrompt(false); onClose(); } }} onSaved={() => {}} videoUrl={videoUrl} videoSync={{ start: startPt, end: endPt }} loadedProfileId={loadedProfileId} />}
       {showClosePrompt && !showVidSave && <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowClosePrompt(false)}>
         <div className="modal-content" style={{ width: "100%", maxWidth: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, padding: "24px 20px", textAlign: "center" }} onClick={e => e.stopPropagation()}>
-          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>Unsaved Changes</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20, fontFamily: "'Outfit',sans-serif" }}>You have unsaved changes in this session.</div>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>{t("video.unsaved")}</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20, fontFamily: "'Outfit',sans-serif" }}>{t("video.unsavedDesc")}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <button onClick={() => { setShowClosePrompt(false); setShowVidSave(true); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Save Changes</button>
-            <button onClick={() => { setShowClosePrompt(false); onClose(); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.danger}55`, background: "transparent", color: C.danger, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Discard</button>
-            <button onClick={() => setShowClosePrompt(false)} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Cancel</button>
+            <button onClick={() => { setShowClosePrompt(false); setShowVidSave(true); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("video.saveChanges")}</button>
+            <button onClick={() => { setShowClosePrompt(false); onClose(); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.danger}55`, background: "transparent", color: C.danger, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("video.discard")}</button>
+            <button onClick={() => setShowClosePrompt(false)} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("video.cancel")}</button>
           </div>
         </div>
       </div>}
@@ -1140,33 +1355,34 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
 // All setting explanations should use data-tip or data-tip-b tooltip attributes only.
 // Keep the settings UI clean and minimal — no prose descriptions.
 function SetP({ settings: s, onChange, onClose }) {
-  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Settings</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
-    <SR l="Mode">{["basic", "default", "advanced"].map(v => <button key={v} onClick={() => u("appMode", v)} style={{ ...oB(s.appMode === v), textTransform: "capitalize" }}>{v}</button>)}</SR>
-    <SR l="Click">{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} data-tip={v === "accented" ? "Accented" : "Flat"} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>)}{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} data-tip={v === "pitched" ? "Pitched" : "Unpitched"} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "♪" : "✕"}</button>)}</SR><SR l="Beats">{[false, true].map(v => <button key={String(v)} onClick={() => u("downbeatOnly", v)} style={oB(s.downbeatOnly === v)}>{v ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>)}</SR><SR l="Visual">{[["dots", "●", "Pulse"], ["dots+flash", "● ◻", "Full"], ["flash", "◻", "Flash"]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l="Count-in">{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "Off" : `${v} bar${v > 1 ? "s" : ""}`}</button>)}</SR>
-    {s.appMode === "advanced" && <SR l="Silent Cycle"><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[0, 4, 8, 12, 16].map(v => <button key={v} onClick={() => u("silentInterval", v)} data-tip={v === 0 ? "Always audible" : `${v}s on, ${v}s off, repeating`} style={{ ...oB(s.silentInterval === v), fontSize: 11 }}>{v === 0 ? "Off" : `${v}s`}</button>)}</div></SR>}
+  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{t("settings.title")}</div><button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button></div>
+    <SR l={t("settings.language")}>{[["en","English"],["zh-CN","简体中文"],["zh-TW","繁體中文"]].map(([v,l])=><button key={v} onClick={()=>{u("lang",v);setAppLang(v)}} style={oB(s.lang===v)}>{l}</button>)}</SR>
+    <SR l={t("settings.mode")}>{[["basic",t("settings.basic")], ["default",t("settings.default")], ["advanced",t("settings.advanced")]].map(([v,l]) => <button key={v} onClick={() => u("appMode", v)} style={oB(s.appMode === v)}>{l}</button>)}</SR>
+    <SR l={t("settings.click")}>{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} data-tip={v === "accented" ? t("settings.accented") : t("settings.flatTip")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>)}{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} data-tip={v === "pitched" ? t("settings.pitched") : t("settings.unpitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "♪" : "✕"}</button>)}</SR><SR l={t("settings.beats")}>{[false, true].map(v => <button key={String(v)} onClick={() => u("downbeatOnly", v)} style={oB(s.downbeatOnly === v)}>{v ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>)}</SR><SR l={t("settings.visual")}>{[["dots", "●", t("settings.pulse")], ["dots+flash", "● ◻", t("settings.full")], ["flash", "◻", t("settings.flash")]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l={t("settings.countIn")}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? t("settings.countInOff") : v === 1 ? t("settings.countIn1") : t("settings.countIn2")}</button>)}</SR>
+    {s.appMode === "advanced" && <SR l={t("settings.silentCycle")}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[0, 4, 8, 12, 16].map(v => <button key={v} onClick={() => u("silentInterval", v)} data-tip={v === 0 ? t("settings.alwaysAudible") : `${v}s ${t("settings.silentTip")}, ${v}s ${t("settings.silentTip2")}`} style={{ ...oB(s.silentInterval === v), fontSize: 11 }}>{v === 0 ? t("off") : `${v}s`}</button>)}</div></SR>}
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-      <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>Device ID: {getDeviceId()}</div>
-      <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>Your data is stored locally and backed up anonymously.</div>
+      <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>{t("settings.deviceId")} {getDeviceId()}</div>
+      <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>{t("settings.privacy")}</div>
     </div></div></div>);
 }
 function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved, videoUrl: savedVideoUrl, videoSync: savedVideoSync, loadedProfileId }) {
   const existing = useMemo(() => { if (!loadedProfileId) return null; const p = ldP(); return p.find(x => x.id === loadedProfileId) || null; }, [loadedProfileId]);
-  const [t, sT] = useState(existing?.title || ""), [c, sC] = useState(existing?.composer || ""), [perf, setPerf] = useState(existing?.performer || ""), [vUrl, setVUrl] = useState(savedVideoUrl || existing?.videoUrl || "");
-  const ok = t.trim() && c.trim();
-  const saveNew = () => { if (!ok) return; const p = ldP(); const id = Date.now(); const profile = { id, title: t.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (perf.trim()) profile.performer = perf.trim(); if (vUrl.trim()) profile.videoUrl = vUrl.trim(); if (savedVideoSync) profile.videoSync = savedVideoSync; p.push(profile); svP(p); onSaved(id); onClose(); };
-  const overwrite = () => { if (!ok || !loadedProfileId) return; const p = ldP(); const idx = p.findIndex(x => x.id === loadedProfileId); if (idx < 0) { saveNew(); return; } p[idx] = { ...p[idx], title: t.trim(), composer: c.trim(), performer: perf.trim() || undefined, videoUrl: vUrl.trim() || undefined, videoSync: savedVideoSync || p[idx].videoSync, sections, updatedAt: new Date().toISOString() }; svP(p); onSaved(loadedProfileId); onClose(); };
+  const [ti, sTi] = useState(existing?.title || ""), [c, sC] = useState(existing?.composer || ""), [perf, setPerf] = useState(existing?.performer || ""), [vUrl, setVUrl] = useState(savedVideoUrl || existing?.videoUrl || "");
+  const ok = ti.trim() && c.trim();
+  const saveNew = () => { if (!ok) return; const p = ldP(); const id = Date.now(); const profile = { id, title: ti.trim(), composer: c.trim(), sections, createdAt: new Date().toISOString() }; if (perf.trim()) profile.performer = perf.trim(); if (vUrl.trim()) profile.videoUrl = vUrl.trim(); if (savedVideoSync) profile.videoSync = savedVideoSync; p.push(profile); svP(p); onSaved(id); onClose(); };
+  const overwrite = () => { if (!ok || !loadedProfileId) return; const p = ldP(); const idx = p.findIndex(x => x.id === loadedProfileId); if (idx < 0) { saveNew(); return; } p[idx] = { ...p[idx], title: ti.trim(), composer: c.trim(), performer: perf.trim() || undefined, videoUrl: vUrl.trim() || undefined, videoSync: savedVideoSync || p[idx].videoSync, sections, updatedAt: new Date().toISOString() }; svP(p); onSaved(loadedProfileId); onClose(); };
   return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{existing ? "Update Piece" : "Save Piece"}</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
-    <input value={t} onChange={e => sT(e.target.value)} placeholder="Title" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
-    <input value={c} onChange={e => sC(e.target.value)} placeholder="Composer / Arranger" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
-    <input value={perf} onChange={e => setPerf(e.target.value)} placeholder="Performer / Ensemble (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 13, color: C.textMuted }} />
-    <input value={vUrl} onChange={e => setVUrl(e.target.value)} placeholder="Video URL (optional)" style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 13, color: C.textMuted }} />
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{existing ? t("save.updatePiece") : t("save.savePiece")}</div><button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button></div>
+    <input value={ti} onChange={e => sTi(e.target.value)} placeholder={t("save.title")} style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
+    <input value={c} onChange={e => sC(e.target.value)} placeholder={t("save.composer")} style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 }} />
+    <input value={perf} onChange={e => setPerf(e.target.value)} placeholder={t("save.performer")} style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 13, color: C.textMuted }} />
+    <input value={vUrl} onChange={e => setVUrl(e.target.value)} placeholder={t("save.videoUrl")} style={{ ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 20, fontSize: 13, color: C.textMuted }} />
     {existing ? (<div style={{ display: "flex", gap: 8 }}>
-      <button onClick={overwrite} style={{ flex: 1, padding: "12px", borderRadius: 8, border: "none", background: ok ? C.accent : C.sub, color: ok ? "#fff" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Update</button>
-      <button onClick={saveNew} style={{ flex: 1, padding: "12px", borderRadius: 8, border: `1px solid ${ok ? C.downbeat : C.sub}`, background: "transparent", color: ok ? C.downbeat : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save New</button>
+      <button onClick={overwrite} style={{ flex: 1, padding: "12px", borderRadius: 8, border: "none", background: ok ? C.accent : C.sub, color: ok ? "#fff" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>{t("save.update")}</button>
+      <button onClick={saveNew} style={{ flex: 1, padding: "12px", borderRadius: 8, border: `1px solid ${ok ? C.downbeat : C.sub}`, background: "transparent", color: ok ? C.downbeat : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>{t("save.saveNew")}</button>
     </div>) : (
-      <button onClick={saveNew} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>Save</button>
+      <button onClick={saveNew} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: ok ? C.downbeat : C.sub, color: ok ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: ok ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>{t("save.save")}</button>
     )}
   </div></div>);
 }
@@ -1205,17 +1421,17 @@ function LibP({ onLoad, onClose }) {
     input.click();
   };
   return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "80vh", display: "flex", flexDirection: "column" }} onClick={e => e.stopPropagation()}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>Library</div><div style={{ display: "flex", gap: 6 }}>
-      <button onClick={importFile} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, padding: "4px 8px", cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Import</button>
-      <button onClick={exportAll} disabled={p.length === 0} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: p.length > 0 ? C.textMuted : C.border, padding: "4px 8px", cursor: p.length > 0 ? "pointer" : "default", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Export</button>
-      <button onClick={onClose} data-tip-b="Close" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{t("lib.title")}</div><div style={{ display: "flex", gap: 6 }}>
+      <button onClick={importFile} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, padding: "4px 8px", cursor: "pointer", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{t("lib.import")}</button>
+      <button onClick={exportAll} disabled={p.length === 0} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: p.length > 0 ? C.textMuted : C.border, padding: "4px 8px", cursor: p.length > 0 ? "pointer" : "default", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{t("lib.export")}</button>
+      <button onClick={onClose} data-tip-b={t("close")} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", width: 44, height: 44, borderRadius: 8 }}>{I.x(18)}</button>
     </div></div>
     <div style={{ position: "relative", marginBottom: 12 }}>
-      <input value={s} onChange={e => sS(e.target.value)} placeholder="Search..." style={{ ...nI, width: "100%", textAlign: "left", padding: "0 36px", fontSize: 14 }} />
+      <input value={s} onChange={e => sS(e.target.value)} placeholder={t("lib.search")} style={{ ...nI, width: "100%", textAlign: "left", padding: "0 36px", fontSize: 14 }} />
       <div style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: C.textMuted }}>{I.search(14)}</div>
       {s.length > 0 && <button onClick={() => sS("")} style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(14)}</button>}
     </div>
-    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}><div style={{ opacity: 0.15, transform: "scale(1.2)" }}>{I.folder(48)}</div><div style={{ fontSize: 16, color: C.textMuted }}>{p.length === 0 ? "Your Library is empty" : "No pieces found"}</div><div style={{ fontSize: 13, color: C.border, maxWidth: "80%" }}>{p.length === 0 ? "Save your sections into profiles to quickly load them later." : "Try adjusting your search query."}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null, x.videoSync || null, x.id); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}{x.performer ? ` · ${x.performer}` : ""}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} sec</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>Delete?</span> : I.trash(14)}</button></div>))}</div>
+    <div style={{ overflowY: "auto", flex: 1 }}>{f.length === 0 && <div style={{ color: C.textMuted, fontSize: 14, fontFamily: "'Outfit',sans-serif", textAlign: "center", padding: "60px 20px", display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}><div style={{ opacity: 0.15, transform: "scale(1.2)" }}>{I.folder(48)}</div><div style={{ fontSize: 16, color: C.textMuted }}>{p.length === 0 ? t("lib.empty") : t("lib.noResults")}</div><div style={{ fontSize: 13, color: C.border, maxWidth: "80%" }}>{p.length === 0 ? t("lib.emptyDesc") : t("lib.noResultsDesc")}</div></div>}{f.map(x => (<div key={x.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}><div style={{ flex: 1, cursor: "pointer" }} onClick={() => { onLoad(x.sections, x.videoUrl || null, x.videoSync || null, x.id); onClose(); }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{x.title}{x.videoUrl && <span style={{ fontSize: 11, color: C.accent }} title={x.videoUrl}>▶</span>}</div><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted }}>{x.composer}{x.performer ? ` · ${x.performer}` : ""}</div></div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{x.sections?.length || 0} {t("sec")}</div><button onClick={() => del(x.id)} data-tip-b={confirmDelId === x.id ? "Tap again" : "Delete"} style={{ background: confirmDelId === x.id ? C.danger + "22" : "none", border: confirmDelId === x.id ? `1px solid ${C.danger}` : "1px solid transparent", borderRadius: 6, color: C.danger + (confirmDelId === x.id ? "ff" : "99"), cursor: "pointer", padding: 4, display: "flex", transition: "all 0.15s" }}>{confirmDelId === x.id ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace" }}>{t("lib.deleteQ")}</span> : I.trash(14)}</button></div>))}</div>
   </div></div>);
 }
 
@@ -1235,28 +1451,28 @@ function PracSetup({ sections, onStart, onClose }) {
   };
   return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
     <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} Practice Mode</div><button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button></div>
-      <Row label="Start">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.practice, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.target(18)} {t("prac.title")}</div><button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button></div>
+      <Row label={t("prac.start")}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Stp value={startBpm} onChange={setStartBpm} min={10} max={refTempo} />
           <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
           <span style={{ color: C.textMuted + "88", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{pct}%</span>
         </div>
       </Row>
-      <Row label="Target">
+      <Row label={t("prac.target")}>
         <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 16, color: C.text }}>{refTempo}</span>
         <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
         <span style={{ color: C.textMuted + "88", fontSize: 11, fontFamily: "'DM Mono',monospace" }}>100%</span>
       </Row>
-      <Row label="Increment">
+      <Row label={t("prac.increment")}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Stp value={inc} onChange={setInc} min={1} max={50} />
           <span style={{ color: C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace" }}>BPM</span>
         </div>
       </Row>
-      <Row label="Repeats"><Stp value={reps} onChange={setReps} min={1} max={20} /></Row>
+      <Row label={t("prac.repeats")}><Stp value={reps} onChange={setReps} min={1} max={20} /></Row>
       <div style={{ marginTop: 18 }}>
-        <button onClick={doStart} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: C.practice, color: "#000", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Start</button>
+        <button onClick={doStart} style={{ width: "100%", padding: "12px", borderRadius: 8, border: "none", background: C.practice, color: "#000", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("prac.startBtn")}</button>
       </div>
     </div>
   </div>);
@@ -1278,8 +1494,8 @@ export default function Tempus() {
   useEffect(() => { if (videoUrl) _setLS("tempus_videoUrl", videoUrl); else { try { localStorage.removeItem("tempus_videoUrl"); } catch {} } }, [videoUrl]);
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
-  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0 }; });
-  useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en" }; });
+  useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); if (settings.lang) setAppLang(settings.lang); }, [settings]);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
   const [isP, setIsP] = useState(false);
@@ -1563,17 +1779,17 @@ export default function Tempus() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
         <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? "Tap again" : "New"} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{confirmClear ? "Clear?" : I.fileNew(18)}</button>}
-          {videoUrl && !sync.isMemberLocked && <button onClick={() => setShowVideo(true)} data-tip-b="Video" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
-          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
-          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
-          {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b="Sync" style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
-          <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
+          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? t("toolbar.tapAgain") : t("toolbar.new")} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{confirmClear ? t("toolbar.clearQ") : I.fileNew(18)}</button>}
+          {videoUrl && !sync.isMemberLocked && <button onClick={() => setShowVideo(true)} data-tip-b={t("toolbar.video")} style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
+          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b={t("toolbar.library")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
+          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b={t("toolbar.save")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b={t("toolbar.sync")} style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
+          <button onClick={() => setShowSet(true)} data-tip-b={t("toolbar.settings")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
         </div>
       </div>
 
       <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", gap: 16, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>
-        <span>{sections.length} section{sections.length !== 1 ? "s" : ""}</span><span>{totalBars} bar{totalBars !== 1 ? "s" : ""}</span>
+        <span>{sections.length} {tp("unit.sec", sections.length)}</span><span>{totalBars} {tp("unit.bar", totalBars)}</span>
         {totalBars > 0 && <span>{Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur)}s</span>}
       </div>
 
@@ -1587,9 +1803,9 @@ export default function Tempus() {
       {/* Bottom buttons: Play / Record / Practice — hidden for members in sync room, host routes Play through sync */}
       {!sync.isMemberLocked && <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
         <div className="glass-pill" style={{ display: "flex", gap: 20, alignItems: "center", pointerEvents: "auto", padding: "10px 24px" }}>
-          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
-          <button className="btn-ripple transport-btn" onClick={() => { if (sync.isInRoom && sync.isHost) { met.tap(); sync.doStart(); } else { met.tap(); setMode("normal"); go(0); } }} disabled={!sections.length || (sync.isInRoom && !sync.syncReady)} data-tip={sync.isInRoom ? (sync.syncReady ? "Sync Start" : "Connecting...") : "Play"} style={{ width: 64, height: 64, borderRadius: "50%", background: sync.isInRoom ? sync.SYNC_COLOR : C.downbeat, border: "none", color: "#000", cursor: (sync.isInRoom && !sync.syncReady) ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: (sync.isInRoom && !sync.syncReady) ? 0.4 : 1, boxShadow: `0 0 24px ${sync.isInRoom ? sync.SYNC_GLOW : C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, opacity 0.3s" }}>{(sync.isInRoom && !sync.syncReady) ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#000" }}>...</span> : I.play(28)}</button>
-          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip="Practice Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
+          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip={t("toolbar.record")} style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
+          <button className="btn-ripple transport-btn" onClick={() => { if (sync.isInRoom && sync.isHost) { met.tap(); sync.doStart(); } else { met.tap(); setMode("normal"); go(0); } }} disabled={!sections.length || (sync.isInRoom && !sync.syncReady)} data-tip={sync.isInRoom ? (sync.syncReady ? t("toolbar.syncStart") : t("toolbar.connecting")) : t("toolbar.play")} style={{ width: 64, height: 64, borderRadius: "50%", background: sync.isInRoom ? sync.SYNC_COLOR : C.downbeat, border: "none", color: "#000", cursor: (sync.isInRoom && !sync.syncReady) ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: (sync.isInRoom && !sync.syncReady) ? 0.4 : 1, boxShadow: `0 0 24px ${sync.isInRoom ? sync.SYNC_GLOW : C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, opacity 0.3s" }}>{(sync.isInRoom && !sync.syncReady) ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#000" }}>...</span> : I.play(28)}</button>
+          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip={t("toolbar.practiceMode")} style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
         </div>
       </div>}
 
@@ -1603,8 +1819,8 @@ export default function Tempus() {
       <SyncToast message={sync.toast} />
       {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} onEditSection={id => { setEditIsNew(false); setEditId(id); }} onAddSection={addSec} onDeleteSection={handleDelete} onMoveSection={moveSec} loadedProfileId={loadedProfileId} />}
       {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
-        <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
-        <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
+        <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? t("undo.cleared") : t("undo.deleted")}</span>
+        <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} {t("undo.undo")}</button>
       </div>}
     </div>
   );
