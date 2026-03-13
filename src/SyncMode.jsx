@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { fbInit, getDeviceId, C, I, buildTL, nI, SyncIcon } from "./App";
+import { fbInit, getDeviceId, C, I, buildTL, nI, SyncIcon, t, tp } from "./App";
 
 // ============ SYNC CONSTANTS ============
 const SYNC_COLOR = "#06b6d4";
@@ -270,13 +270,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     unsubRef.current = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
       if (!snap.exists()) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
-        if (originalSections.current) showToast("Room closed by host");
+        if (originalSections.current) showToast(t("sync.roomClosed"));
         return;
       }
       const d = snap.data(); const myId = getDeviceId();
       if (d.kicked?.includes(myId)) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
-        showToast("You were removed by the host"); return;
+        showToast(t("sync.removed")); return;
       }
       // On first snapshot, initialize lastCmdSeq and mark connection as ready
       if (firstSnapshot) {
@@ -449,7 +449,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (!roomCode || !isHost) return;
     // Host stops locally immediately
     exitPlayRef.current();
-    showToast("Sync reset — all devices reloaded");
+    showToast(t("sync.resetAll"));
     // Write to Firestore for members
     updateRoomSections(roomCode, sectionsRef.current);
     sendCommand(roomCode, "sync-reset");
@@ -506,12 +506,12 @@ export function SyncStatusBar({ sync, onOpenLobby }) {
       <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{memberCount}</span>
       <div style={{ flex: 1 }} />
 
-      {isHost && <button onClick={handleSyncReset} style={sb(confirmReset ? "#000" : SYNC_COLOR, confirmReset ? SYNC_COLOR : SYNC_COLOR + "15", SYNC_COLOR + (confirmReset ? "" : "55"))}>{confirmReset ? "Confirm?" : "Sync Reset"}</button>}
-      {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>Stop</button>}
-      {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>Resume</button>}
-      {isHost && status === "paused" && <button onClick={doRestart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>Restart</button>}
-      {isHost && (pendingCount > 0 || memberCount > 1) && <button onClick={onOpenLobby} style={sb(SYNC_COLOR, "transparent", SYNC_COLOR + "55")}>{pendingCount > 0 ? `${pendingCount} pending` : "Manage"}</button>}
-      <button onClick={handleLeave} style={sb(confirmLeave ? C.danger : C.textMuted, confirmLeave ? C.danger + "15" : "transparent", confirmLeave ? C.danger + "55" : C.border)}>{confirmLeave ? "Leave?" : I.x(12)}</button>
+      {isHost && <button onClick={handleSyncReset} style={sb(confirmReset ? "#000" : SYNC_COLOR, confirmReset ? SYNC_COLOR : SYNC_COLOR + "15", SYNC_COLOR + (confirmReset ? "" : "55"))}>{confirmReset ? t("sync.confirmQ") : t("sync.syncReset")}</button>}
+      {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>{t("sync.stop")}</button>}
+      {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>{t("sync.resume")}</button>}
+      {isHost && status === "paused" && <button onClick={doRestart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>{t("sync.restart")}</button>}
+      {isHost && (pendingCount > 0 || memberCount > 1) && <button onClick={onOpenLobby} style={sb(SYNC_COLOR, "transparent", SYNC_COLOR + "55")}>{pendingCount > 0 ? `${pendingCount} ${t("sync.pending").toLowerCase()}` : t("sync.manage")}</button>}
+      <button onClick={handleLeave} style={sb(confirmLeave ? C.danger : C.textMuted, confirmLeave ? C.danger + "15" : "transparent", confirmLeave ? C.danger + "55" : C.border)}>{confirmLeave ? t("sync.leaveQ") : I.x(12)}</button>
     </div>
   );
 }
@@ -545,18 +545,18 @@ export function SyncLobby({ sync, onLoadSections }) {
   }, [view, syncState?.code]);
 
   const handleCreate = async () => {
-    if (!name.trim()) { setError("Enter your display name"); return; }
+    if (!name.trim()) { setError(t("sync.enterName")); return; }
     setLoading(true); setError(null);
     const c = await doCreateRoom(name.trim()); setLoading(false);
     if (c) { setView("room"); setTimeout(() => setShowLobby(false), 500); }
   };
 
   const handleJoin = async () => {
-    if (!name.trim()) { setError("Enter your display name"); return; }
-    if (code.length !== 4) { setError("Enter a 4-digit room code"); return; }
+    if (!name.trim()) { setError(t("sync.enterName")); return; }
+    if (code.length !== 4) { setError(t("sync.enter4Digit")); return; }
     setLoading(true); setError(null);
     const ok = await doJoinRoom(code, name.trim()); setLoading(false);
-    if (ok) setView("room"); else setError("Could not join room");
+    if (ok) setView("room"); else setError(t("sync.couldNotJoin"));
   };
 
   const handleLeave = async () => {
@@ -603,113 +603,113 @@ export function SyncLobby({ sync, onLoadSections }) {
   // ENTRY
   if (view === "entry") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.mode")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <button onClick={() => setView("create")} style={bp}>Create Room</button>
-        <button onClick={() => setView("join")} style={bo(SYNC_COLOR)}>Join Room</button>
+        <button onClick={() => setView("create")} style={bp}>{t("sync.createRoom")}</button>
+        <button onClick={() => setView("join")} style={bo(SYNC_COLOR)}>{t("sync.joinRoom")}</button>
       </div>
-      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>Up to {MAX_MEMBERS} devices can sync together.</div>
+      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>{t("sync.upTo")} {MAX_MEMBERS} {t("sync.maxDevices")}</div>
     </div></div>
   );
 
   // CREATE
   if (view === "create") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Create Room</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name" autoFocus style={inp} onKeyDown={e => { if (e.key === "Enter") handleCreate(); }} />
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.createRoom")}</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder={t("sync.displayName")} autoFocus style={inp} onKeyDown={e => { if (e.key === "Enter") handleCreate(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
-      <button onClick={handleCreate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "Creating..." : "Create Room"}</button>
+      <button onClick={handleCreate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? t("sync.creating") : t("sync.createRoom")}</button>
     </div></div>
   );
 
   // JOIN
   if (view === "join") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Join Room</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name" autoFocus style={inp} />
-      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 6 }}>Room code</div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.joinRoom")}</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder={t("sync.displayName")} autoFocus style={inp} />
+      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 6 }}>{t("sync.roomCode")}</div>
       <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="0000" inputMode="numeric" style={{ ...inp, letterSpacing: code ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
-      <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "Joining..." : "Join Room"}</button>
+      <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? t("sync.joining") : t("sync.joinRoom")}</button>
     </div></div>
   );
 
   // WAITING ROOM (member pending)
   if (!isHost && syncState?.isPending) return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Waiting Room</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.waitingRoom")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ textAlign: "center", padding: "32px 0" }}>
-        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Waiting for the host to let you in...</div>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>Room {syncState.code}</div>
+        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("sync.waitingForHost")}</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{t("sync.room")} {syncState.code}</div>
         <div style={{ marginTop: 8 }}><div className="sync-pulse" style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, margin: "0 auto" }} /></div>
       </div>
-      <button onClick={handleLeave} style={bo(C.textMuted)}>Leave</button>
+      <button onClick={handleLeave} style={bo(C.textMuted)}>{t("sync.leave")}</button>
     </div></div>
   );
 
   // LATE JOIN during performance
   if (!isHost && syncState?.isAdmitted && syncState?.status === "playing") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.mode")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ textAlign: "center", padding: "32px 0" }}>
-        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Performance in progress</div>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>Waiting for next start...</div>
+        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("sync.performanceInProgress")}</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("sync.waitingForNext")}</div>
         <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 16 }}>
           {Object.keys(members).map(id => <div key={id} style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR }} />)}
         </div>
       </div>
-      <button onClick={handleLeave} style={bo(C.textMuted)}>Leave Room</button>
+      <button onClick={handleLeave} style={bo(C.textMuted)}>{t("sync.leaveRoom")}</button>
     </div></div>
   );
 
   // ROOM MANAGEMENT (host: manage members; anyone: view room)
   return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Room {syncState?.code}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.room")} {syncState?.code}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 28, color: SYNC_COLOR, letterSpacing: 6, fontWeight: 700 }}>{syncState?.code}</div>
         <button onClick={() => navigator.clipboard?.writeText(syncState?.code || "")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: 6, display: "flex" }}>{I.copy(14)}</button>
       </div>
-      <div style={{ textAlign: "center", fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace", marginBottom: 16 }}>{memberCount}/{MAX_MEMBERS} members</div>
+      <div style={{ textAlign: "center", fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace", marginBottom: 16 }}>{memberCount}/{MAX_MEMBERS} {tp("unit.member", memberCount)}</div>
 
       {/* Pending (host) */}
       {isHost && pendingList.length > 0 && <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>Pending ({pendingList.length})</span>
-          {pendingList.length > 1 && <button onClick={() => doAdmitAll()} style={{ background: "none", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "3px 8px", fontFamily: "'Outfit',sans-serif" }}>Admit All</button>}
+          <span>{t("sync.pending")} ({pendingList.length})</span>
+          {pendingList.length > 1 && <button onClick={() => doAdmitAll()} style={{ background: "none", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "3px 8px", fontFamily: "'Outfit',sans-serif" }}>{t("sync.admitAll")}</button>}
         </div>
         {pendingList.map(([id, info]) => (
           <div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
-            <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "Unknown"}</div>
-            <button onClick={() => doAdmit(id)} style={{ background: SYNC_COLOR + "22", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "4px 10px", fontFamily: "'Outfit',sans-serif" }}>Admit</button>
-            <button onClick={() => handleKick(id)} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'Outfit',sans-serif", opacity: 0.7 }}>Decline</button>
+            <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || t("sync.unknown")}</div>
+            <button onClick={() => doAdmit(id)} style={{ background: SYNC_COLOR + "22", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "4px 10px", fontFamily: "'Outfit',sans-serif" }}>{t("sync.admit")}</button>
+            <button onClick={() => handleKick(id)} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'Outfit',sans-serif", opacity: 0.7 }}>{t("sync.decline")}</button>
           </div>
         ))}
       </div>}
 
       {/* Members */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Members</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("sync.members")}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, flexShrink: 0, boxShadow: `0 0 6px ${SYNC_COLOR}` }} />
-          <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || "Host"}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>HOST</span></div>
+          <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || t("sync.host")}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>{t("sync.host")}</span></div>
         </div>
         {memberList.map(([id, info]) => {
           const pres = presence[id];
           const stale = pres?.lastSeen ? (Date.now() - pres.lastSeen) > STALE_MS : false;
           return (<div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: stale ? C.textMuted : SYNC_COLOR, flexShrink: 0, boxShadow: stale ? "none" : `0 0 6px ${SYNC_COLOR}` }} />
-            <div style={{ flex: 1, fontSize: 13, color: stale ? C.textMuted : C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "Unknown"}</div>
-            {isHost && <button onClick={() => handleKick(id)} style={{ background: confirmKickId === id ? C.danger + "22" : "none", border: `1px solid ${confirmKickId === id ? C.danger : C.border}`, borderRadius: 6, color: confirmKickId === id ? C.danger : C.textMuted, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'DM Mono',monospace", transition: "all 0.15s" }}>{confirmKickId === id ? "Kick?" : I.x(12)}</button>}
+            <div style={{ flex: 1, fontSize: 13, color: stale ? C.textMuted : C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || t("sync.unknown")}</div>
+            {isHost && <button onClick={() => handleKick(id)} style={{ background: confirmKickId === id ? C.danger + "22" : "none", border: `1px solid ${confirmKickId === id ? C.danger : C.border}`, borderRadius: 6, color: confirmKickId === id ? C.danger : C.textMuted, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'DM Mono',monospace", transition: "all 0.15s" }}>{confirmKickId === id ? t("sync.kickQ") : I.x(12)}</button>}
           </div>);
         })}
       </div>
 
-      {isHost && memberList.length > 0 && <button onClick={handleKickAll} style={{ ...bo(confirmKickAll ? C.danger : C.textMuted), borderColor: confirmKickAll ? C.danger + "88" : C.border, color: confirmKickAll ? C.danger : C.textMuted, fontSize: 12, marginBottom: 8 }}>{confirmKickAll ? "Tap again to remove everyone" : "Remove all members"}</button>}
-      {!isHost && syncState?.isAdmitted && <button onClick={handleLeave} style={bo(C.textMuted)}>Leave Room</button>}
-      <button onClick={close} style={{ ...bo(SYNC_COLOR), marginTop: 8 }}>Back to sections</button>
+      {isHost && memberList.length > 0 && <button onClick={handleKickAll} style={{ ...bo(confirmKickAll ? C.danger : C.textMuted), borderColor: confirmKickAll ? C.danger + "88" : C.border, color: confirmKickAll ? C.danger : C.textMuted, fontSize: 12, marginBottom: 8 }}>{confirmKickAll ? t("sync.removeAllConfirm") : t("sync.removeAll")}</button>}
+      {!isHost && syncState?.isAdmitted && <button onClick={handleLeave} style={bo(C.textMuted)}>{t("sync.leaveRoom")}</button>}
+      <button onClick={close} style={{ ...bo(SYNC_COLOR), marginTop: 8 }}>{t("sync.backToSections")}</button>
     </div></div>
   );
 }
