@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { fbInit, getDeviceId, C, I, buildTL, nI } from "./App";
+import { fbInit, getDeviceId, C, I, buildTL, nI, SyncIcon } from "./App";
 
 // ============ SYNC CONSTANTS ============
 const SYNC_COLOR = "#06b6d4";
@@ -7,14 +7,6 @@ const SYNC_GLOW = "rgba(6, 182, 212, 0.4)";
 const MAX_MEMBERS = 20;
 const HEARTBEAT_MS = 10000;
 const STALE_MS = 15000;
-
-// ============ SYNC ICON ============
-export const SyncIcon = ({ size = 18 }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
-    <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-    <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
-  </svg>
-);
 
 // ============ FIRESTORE HELPERS ============
 let _fsModule = null;
