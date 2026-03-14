@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { fbInit, getDeviceId, C, I, buildTL, nI, SyncIcon, t, tp, getClusterId, unlinkDeviceForSync } from "./App";
+import { fbInit, getDeviceId, getAuthUid, C, I, buildTL, nI, SyncIcon, t, tp, getClusterId, unlinkDeviceForSync } from "./App";
 
 // ============ SYNC CONSTANTS ============
 const SYNC_COLOR = "#06b6d4";
@@ -15,7 +15,14 @@ async function getFS() {
   return _fsModule;
 }
 
-function genRoomCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
+// 6-char alphanumeric code, excludes ambiguous chars: 0/O, 1/I/L
+const ROOM_CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const ROOM_CODE_LEN = 6;
+function genRoomCode() {
+  let code = "";
+  for (let i = 0; i < ROOM_CODE_LEN; i++) code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+  return code;
+}
 
 async function createRoom(sections, settings, _retries = 0) {
   if (_retries >= 10) throw new Error("Could not generate a unique room code");
@@ -32,12 +39,13 @@ async function createRoom(sections, settings, _retries = 0) {
       return createRoom(sections, settings, _retries + 1);
     }
   }
+  const authUid = getAuthUid();
   await fs.setDoc(fs.doc(db, "tempus_rooms", code), {
-    code, hostId: deviceId, hostName: "", status: "lobby",
+    code, hostId: deviceId, hostAuthUid: authUid, hostName: "", status: "lobby",
     sections: JSON.parse(JSON.stringify(sections)),
     commandSeq: 0, command: null, startAtMs: null,
     resumeFromBar: 1, countInBars: settings.countIn || 1,
-    members: { [deviceId]: { name: "", joinedAt: Date.now(), lastSeen: Date.now() } },
+    members: { [deviceId]: { name: "", authUid: authUid, joinedAt: Date.now(), lastSeen: Date.now() } },
     pending: {}, kicked: [], createdAt: Date.now()
   });
   return code;
@@ -54,10 +62,10 @@ async function joinRoomPending(code, displayName) {
   if (data.kicked?.includes(deviceId)) throw new Error("You were removed from this room");
   if (Object.keys(data.members || {}).length + Object.keys(data.pending || {}).length >= MAX_MEMBERS) throw new Error("Room is full");
   if (data.members?.[deviceId]) {
-    await fs.updateDoc(ref, { [`members.${deviceId}.name`]: displayName, [`members.${deviceId}.lastSeen`]: Date.now() });
+    await fs.updateDoc(ref, { [`members.${deviceId}.name`]: displayName, [`members.${deviceId}.lastSeen`]: Date.now(), [`members.${deviceId}.authUid`]: getAuthUid() });
     return { admitted: true };
   }
-  await fs.updateDoc(ref, { [`pending.${deviceId}`]: { name: displayName, requestedAt: Date.now() } });
+  await fs.updateDoc(ref, { [`pending.${deviceId}`]: { name: displayName, authUid: getAuthUid(), requestedAt: Date.now() } });
   return { admitted: false };
 }
 
@@ -65,7 +73,7 @@ async function admitMember(code, memberId) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
   const snap = await fs.getDoc(fs.doc(db, "tempus_rooms", code)); if (!snap.exists()) return;
   const p = snap.data().pending?.[memberId]; if (!p) return;
-  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${memberId}`]: { name: p.name, joinedAt: Date.now(), lastSeen: Date.now() }, [`pending.${memberId}`]: fs.deleteField() });
+  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${memberId}`]: { name: p.name, authUid: p.authUid || null, joinedAt: Date.now(), lastSeen: Date.now() }, [`pending.${memberId}`]: fs.deleteField() });
 }
 
 async function admitAll(code) {
@@ -73,7 +81,7 @@ async function admitAll(code) {
   const snap = await fs.getDoc(fs.doc(db, "tempus_rooms", code)); if (!snap.exists()) return;
   const updates = {};
   for (const [id, info] of Object.entries(snap.data().pending || {})) {
-    updates[`members.${id}`] = { name: info.name, joinedAt: Date.now(), lastSeen: Date.now() };
+    updates[`members.${id}`] = { name: info.name, authUid: info.authUid || null, joinedAt: Date.now(), lastSeen: Date.now() };
     updates[`pending.${id}`] = fs.deleteField();
   }
   if (Object.keys(updates).length > 0) await fs.updateDoc(fs.doc(db, "tempus_rooms", code), updates);
@@ -555,7 +563,7 @@ export function SyncLobby({ sync, onLoadSections }) {
 
   const handleJoin = async () => {
     if (!name.trim()) { setError(t("sync.enterName")); return; }
-    if (code.length !== 4) { setError(t("sync.enter4Digit")); return; }
+    if (code.length !== ROOM_CODE_LEN) { setError(t("sync.enter4Digit")); return; }
     setLoading(true); setError(null);
     const ok = await doJoinRoom(code, name.trim()); setLoading(false);
     if (ok) setView("room"); else setError(t("sync.couldNotJoin"));
@@ -663,7 +671,7 @@ export function SyncLobby({ sync, onLoadSections }) {
       <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.joinRoom")}</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
       <input value={name} onChange={e => setName(e.target.value)} placeholder={t("sync.displayName")} autoFocus style={inp} />
       <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 6 }}>{t("sync.roomCode")}</div>
-      <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="0000" inputMode="numeric" style={{ ...inp, letterSpacing: code ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
+      <input value={code} onChange={e => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, ROOM_CODE_LEN))} placeholder="ABC123" style={{ ...inp, letterSpacing: code ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
       <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? t("sync.joining") : t("sync.joinRoom")}</button>
     </div></div>
