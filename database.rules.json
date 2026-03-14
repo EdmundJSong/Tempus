@@ -1,0 +1,39 @@
+{
+  "rules": {
+    "link_codes": {
+      "$code": {
+        // Only authenticated users may read
+        ".read": "auth != null",
+
+        // Create: authenticated, code must not already exist, creatorAuthUid must match caller
+        ".write": "auth != null && (
+          (!data.exists() && newData.child('creatorAuthUid').val() == auth.uid)
+          || (
+            data.exists()
+            && data.child('joinedDeviceId').val() == null
+            && newData.child('joinedDeviceId').val() != null
+            && newData.child('creatorDeviceId').val() == data.child('creatorDeviceId').val()
+            && newData.child('creatorAuthUid').val() == data.child('creatorAuthUid').val()
+            && newData.child('clusterId').val() == data.child('clusterId').val()
+            && newData.child('createdAt').val() == data.child('createdAt').val()
+            && newData.child('expiresAt').val() == data.child('expiresAt').val()
+          )
+          || (
+            data.exists()
+            && data.child('creatorAuthUid').val() == auth.uid
+            && !newData.exists()
+          )
+        )",
+
+        // Validate shape on create
+        ".validate": "newData.hasChildren(['creatorDeviceId', 'creatorAuthUid', 'clusterId', 'createdAt', 'expiresAt'])"
+      }
+    },
+
+    // Deny all other paths
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

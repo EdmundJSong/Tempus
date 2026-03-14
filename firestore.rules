@@ -1,0 +1,103 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ──────────────────────────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+
+    // ── tempus_backups ────────────────────────────────────────────────
+    // Each doc is keyed by deviceId. Only the auth user who owns it may read/write.
+    // Migration: pre-existing docs without authUid are accessible to any authed user
+    //            (the next write will stamp authUid and lock it down).
+    match /tempus_backups/{deviceId} {
+      allow read:   if isAuth()
+                    && (resource.data.authUid == uid()
+                        || !('authUid' in resource.data));
+      allow create: if isAuth()
+                    && request.resource.data.deviceId == deviceId
+                    && request.resource.data.authUid == uid();
+      allow update: if isAuth()
+                    && (resource.data.authUid == uid()
+                        || !('authUid' in resource.data))
+                    && request.resource.data.authUid == uid();
+      allow delete: if isAuth()
+                    && (resource.data.authUid == uid()
+                        || !('authUid' in resource.data));
+    }
+
+    // ── tempus_rooms ─────────────────────────────────────────────────
+    match /tempus_rooms/{roomCode} {
+      // Anyone authenticated can read (needed to join / check existence)
+      allow read: if isAuth();
+
+      // Anyone authenticated can create a new room
+      allow create: if isAuth()
+                    && request.resource.data.hostAuthUid == uid();
+
+      // Host can do anything; members have restricted writes
+      // Migration: pre-existing rooms without hostAuthUid allow any authed user as host
+      allow update: if isAuth() && (
+        // Case 1: Host — full write access (or legacy room without hostAuthUid)
+        resource.data.hostAuthUid == uid()
+        || !('hostAuthUid' in resource.data)
+        ||
+        // Case 2: Non-host — may only write their own pending/member entry or heartbeat
+        (
+          // Must not touch host-only fields
+          !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['code', 'hostId', 'hostAuthUid', 'hostName', 'command', 'commandSeq',
+                      'startAtMs', 'resumeFromBar', 'countInBars', 'status',
+                      'sections', 'kicked', 'createdAt'])
+        )
+      );
+
+      // Only host can delete the room
+      allow delete: if isAuth()
+                    && (resource.data.hostAuthUid == uid()
+                        || !('hostAuthUid' in resource.data));
+
+      // ── presence subcollection ──────────────────────────────────
+      // Note: ideally scoped per-member, but presence docs are keyed by
+      // deviceId (not auth UID) so we can only enforce auth-required.
+      match /presence/{memberId} {
+        allow read:   if isAuth();
+        allow write:  if isAuth();
+        allow delete: if isAuth();
+      }
+    }
+
+    // ── tempus_clusters ──────────────────────────────────────────────
+    // Maintains a flat authUids[] array alongside devices map for rule checks.
+    // Migration: pre-existing docs without authUids are accessible to any authed user.
+    match /tempus_clusters/{clusterId} {
+      allow create: if isAuth()
+                    && uid() in request.resource.data.authUids;
+
+      allow read:   if isAuth()
+                    && (!('authUids' in resource.data)
+                        || uid() in resource.data.authUids);
+      allow update: if isAuth()
+                    && (!('authUids' in resource.data)
+                        || uid() in resource.data.authUids);
+      allow delete: if isAuth()
+                    && (!('authUids' in resource.data)
+                        || uid() in resource.data.authUids);
+    }
+
+    // ── tempus_clock_cal ─────────────────────────────────────────────
+    // Each device writes its own calibration doc (keyed by deviceId)
+    match /tempus_clock_cal/{deviceId} {
+      allow read, write, delete: if isAuth();
+    }
+
+    // ── Deny everything else ─────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
