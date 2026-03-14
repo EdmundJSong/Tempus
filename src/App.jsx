@@ -250,6 +250,7 @@ const S = {
   "link.lastSeen": { en: "Last seen", "zh-CN": "最后在线", "zh-TW": "最後上線" },
   "link.thisDevice": { en: "This device", "zh-CN": "当前设备", "zh-TW": "當前裝置" },
   "link.linkAnother": { en: "Link Another Device", "zh-CN": "关联另一台设备", "zh-TW": "關聯另一台裝置" },
+  "link.leaveCluster": { en: "Leave Cluster", "zh-CN": "离开集群", "zh-TW": "離開集群" },
   "link.waiting": { en: "Waiting for other device...", "zh-CN": "等待其他设备...", "zh-TW": "等待其他裝置..." },
   "link.expired": { en: "Code expired", "zh-CN": "码已过期", "zh-TW": "碼已過期" },
   "link.notLinked": { en: "No linked devices", "zh-CN": "无关联设备", "zh-TW": "無關聯裝置" },
@@ -1553,7 +1554,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px", flexShrink: 0 }}>
         <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>{t("video.sync")}</button>}
+          {(startPt != null || endPt != null) && <button onClick={handleSave} data-tip-b="Link video ⇄ click" style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 14, cursor: "pointer", lineHeight: 1 }}>⇄</button>}
           <button onClick={() => setShowVidSave(true)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(14)}</button>
           <button className="close-btn" onClick={handleClose}>{I.x(18)}</button>
         </div>
@@ -1926,7 +1927,7 @@ function DeviceLinkModal({ onClose, onProfilesUpdated }) {
               </div>
               <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", marginTop: 2 }}>{t("link.lastSeen")} {isMe ? "now" : fmtAgo(dev.lastSeen)}</div>
             </div>
-            <button onClick={() => { setUnlinkTarget(did); setView("unlink"); }} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, cursor: "pointer", padding: "4px 10px", fontSize: 11, fontFamily: "'Outfit',sans-serif" }}>{t("link.unlink")}</button>
+            {!isMe && <button onClick={() => { setUnlinkTarget(did); setView("unlink"); }} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, cursor: "pointer", padding: "4px 10px", fontSize: 11, fontFamily: "'Outfit',sans-serif" }}>{t("link.unlink")}</button>}
           </div>);
         })}
       </div>) : (<div style={{ textAlign: "center", padding: "30px 20px", marginBottom: 16 }}>
@@ -1941,6 +1942,7 @@ function DeviceLinkModal({ onClose, onProfilesUpdated }) {
           {clusterId ? t("link.linkAnother") : t("link.linkDevice")}
         </button>
         <button onClick={() => { setError(null); setSuccess(null); setView("join"); }} style={btnOutline}>{t("link.enterCode")}</button>
+        {clusterId && <button onClick={() => { setUnlinkTarget(myDeviceId); setView("unlink"); }} style={{ ...btnOutline, color: C.danger, borderColor: C.danger + "44", marginTop: 4 }}>{t("link.leaveCluster")}</button>}
       </div>
     </>)}
   </div></div>);
