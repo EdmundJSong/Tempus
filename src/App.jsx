@@ -1942,7 +1942,7 @@ function DeviceLinkModal({ onClose, onProfilesUpdated }) {
           {clusterId ? t("link.linkAnother") : t("link.linkDevice")}
         </button>
         <button onClick={() => { setError(null); setSuccess(null); setView("join"); }} style={btnOutline}>{t("link.enterCode")}</button>
-        {clusterId && <button onClick={() => { setUnlinkTarget(myDeviceId); setView("unlink"); }} style={{ ...btnOutline, color: C.danger, borderColor: C.danger + "44", marginTop: 4 }}>{t("link.leaveCluster")}</button>}
+        {clusterId && deviceIds.length > 1 && <button onClick={() => { setUnlinkTarget(myDeviceId); setView("unlink"); }} style={{ ...btnOutline, color: C.danger, borderColor: C.danger + "44", marginTop: 4 }}>{t("link.leaveCluster")}</button>}
       </div>
     </>)}
   </div></div>);
