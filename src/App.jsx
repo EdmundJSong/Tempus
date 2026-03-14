@@ -175,7 +175,7 @@ const S = {
   "prac.startBtn": { en: "Start", "zh-CN": "开始", "zh-TW": "開始" },
 
   // --- Tempo History ---
-  "tempo.progress": { en: "Tempo Progress", "zh-CN": "速度进度", "zh-TW": "速度進度" },
+  "tempo.progress": { en: "Progress Tracking", "zh-CN": "进度追踪", "zh-TW": "進度追蹤" },
   "tempo.last": { en: "Last", "zh-CN": "上次", "zh-TW": "上次" },
   "tempo.best": { en: "Best", "zh-CN": "最佳", "zh-TW": "最佳" },
 
@@ -2056,8 +2056,8 @@ function SetP({ settings: s, onChange, onClose, onShowDeviceLink }) {
     </div>
     <SR l={t("settings.countIn")}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={{...oB(s.countIn === v), flex: 1}}>{v === 0 ? t("settings.countInOff") : v === 1 ? t("settings.countIn1") : t("settings.countIn2")}</button>)}</SR>
     {s.appMode === "advanced" && <SR l={t("settings.silentCycle")}><TextStepper options={silOpts} value={s.silentInterval} onChange={v => u("silentInterval", v)} /></SR>}
-    {s.appMode === "advanced" && <SR l={t("settings.offlineMode")}>{[true, false].map(v => <button key={String(v)} onClick={() => u("offlineMode", v)} style={{...oB(s.offlineMode === v), flex: 1}}>{v ? t("secEd.on") : t("secEd.off")}</button>)}</SR>}
-    <SR l={t("tempo.progress")}>{[true, false].map(v => <button key={String(v)} onClick={() => u("showTempoHistory", v)} style={{...oB(s.showTempoHistory === v), flex: 1}}>{v ? t("secEd.on") : t("secEd.off")}</button>)}</SR>
+    {s.appMode === "advanced" && <div style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("settings.offlineMode")}</span><button onClick={() => u("offlineMode", !s.offlineMode)} style={{ padding: "5px 14px", borderRadius: 6, border: `1px solid ${s.offlineMode ? C.danger : C.border}`, background: s.offlineMode ? C.danger + "22" : "transparent", color: s.offlineMode ? C.danger : C.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{s.offlineMode ? t("secEd.on") : t("secEd.off")}</button></div>}
+    <div style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("tempo.progress")}</span><button onClick={() => u("showTempoHistory", !s.showTempoHistory)} style={{ padding: "5px 14px", borderRadius: 6, border: `1px solid ${s.showTempoHistory ? C.danger : C.border}`, background: s.showTempoHistory ? C.danger + "22" : "transparent", color: s.showTempoHistory ? C.danger : C.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{s.showTempoHistory ? t("secEd.on") : t("secEd.off")}</button></div>
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>{t("settings.deviceId")} {getDeviceId()}</div>
