@@ -220,6 +220,35 @@ const S = {
   "sync.manage": { en: "Manage", "zh-CN": "管理", "zh-TW": "管理" },
   "sync.leaveQ": { en: "Leave?", "zh-CN": "离开?", "zh-TW": "離開?" },
   "sync.upTo": { en: "Up to", "zh-CN": "最多", "zh-TW": "最多" },
+
+  // --- Device Linking ---
+  "link.myDevices": { en: "My Devices", "zh-CN": "我的设备", "zh-TW": "我的裝置" },
+  "link.linkDevice": { en: "Link a Device", "zh-CN": "关联设备", "zh-TW": "關聯裝置" },
+  "link.enterCode": { en: "Enter Link Code", "zh-CN": "输入关联码", "zh-TW": "輸入關聯碼" },
+  "link.yourCode": { en: "Your link code:", "zh-CN": "您的关联码:", "zh-TW": "您的關聯碼:" },
+  "link.showCode": { en: "Enter this code on your other device", "zh-CN": "在您的其他设备上输入此码", "zh-TW": "在您的其他裝置上輸入此碼" },
+  "link.expires": { en: "Expires in", "zh-CN": "有效期", "zh-TW": "有效期" },
+  "link.enterDigits": { en: "Enter 6-digit link code", "zh-CN": "输入6位关联码", "zh-TW": "輸入6位關聯碼" },
+  "link.link": { en: "Link", "zh-CN": "关联", "zh-TW": "關聯" },
+  "link.linking": { en: "Linking...", "zh-CN": "关联中...", "zh-TW": "關聯中..." },
+  "link.generating": { en: "Generating...", "zh-CN": "生成中...", "zh-TW": "生成中..." },
+  "link.success": { en: "Device linked!", "zh-CN": "设备已关联!", "zh-TW": "裝置已關聯!" },
+  "link.failed": { en: "Could not link device", "zh-CN": "无法关联设备", "zh-TW": "無法關聯裝置" },
+  "link.invalidCode": { en: "Invalid or expired code", "zh-CN": "无效或已过期的码", "zh-TW": "無效或已過期的碼" },
+  "link.linked": { en: "Linked", "zh-CN": "已关联", "zh-TW": "已關聯" },
+  "link.unlink": { en: "Unlink", "zh-CN": "取消关联", "zh-TW": "取消關聯" },
+  "link.unlinkQ": { en: "Unlink this device?", "zh-CN": "取消关联此设备?", "zh-TW": "取消關聯此裝置?" },
+  "link.keepProfiles": { en: "Keep shared profiles", "zh-CN": "保留共享曲目", "zh-TW": "保留共享曲目" },
+  "link.revertProfiles": { en: "Revert to my original library", "zh-CN": "恢复我的原始曲库", "zh-TW": "恢復我的原始曲庫" },
+  "link.cancelUnlink": { en: "Cancel", "zh-CN": "取消", "zh-TW": "取消" },
+  "link.unlinked": { en: "Device unlinked", "zh-CN": "设备已取消关联", "zh-TW": "裝置已取消關聯" },
+  "link.lastSeen": { en: "Last seen", "zh-CN": "最后在线", "zh-TW": "最後上線" },
+  "link.thisDevice": { en: "This device", "zh-CN": "当前设备", "zh-TW": "當前裝置" },
+  "link.linkAnother": { en: "Link Another Device", "zh-CN": "关联另一台设备", "zh-TW": "關聯另一台裝置" },
+  "link.waiting": { en: "Waiting for other device...", "zh-CN": "等待其他设备...", "zh-TW": "等待其他裝置..." },
+  "link.expired": { en: "Code expired", "zh-CN": "码已过期", "zh-TW": "碼已過期" },
+  "link.notLinked": { en: "No linked devices", "zh-CN": "无关联设备", "zh-TW": "無關聯裝置" },
+  "link.notLinkedDesc": { en: "Link your devices to sync profiles across them.", "zh-CN": "关联设备以同步曲目。", "zh-TW": "關聯裝置以同步曲目。" },
 };
 export function t(key) { const e = S[key]; if (!e) return key; return e[_lang] || e.en || key; }
 export function tp(key, n) { const v = S[key]?.[_lang] || S[key]?.en || key; return _lang === "en" && n !== 1 ? v + "s" : v; }
@@ -276,13 +305,14 @@ const _memStore = {};
 function _getLS(k) { try { return localStorage.getItem(k); } catch { return _memStore[k] || null; } }
 function _setLS(k, v) { try { localStorage.setItem(k, v); } catch { _memStore[k] = v; } }
 function ldP() { try { return JSON.parse(_getLS(SK)) || []; } catch { return []; } }
-function svP(p) { _setLS(SK, JSON.stringify(p)); try { const sec = JSON.parse(_getLS("tempus_sections")) || []; fbSyncDebounced(sec, p); } catch {} }
+function svP(p) { _setLS(SK, JSON.stringify(p)); try { const sec = JSON.parse(_getLS("tempus_sections")) || []; fbSyncDebounced(sec, p); } catch {} if (getClusterId()) updateClusterProfiles(p); }
 
 // ============ FIREBASE SILENT BACKUP ============
 // TODO: Replace with your Firebase config
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyA9LAg1iywIxG1KEbrwNQhrpfqELK3SOeY",
   authDomain: "tempus-acc0e.firebaseapp.com",
+  databaseURL: "https://tempus-acc0e-default-rtdb.firebaseio.com",
   projectId: "tempus-acc0e",
   storageBucket: "tempus-acc0e.firebasestorage.app",
   messagingSenderId: "290765368525",
@@ -300,6 +330,18 @@ export async function fbInit() {
     _fb = initializeApp(FIREBASE_CONFIG);
     _fbDb = getFirestore(_fb);
     return _fbDb;
+  } catch { return null; }
+}
+
+let _fbRtdb = null, _rtdbModule = null;
+async function getRTDB() {
+  if (_fbRtdb) return { db: _fbRtdb, mod: _rtdbModule };
+  if (!FB_ENABLED) return null;
+  try {
+    await fbInit(); // ensure app is initialised
+    _rtdbModule = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js");
+    _fbRtdb = _rtdbModule.getDatabase(_fb);
+    return { db: _fbRtdb, mod: _rtdbModule };
   } catch { return null; }
 }
 
@@ -334,6 +376,215 @@ function fbSyncDebounced(sections, profiles) {
       }, { merge: true });
     } catch {}
   }, 5000);
+}
+
+// ============ DEVICE LINKING ============
+const LINK_CODE_TTL = 300000; // 5 minutes
+
+function getClusterId() { return _getLS("tempus_cluster_id") || null; }
+function setClusterId(id) { if (id) _setLS("tempus_cluster_id", id); else { try { localStorage.removeItem("tempus_cluster_id"); } catch {} } }
+
+function getDeviceName() {
+  const stored = _getLS("tempus_device_name");
+  if (stored) return stored;
+  const ua = navigator.userAgent || "";
+  if (/iPhone/.test(ua)) return "iPhone · Safari";
+  if (/iPad/.test(ua)) return "iPad · Safari";
+  if (/Android/.test(ua)) return "Android · Chrome";
+  if (/Macintosh/.test(ua)) return /Chrome/.test(ua) ? "Chrome · macOS" : "Safari · macOS";
+  if (/Windows/.test(ua)) return "Chrome · Windows";
+  if (/Linux/.test(ua)) return "Chrome · Linux";
+  return "Unknown device";
+}
+function setDeviceName(name) { _setLS("tempus_device_name", name); }
+
+function genLinkCode() { return String(100000 + Math.floor(Math.random() * 900000)); }
+
+async function createLinkCode() {
+  const rtdb = await getRTDB(); if (!rtdb) throw new Error("RTDB not available");
+  const { db, mod } = rtdb;
+  const deviceId = getDeviceId();
+  let clusterId = getClusterId();
+
+  // If not in a cluster yet, create one in Firestore
+  if (!clusterId) {
+    const fsDb = await fbInit(); if (!fsDb) throw new Error("Firestore not available");
+    const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    clusterId = "cl_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 8);
+    // Backup current profiles before linking
+    _setLS("tempus_prelink_profiles", _getLS(SK) || "[]");
+    const deviceName = getDeviceName();
+    await fs.setDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
+      clusterId,
+      devices: { [deviceId]: { name: deviceName, linkedAt: Date.now(), lastSeen: Date.now() } },
+      profiles: ldP(),
+      tempoHistory: {},
+      createdAt: Date.now(),
+      updatedAt: Date.now()
+    });
+    setClusterId(clusterId);
+  }
+
+  // Generate 6-digit code and write to RTDB
+  const code = genLinkCode();
+  const now = Date.now();
+  await mod.set(mod.ref(db, `link_codes/${code}`), {
+    creatorDeviceId: deviceId,
+    clusterId,
+    createdAt: now,
+    expiresAt: now + LINK_CODE_TTL,
+    joinedDeviceId: null
+  });
+  return { code, clusterId };
+}
+
+async function joinWithLinkCode(code) {
+  const rtdb = await getRTDB(); if (!rtdb) throw new Error("RTDB not available");
+  const { db, mod } = rtdb;
+  const snap = await mod.get(mod.ref(db, `link_codes/${code}`));
+  if (!snap.exists()) throw new Error("invalid");
+  const data = snap.val();
+  if (Date.now() > data.expiresAt) throw new Error("expired");
+  if (data.joinedDeviceId) throw new Error("already_used");
+
+  const deviceId = getDeviceId();
+  if (data.creatorDeviceId === deviceId) throw new Error("same_device");
+
+  // Backup current profiles before linking
+  if (!getClusterId()) _setLS("tempus_prelink_profiles", _getLS(SK) || "[]");
+
+  // Write self as joined
+  await mod.update(mod.ref(db, `link_codes/${code}`), { joinedDeviceId: deviceId });
+
+  // Add self to cluster in Firestore
+  const clusterId = data.clusterId;
+  const fsDb = await fbInit(); if (!fsDb) throw new Error("Firestore not available");
+  const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+  const deviceName = getDeviceName();
+
+  // Read cluster, merge profiles
+  const clusterSnap = await fs.getDoc(fs.doc(fsDb, "tempus_clusters", clusterId));
+  const clusterData = clusterSnap.exists() ? clusterSnap.data() : { profiles: [] };
+  const localProfiles = ldP();
+  const mergedProfiles = mergeProfiles(clusterData.profiles || [], localProfiles);
+
+  await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
+    [`devices.${deviceId}`]: { name: deviceName, linkedAt: Date.now(), lastSeen: Date.now() },
+    profiles: mergedProfiles,
+    updatedAt: Date.now()
+  });
+
+  setClusterId(clusterId);
+  // Update local profiles to merged set
+  svP(mergedProfiles);
+  return clusterId;
+}
+
+async function completeLinkHandshake(code, joinedDeviceId) {
+  // Called by the creator when they see joinedDeviceId appear
+  const rtdb = await getRTDB(); if (!rtdb) return;
+  const { db, mod } = rtdb;
+  // Clean up the link code
+  try { await mod.remove(mod.ref(db, `link_codes/${code}`)); } catch {}
+
+  // Re-merge profiles in the cluster
+  const clusterId = getClusterId();
+  if (!clusterId) return;
+  const fsDb = await fbInit(); if (!fsDb) return;
+  const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+  const clusterSnap = await fs.getDoc(fs.doc(fsDb, "tempus_clusters", clusterId));
+  if (clusterSnap.exists()) {
+    const clusterProfiles = clusterSnap.data().profiles || [];
+    svP(clusterProfiles);
+  }
+}
+
+function mergeProfiles(clusterProfiles, localProfiles) {
+  const map = new Map();
+  for (const p of clusterProfiles) map.set(p.id, p);
+  for (const p of localProfiles) {
+    if (!map.has(p.id)) map.set(p.id, p);
+    else {
+      // Keep the more recently updated version
+      const existing = map.get(p.id);
+      const eTime = existing.updatedAt || existing.createdAt || "";
+      const lTime = p.updatedAt || p.createdAt || "";
+      if (lTime > eTime) map.set(p.id, p);
+    }
+  }
+  return Array.from(map.values());
+}
+
+async function unlinkDevice(deviceIdToRemove, keepProfiles) {
+  const clusterId = getClusterId();
+  if (!clusterId) return;
+  const fsDb = await fbInit(); if (!fsDb) return;
+  const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+  const myDeviceId = getDeviceId();
+  const isSelf = deviceIdToRemove === myDeviceId;
+
+  // Read cluster
+  const clusterSnap = await fs.getDoc(fs.doc(fsDb, "tempus_clusters", clusterId));
+  if (!clusterSnap.exists()) { setClusterId(null); return; }
+  const clusterData = clusterSnap.data();
+
+  // Remove device from cluster
+  await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
+    [`devices.${deviceIdToRemove}`]: fs.deleteField(),
+    updatedAt: Date.now()
+  });
+
+  if (isSelf) {
+    if (keepProfiles) {
+      // Keep cluster profiles locally
+      svP(clusterData.profiles || []);
+    } else {
+      // Revert to pre-link profiles
+      try {
+        const prelink = JSON.parse(_getLS("tempus_prelink_profiles") || "[]");
+        svP(prelink);
+      } catch { svP([]); }
+    }
+    setClusterId(null);
+    try { localStorage.removeItem("tempus_prelink_profiles"); } catch {}
+  }
+
+  // If cluster has no devices left, delete it
+  const remaining = { ...clusterData.devices };
+  delete remaining[deviceIdToRemove];
+  if (Object.keys(remaining).length === 0) {
+    try { await fs.deleteDoc(fs.doc(fsDb, "tempus_clusters", clusterId)); } catch {}
+  }
+}
+
+async function updateClusterProfiles(profiles) {
+  const clusterId = getClusterId();
+  if (!clusterId || !FB_ENABLED) return;
+  try {
+    const fsDb = await fbInit(); if (!fsDb) return;
+    const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), { profiles, updatedAt: Date.now() });
+  } catch {}
+}
+
+async function updateClusterLastSeen() {
+  const clusterId = getClusterId();
+  if (!clusterId || !FB_ENABLED) return;
+  try {
+    const fsDb = await fbInit(); if (!fsDb) return;
+    const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    const deviceId = getDeviceId();
+    await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
+      [`devices.${deviceId}.lastSeen`]: Date.now()
+    });
+  } catch {}
+}
+
+async function cleanupExpiredLinkCode(code) {
+  try {
+    const rtdb = await getRTDB(); if (!rtdb) return;
+    await rtdb.mod.remove(rtdb.mod.ref(rtdb.db, `link_codes/${code}`));
+  } catch {}
 }
 
 // ============ SVG NOTE ============
@@ -1381,11 +1632,232 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
   );
 }
 
+// ============ DEVICE LINK MODAL ============
+function DeviceLinkModal({ onClose, onProfilesUpdated }) {
+  const [view, setView] = useState("main"); // main | generate | join | unlink
+  const [code, setCode] = useState("");
+  const [inputCode, setInputCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+  const [countdown, setCountdown] = useState(0);
+  const [cluster, setCluster] = useState(null);
+  const [unlinkTarget, setUnlinkTarget] = useState(null);
+  const listenerRef = useRef(null);
+  const timerRef = useRef(null);
+  const expiresRef = useRef(0);
+  const myDeviceId = getDeviceId();
+  const clusterId = getClusterId();
+
+  // Load cluster data
+  useEffect(() => {
+    if (!clusterId) { setCluster(null); return; }
+    let cancelled = false;
+    let unsub = null;
+    (async () => {
+      try {
+        const fsDb = await fbInit(); if (!fsDb || cancelled) return;
+        const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+        unsub = fs.onSnapshot(fs.doc(fsDb, "tempus_clusters", clusterId), snap => {
+          if (cancelled) return;
+          if (snap.exists()) {
+            setCluster(snap.data());
+            // Sync profiles from cluster to local
+            const clusterProfiles = snap.data().profiles || [];
+            if (clusterProfiles.length > 0) {
+              _setLS(SK, JSON.stringify(clusterProfiles));
+              if (onProfilesUpdated) onProfilesUpdated(clusterProfiles);
+            }
+          } else { setCluster(null); setClusterId(null); }
+        });
+      } catch {}
+    })();
+    // Update last seen
+    updateClusterLastSeen();
+    return () => { cancelled = true; if (unsub) unsub(); };
+  }, [clusterId, onProfilesUpdated]);
+
+  // Countdown timer for generated code
+  useEffect(() => {
+    if (view !== "generate" || !code) return;
+    timerRef.current = setInterval(() => {
+      const rem = Math.max(0, Math.floor((expiresRef.current - Date.now()) / 1000));
+      setCountdown(rem);
+      if (rem <= 0) {
+        clearInterval(timerRef.current);
+        cleanupExpiredLinkCode(code);
+        setError(t("link.expired"));
+        setCode("");
+      }
+    }, 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [view, code]);
+
+  // Cleanup RTDB listener on unmount
+  useEffect(() => () => {
+    if (listenerRef.current) { listenerRef.current(); listenerRef.current = null; }
+    if (timerRef.current) clearInterval(timerRef.current);
+  }, []);
+
+  const handleGenerate = async () => {
+    setLoading(true); setError(null); setSuccess(null);
+    try {
+      const result = await createLinkCode();
+      setCode(result.code);
+      expiresRef.current = Date.now() + LINK_CODE_TTL;
+      setCountdown(Math.floor(LINK_CODE_TTL / 1000));
+      setView("generate");
+
+      // Listen for joiner on RTDB
+      const rtdb = await getRTDB();
+      if (rtdb) {
+        const codeRef = rtdb.mod.ref(rtdb.db, `link_codes/${result.code}`);
+        const unsub = rtdb.mod.onValue(codeRef, snap => {
+          if (!snap.exists()) return;
+          const data = snap.val();
+          if (data.joinedDeviceId && data.joinedDeviceId !== myDeviceId) {
+            // Handshake complete!
+            completeLinkHandshake(result.code, data.joinedDeviceId);
+            setSuccess(t("link.success"));
+            setCode("");
+            setView("main");
+            if (unsub) unsub();
+            listenerRef.current = null;
+          }
+        });
+        listenerRef.current = unsub;
+      }
+    } catch (e) { setError(t("link.failed")); }
+    setLoading(false);
+  };
+
+  const handleJoin = async () => {
+    if (inputCode.length !== 6) return;
+    setLoading(true); setError(null); setSuccess(null);
+    try {
+      await joinWithLinkCode(inputCode);
+      setSuccess(t("link.success"));
+      setInputCode("");
+      setView("main");
+    } catch (e) {
+      if (e.message === "invalid" || e.message === "expired") setError(t("link.invalidCode"));
+      else if (e.message === "same_device") setError("Cannot link to yourself");
+      else setError(t("link.failed"));
+    }
+    setLoading(false);
+  };
+
+  const handleUnlink = async (keepProfiles) => {
+    if (!unlinkTarget) return;
+    setLoading(true); setError(null);
+    try {
+      await unlinkDevice(unlinkTarget, keepProfiles);
+      setSuccess(t("link.unlinked"));
+      setUnlinkTarget(null);
+      setView("main");
+    } catch { setError(t("link.failed")); }
+    setLoading(false);
+  };
+
+  const cancelGenerate = () => {
+    if (code) cleanupExpiredLinkCode(code);
+    if (listenerRef.current) { listenerRef.current(); listenerRef.current = null; }
+    setCode(""); setView("main");
+  };
+
+  const devices = cluster?.devices || {};
+  const deviceIds = Object.keys(devices);
+  const fmtAgo = ts => {
+    if (!ts) return "";
+    const d = Math.floor((Date.now() - ts) / 1000);
+    if (d < 60) return "just now";
+    if (d < 3600) return `${Math.floor(d / 60)}m ago`;
+    if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
+    return `${Math.floor(d / 86400)}d ago`;
+  };
+
+  const modalStyle = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 110, display: "flex", alignItems: "flex-end", justifyContent: "center" };
+  const contentStyle = { width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "80vh", overflowY: "auto" };
+  const btnPrimary = (active = true) => ({ padding: "12px 20px", borderRadius: 8, border: "none", background: active ? C.accent : C.sub, color: active ? "#fff" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: active ? "pointer" : "default", fontFamily: "'Outfit',sans-serif", width: "100%" });
+  const btnOutline = { padding: "12px 20px", borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "'Outfit',sans-serif", width: "100%" };
+
+  return (<div className="modal-bg" style={modalStyle} onClick={onClose}><div className="modal-content" style={contentStyle} onClick={e => e.stopPropagation()}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}>
+      <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>{I.sync(18)} {t("link.myDevices")}</div>
+      <button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button>
+    </div>
+
+    {success && <div style={{ background: C.practice + "22", border: `1px solid ${C.practice}44`, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: C.practice, fontFamily: "'Outfit',sans-serif" }}>{success}</div>}
+    {error && <div style={{ background: C.danger + "22", border: `1px solid ${C.danger}44`, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: C.danger, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
+
+    {/* === UNLINK CONFIRM VIEW === */}
+    {view === "unlink" && unlinkTarget && (<div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", textAlign: "center", marginBottom: 4 }}>{t("link.unlinkQ")}</div>
+      <button onClick={() => handleUnlink(true)} style={btnPrimary()}>{t("link.keepProfiles")}</button>
+      <button onClick={() => handleUnlink(false)} style={btnOutline}>{t("link.revertProfiles")}</button>
+      <button onClick={() => { setUnlinkTarget(null); setView("main"); }} style={{ ...btnOutline, marginTop: 4 }}>{t("link.cancelUnlink")}</button>
+    </div>)}
+
+    {/* === GENERATE CODE VIEW === */}
+    {view === "generate" && (<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
+      {code ? (<>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("link.yourCode")}</div>
+        <div style={{ fontSize: 42, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 8, color: C.accent }}>{code}</div>
+        <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("link.showCode")}</div>
+        <div style={{ fontSize: 13, color: countdown < 60 ? C.danger : C.textMuted, fontFamily: "'DM Mono',monospace" }}>{t("link.expires")} {Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, "0")}</div>
+        <div style={{ fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif" }}>{t("link.waiting")}</div>
+      </>) : (<div style={{ fontSize: 13, color: C.textMuted }}>{loading ? t("link.generating") : ""}</div>)}
+      <button onClick={cancelGenerate} style={btnOutline}>{t("link.cancelUnlink")}</button>
+    </div>)}
+
+    {/* === JOIN VIEW === */}
+    {view === "join" && (<div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("link.enterDigits")}</div>
+      <input value={inputCode} onChange={e => { const v = e.target.value.replace(/\D/g, "").slice(0, 6); setInputCode(v); }} inputMode="numeric" maxLength={6} placeholder="000000" style={{ ...nI, width: "100%", textAlign: "center", fontSize: 28, letterSpacing: 8, fontFamily: "'Bebas Neue','DM Mono',monospace", padding: "12px 0" }} autoFocus />
+      <button onClick={handleJoin} disabled={inputCode.length !== 6 || loading} style={btnPrimary(inputCode.length === 6 && !loading)}>{loading ? t("link.linking") : t("link.link")}</button>
+      <button onClick={() => { setInputCode(""); setError(null); setView("main"); }} style={btnOutline}>{t("link.cancelUnlink")}</button>
+    </div>)}
+
+    {/* === MAIN VIEW === */}
+    {view === "main" && (<>
+      {/* Device list */}
+      {deviceIds.length > 0 ? (<div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+        {deviceIds.map(did => {
+          const dev = devices[did];
+          const isMe = did === myDeviceId;
+          return (<div key={did} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: C.surface, borderRadius: 8, border: `1px solid ${isMe ? C.accent + "44" : C.border}` }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", gap: 6 }}>
+                {dev.name || "Device"}
+                {isMe && <span style={{ fontSize: 9, color: C.accent, fontFamily: "'Outfit',sans-serif", padding: "1px 6px", border: `1px solid ${C.accent}44`, borderRadius: 4 }}>{t("link.thisDevice")}</span>}
+              </div>
+              <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", marginTop: 2 }}>{t("link.lastSeen")} {isMe ? "now" : fmtAgo(dev.lastSeen)}</div>
+            </div>
+            <button onClick={() => { setUnlinkTarget(did); setView("unlink"); }} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, cursor: "pointer", padding: "4px 10px", fontSize: 11, fontFamily: "'Outfit',sans-serif" }}>{t("link.unlink")}</button>
+          </div>);
+        })}
+      </div>) : (<div style={{ textAlign: "center", padding: "30px 20px", marginBottom: 16 }}>
+        <div style={{ opacity: 0.15, transform: "scale(1.2)", marginBottom: 12 }}>{I.sync(48)}</div>
+        <div style={{ fontSize: 14, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("link.notLinked")}</div>
+        <div style={{ fontSize: 12, color: C.border, fontFamily: "'Outfit',sans-serif", marginTop: 6 }}>{t("link.notLinkedDesc")}</div>
+      </div>)}
+
+      {/* Action buttons */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <button onClick={handleGenerate} disabled={loading} style={btnPrimary(!loading)}>
+          {clusterId ? t("link.linkAnother") : t("link.linkDevice")}
+        </button>
+        <button onClick={() => { setError(null); setSuccess(null); setView("join"); }} style={btnOutline}>{t("link.enterCode")}</button>
+      </div>
+    </>)}
+  </div></div>);
+}
+
 // ============ SETTINGS / SAVE / LIBRARY ============
 // AGENT NOTE: Do NOT add inline description text beneath settings rows.
 // All setting explanations should use data-tip or data-tip-b tooltip attributes only.
 // Keep the settings UI clean and minimal — no prose descriptions.
-function SetP({ settings: s, onChange, onClose }) {
+function SetP({ settings: s, onChange, onClose, onShowDeviceLink }) {
   const actxRef = useRef(null);
   const preview = useCallback((sound) => {
     try {
@@ -1435,7 +1907,10 @@ function SetP({ settings: s, onChange, onClose }) {
     <SR l={t("settings.countIn")}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={{...oB(s.countIn === v), flex: 1}}>{v === 0 ? t("settings.countInOff") : v === 1 ? t("settings.countIn1") : t("settings.countIn2")}</button>)}</SR>
     {s.appMode === "advanced" && <SR l={t("settings.silentCycle")}><TextStepper options={silOpts} value={s.silentInterval} onChange={v => u("silentInterval", v)} /></SR>}
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
-      <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>{t("settings.deviceId")} {getDeviceId()}</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>{t("settings.deviceId")} {getDeviceId()}</div>
+        {s.appMode === "advanced" && <button onClick={() => { onClose(); setTimeout(() => onShowDeviceLink && onShowDeviceLink(), 100); }} style={{ background: "none", border: `1px solid ${getClusterId() ? C.accent + "55" : C.border}`, borderRadius: 6, color: getClusterId() ? C.accent : C.textMuted, cursor: "pointer", padding: "4px 10px", fontSize: 10, fontFamily: "'Outfit',sans-serif", display: "flex", alignItems: "center", gap: 4 }}>{I.sync(12)} {t("link.myDevices")}{getClusterId() ? <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.practice, display: "inline-block", marginLeft: 2 }} /> : null}</button>}
+      </div>
       <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>{t("settings.privacy")}</div>
     </div></div></div>);
 }
@@ -1568,8 +2043,33 @@ export default function Tempus() {
   useEffect(() => { if (videoUrl) _setLS("tempus_videoUrl", videoUrl); else { try { localStorage.removeItem("tempus_videoUrl"); } catch {} } }, [videoUrl]);
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
-  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const parsed = JSON.parse(saved); if (parsed.pitched !== undefined && !parsed.clickSound) { parsed.clickSound = parsed.pitched ? "sine" : "noise"; delete parsed.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", ...parsed }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en" }; });
+  const [showDeviceLink, setShowDeviceLink] = useState(false);
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const parsed = JSON.parse(saved); if (parsed.pitched !== undefined && !parsed.clickSound) { parsed.clickSound = parsed.pitched ? "sine" : "noise"; delete parsed.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", showTempoHistory: false, ...parsed }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", showTempoHistory: false }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); if (settings.lang) setAppLang(settings.lang); }, [settings]);
+
+  // Background cluster profile sync (runs when linked, even with modal closed)
+  useEffect(() => {
+    const cId = getClusterId();
+    if (!cId || !FB_ENABLED) return;
+    let unsub = null;
+    (async () => {
+      try {
+        const fsDb = await fbInit(); if (!fsDb) return;
+        const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+        unsub = fs.onSnapshot(fs.doc(fsDb, "tempus_clusters", cId), snap => {
+          if (!snap.exists()) return;
+          const clusterProfiles = snap.data().profiles || [];
+          if (clusterProfiles.length > 0) {
+            _setLS(SK, JSON.stringify(clusterProfiles));
+          }
+        });
+      } catch {}
+    })();
+    // Periodic last-seen heartbeat (every 60s)
+    const hb = setInterval(() => updateClusterLastSeen(), 60000);
+    updateClusterLastSeen();
+    return () => { if (unsub) unsub(); clearInterval(hb); };
+  }, []);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
   const [isP, setIsP] = useState(false);
@@ -1885,10 +2385,11 @@ export default function Tempus() {
 
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, clickSound: settings.clickSound, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
-      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
+      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} onShowDeviceLink={() => setShowDeviceLink(true)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
       {showLib && <LibP onLoad={(s, v, vs, pid) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); setLoadedProfileId(pid || null); }} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
+      {showDeviceLink && <DeviceLinkModal onClose={() => setShowDeviceLink(false)} onProfilesUpdated={p => { /* cluster snapshot pushed new profiles */ }} />}
       {sync.showLobby && <SyncLobby sync={sync} onLoadSections={handleSyncLoadSections} />}
       <SyncToast message={sync.toast} />
       {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} onEditSection={id => { setEditIsNew(false); setEditId(id); }} onAddSection={addSec} onDeleteSection={handleDelete} onMoveSection={moveSec} loadedProfileId={loadedProfileId} />}
