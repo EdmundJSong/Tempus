@@ -113,6 +113,16 @@ const S = {
   "settings.flatTip": { en: "Flat", "zh-CN": "平均", "zh-TW": "平均" },
   "settings.pitched": { en: "Pitched", "zh-CN": "音高", "zh-TW": "音高" },
   "settings.unpitched": { en: "Unpitched", "zh-CN": "噪声", "zh-TW": "噪音" },
+  "settings.sound": { en: "Sound", "zh-CN": "音色", "zh-TW": "音色" },
+  "settings.sound.sine": { en: "Sine", "zh-CN": "正弦", "zh-TW": "正弦" },
+  "settings.sound.noise": { en: "Noise", "zh-CN": "噪声", "zh-TW": "噪音" },
+  "settings.sound.wood": { en: "Wood Block", "zh-CN": "木鱼", "zh-TW": "木魚" },
+  "settings.sound.rimshot": { en: "Rimshot", "zh-CN": "鼓边", "zh-TW": "鼓邊" },
+  "settings.sound.clave": { en: "Clave", "zh-CN": "响棒", "zh-TW": "響棒" },
+  "settings.sound.cowbell": { en: "Cowbell", "zh-CN": "牛铃", "zh-TW": "牛鈴" },
+  "settings.accent": { en: "Accent", "zh-CN": "重音", "zh-TW": "重音" },
+  "settings.allBeats": { en: "All Beats", "zh-CN": "全部节拍", "zh-TW": "全部節拍" },
+  "settings.downbeatOnly": { en: "Downbeat Only", "zh-CN": "仅重拍", "zh-TW": "僅重拍" },
   "settings.beats": { en: "Beats", "zh-CN": "节拍", "zh-TW": "節拍" },
   "settings.visual": { en: "Visual", "zh-CN": "视觉", "zh-TW": "視覺" },
   "settings.pulse": { en: "Pulse", "zh-CN": "脉冲", "zh-TW": "脈衝" },
@@ -420,7 +430,7 @@ function scaleSections(sections, pct) {
 
 // ============ AUDIO ENGINE ============
 function useMetronome() {
-  const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, pitched: true, muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false);
+  const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, clickSound: "sine", muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false);
   const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false);
   const init = useCallback(() => { if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, []);
   const rwl = useCallback(async () => { try { if ("wakeLock" in navigator) wl.current = await navigator.wakeLock.request("screen"); } catch { } if (sa.current && sa.current.paused) { try { await sa.current.play(); } catch { } } }, []);
@@ -428,7 +438,7 @@ function useMetronome() {
   const prime = useCallback(async () => { const ctx = init(); if (ctx.state === "suspended") await ctx.resume(); return ctx; }, [init]);
   const silentStart = useRef(0);
   const clk = useCallback((ctx, time, bt) => {
-    const { accented, pitched, muted, downbeatOnly, silentInterval } = sR.current; if (muted) return;
+    const { accented, clickSound = "sine", muted, downbeatOnly, silentInterval } = sR.current; if (muted) return;
     // Downbeat-only: skip non-downbeats
     if (downbeatOnly && bt !== 0) return;
     // Silent interval: alternate audible/silent in equal durations
@@ -440,8 +450,15 @@ function useMetronome() {
     }
     const e = accented ? bt : 2;
     if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
-    if (pitched) { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.08); }
-    else { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++)d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(time); src.stop(time + 0.06); }
+    switch (clickSound) {
+      case "sine": { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.08); break; }
+      case "noise": { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++)d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(time); src.stop(time + 0.06); break; }
+      case "wood": { const v = e === 0 ? 0.9 : e === 1 ? 0.55 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.setValueAtTime(e === 0 ? 850 : e === 1 ? 750 : 680, time); o.frequency.exponentialRampToValueAtTime(420, time + 0.025); g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.035); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.05); break; }
+      case "rimshot": { const v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25; const o = ctx.createOscillator(), gO = ctx.createGain(); o.type = "sine"; o.frequency.setValueAtTime(e === 0 ? 1800 : 1500, time); gO.gain.setValueAtTime(v * 0.6, time); gO.gain.exponentialRampToValueAtTime(0.001, time + 0.03); o.connect(gO); gO.connect(ctx.destination); o.start(time); o.stop(time + 0.05); const l = Math.floor(ctx.sampleRate * 0.02), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++)d[i] = Math.random() * 2 - 1; const src = ctx.createBufferSource(), gN = ctx.createGain(); src.buffer = buf; gN.gain.setValueAtTime(v * 0.7, time); gN.gain.exponentialRampToValueAtTime(0.001, time + 0.04); const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2000; src.connect(hp); hp.connect(gN); gN.connect(ctx.destination); src.start(time); src.stop(time + 0.06); break; }
+      case "clave": { const v = e === 0 ? 0.9 : e === 1 ? 0.55 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 2500 : e === 1 ? 2300 : 2100; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.022); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.04); break; }
+      case "cowbell": { const v = e === 0 ? 0.7 : e === 1 ? 0.45 : 0.22; const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(); o1.type = "square"; o2.type = "square"; o1.frequency.value = e === 0 ? 565 : 545; o2.frequency.value = e === 0 ? 845 : 815; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.08); const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 800; bp.Q.value = 2; o1.connect(bp); o2.connect(bp); bp.connect(g); g.connect(ctx.destination); o1.start(time); o2.start(time); o1.stop(time + 0.1); o2.stop(time + 0.1); break; }
+      default: { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.08); }
+    }
   }, []);
   const sched = useCallback(() => {
     const ctx = actx.current; if (!ctx || !pl.current) return; const tl = tlR.current;
@@ -489,7 +506,7 @@ function useMetronome() {
   }, [clk]);
   const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; silentStart.current = 0; rlwl(); }, [rlwl]);
   const start = useCallback((tl, from = 0, ci = 0, s = {}) => {
-    stop(); const { syncDelayMs, ...audioSettings } = s; sR.current = { accented: true, pitched: true, muted: false, downbeatOnly: false, silentInterval: 0, ...sR.current, ...audioSettings }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false;
+    stop(); const { syncDelayMs, ...audioSettings } = s; sR.current = { accented: true, clickSound: "sine", muted: false, downbeatOnly: false, silentInterval: 0, ...sR.current, ...audioSettings }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false;
     const ctx = init(); if (ctx.state === "suspended") ctx.resume();
     if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { sa.current.play().catch(() => {}); } catch {}
     try { if ("wakeLock" in navigator) navigator.wakeLock.request("screen").then(l => { wl.current = l; }).catch(() => {}); } catch {}
@@ -512,6 +529,20 @@ function NI({ value, onChange, min, max, style = {}, step = 1, validate }) { con
 function Stp({ value, onChange, min = 1, max = 999 }) { return (<div style={{ display: "flex", alignItems: "center" }}><button onClick={() => onChange(Math.max(min, value - 1))} style={sB}>{I.chevL(16)}</button><NI value={value} onChange={onChange} min={min} max={max} /><button onClick={() => onChange(Math.min(max, value + 1))} style={sB}>{I.chevR(16)}</button></div>); }
 function StpF({ value, onChange, min = 0, max = 999, step = 0.5 }) { return (<div style={{ display: "flex", alignItems: "center" }}><button onClick={() => onChange(Math.max(min, +(value - step).toFixed(1)))} style={sB}>{I.chevL(16)}</button><NI value={value} onChange={onChange} min={min} max={max} step={step} style={{ width: 72 }} /><button onClick={() => onChange(Math.min(max, +(value + step).toFixed(1)))} style={sB}>{I.chevR(16)}</button></div>); }
 function Row({ label, children }) { return (<div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 14 }}><span style={{ color: C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", width: 70, flexShrink: 0, display: "flex", alignItems: "center" }}>{label}</span><div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>{children}</div></div>); }
+function TextStepper({ options, value, onChange }) {
+  const idx = options.findIndex(o => o[0] === value);
+  const prev = () => { const i = (idx - 1 + options.length) % options.length; onChange(options[i][0]); };
+  const next = () => { const i = (idx + 1) % options.length; onChange(options[i][0]); };
+  const label = idx >= 0 ? options[idx][1] : value;
+  const tsBtn = { minWidth: 44, minHeight: 44, background: "none", border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+  return (
+    <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
+      <button onClick={prev} style={tsBtn}>{I.chevL(16)}</button>
+      <div style={{ flex: 1, textAlign: "center", fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace", userSelect: "none", minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}>{label}</div>
+      <button onClick={next} style={tsBtn}>{I.chevR(16)}</button>
+    </div>
+  );
+}
 
 // ============ TAP TEMPO ============
 function useTapTempo(onChange) {
@@ -808,7 +839,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
         {/* Quick settings */}
         {settings && onSettings && <div style={{ display: "flex", gap: 6, justifyContent: "center", pointerEvents: "auto" }}>
           <button onClick={() => onSettings({ ...settings, accented: !settings.accented })} style={qS}>{settings.accented ? t("play.accent") : t("play.flat")}</button>
-          <button onClick={() => onSettings({ ...settings, pitched: !settings.pitched })} style={qS}>{settings.pitched ? t("play.pitch") : t("play.noise")}</button>
+          <button onClick={() => { const all = ["sine", "noise", "wood", "rimshot", "clave", "cowbell"]; const opts = settings.appMode === "advanced" ? all : all.slice(0, 2); const i = (opts.indexOf(settings.clickSound) + 1) % opts.length; onSettings({ ...settings, clickSound: opts[i] }); }} style={qS}>{t("settings.sound." + (settings.clickSound || "sine"))}</button>
           <button onClick={() => { const m = ["dots", "dots+flash", "flash"]; const i = (m.indexOf(settings.visualMode) + 1) % m.length; onSettings({ ...settings, visualMode: m[i] }); }} style={qS}><span style={{ opacity: settings.visualMode.includes("dots") ? 1 : 0.25 }}>●</span> <span style={{ opacity: settings.visualMode.includes("flash") ? 1 : 0.25 }}>◻</span></button>
           <button onClick={() => onSettings({ ...settings, countIn: (settings.countIn + 1) % 3 })} style={qS}>{settings.countIn === 0 ? t("play.noCountIn") : settings.countIn === 1 ? t("play.1countIn") : t("play.2countIn")}</button>
         </div>}
@@ -1026,7 +1057,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
         m.setCb(syncCbRef.current); m.tap();
         const bar = syncBarRef.current;
         const fromBar = bar ? t.findIndex(b => b.ab === bar.ab) : 0;
-        m.start(t, Math.max(0, fromBar >= 0 ? fromBar : 0), 0, { accented: st.accented, pitched: st.pitched, muted: mutedRef.current });
+        m.start(t, Math.max(0, fromBar >= 0 ? fromBar : 0), 0, { accented: st.accented, clickSound: st.clickSound, muted: mutedRef.current });
         setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
       } else if (isPause && syncActiveRef.current && !countingInRef.current) {
         m.stop(); setSyncActive(false); syncActiveRef.current = false;
@@ -1079,7 +1110,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
     setTimeout(() => {
       // Don't start video yet — callback will start it after count-in
       if (vidCountIn === 0 && playerRef.current) playerRef.current.playVideo();
-      met.tap(); met.start(tl, 0, vidCountIn, { accented: settings.accented, pitched: settings.pitched, muted });
+      met.tap(); met.start(tl, 0, vidCountIn, { accented: settings.accented, clickSound: settings.clickSound, muted });
       setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
     }, 200);
   };
@@ -1104,7 +1135,7 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
       setTimeout(() => {
         // Don't start video yet if counting in — callback will start it after count-in
         if (!useCI && playerRef.current) playerRef.current.playVideo();
-        met.tap(); met.start(tl, idx, vidCountIn, { accented: settings.accented, pitched: settings.pitched, muted });
+        met.tap(); met.start(tl, idx, vidCountIn, { accented: settings.accented, clickSound: settings.clickSound, muted });
         setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
       }, 150);
     }
@@ -1355,17 +1386,59 @@ function VideoView({ videoUrl, sections, tl, onClose, onSyncPoints, met, setting
 // All setting explanations should use data-tip or data-tip-b tooltip attributes only.
 // Keep the settings UI clean and minimal — no prose descriptions.
 function SetP({ settings: s, onChange, onClose }) {
-  const u = (k, v) => onChange({ ...s, [k]: v }); return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{t("settings.title")}</div><button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button></div>
-    <SR l={t("settings.language")}>{[["en","English"],["zh-CN","简体中文"],["zh-TW","繁體中文"]].map(([v,l])=><button key={v} onClick={()=>{u("lang",v);setAppLang(v)}} style={oB(s.lang===v)}>{l}</button>)}</SR>
-    <SR l={t("settings.mode")}>{[["basic",t("settings.basic")], ["default",t("settings.default")], ["advanced",t("settings.advanced")]].map(([v,l]) => <button key={v} onClick={() => u("appMode", v)} style={oB(s.appMode === v)}>{l}</button>)}</SR>
-    <SR l={t("settings.click")}>{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} data-tip={v === "accented" ? t("settings.accented") : t("settings.flatTip")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>)}{["pitched", "unpitched"].map(v => <button key={v} onClick={() => u("pitched", v === "pitched")} data-tip={v === "pitched" ? t("settings.pitched") : t("settings.unpitched")} style={oB(s.pitched === (v === "pitched"))}>{v === "pitched" ? "♪" : "✕"}</button>)}</SR><SR l={t("settings.beats")}>{[false, true].map(v => <button key={String(v)} onClick={() => u("downbeatOnly", v)} style={oB(s.downbeatOnly === v)}>{v ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>)}</SR><SR l={t("settings.visual")}>{[["dots", "●", t("settings.pulse")], ["dots+flash", "● ◻", t("settings.full")], ["flash", "◻", t("settings.flash")]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l={t("settings.countIn")}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? t("settings.countInOff") : v === 1 ? t("settings.countIn1") : t("settings.countIn2")}</button>)}</SR>
-    {s.appMode === "advanced" && <SR l={t("settings.silentCycle")}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[0, 4, 8, 12, 16].map(v => <button key={v} onClick={() => u("silentInterval", v)} data-tip={v === 0 ? t("settings.alwaysAudible") : `${v}s ${t("settings.silentTip")}, ${v}s ${t("settings.silentTip2")}`} style={{ ...oB(s.silentInterval === v), fontSize: 11 }}>{v === 0 ? t("off") : `${v}s`}</button>)}</div></SR>}
+  const actxRef = useRef(null);
+  const preview = useCallback((sound) => {
+    try {
+      if (!actxRef.current) actxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      const ctx = actxRef.current; if (ctx.state === "suspended") ctx.resume();
+      const time = ctx.currentTime + 0.05;
+      switch (sound) {
+        case "sine": { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = 1000; g.gain.setValueAtTime(0.8, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.08); break; }
+        case "noise": { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++)d[i] = Math.random() * 2 - 1; const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(0.7, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 1200; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(time); src.stop(time + 0.06); break; }
+        case "wood": { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.setValueAtTime(850, time); o.frequency.exponentialRampToValueAtTime(420, time + 0.025); g.gain.setValueAtTime(0.9, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.035); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.05); break; }
+        case "rimshot": { const o = ctx.createOscillator(), gO = ctx.createGain(); o.type = "sine"; o.frequency.setValueAtTime(1800, time); gO.gain.setValueAtTime(0.48, time); gO.gain.exponentialRampToValueAtTime(0.001, time + 0.03); o.connect(gO); gO.connect(ctx.destination); o.start(time); o.stop(time + 0.05); const l = Math.floor(ctx.sampleRate * 0.02), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++)d[i] = Math.random() * 2 - 1; const src = ctx.createBufferSource(), gN = ctx.createGain(); src.buffer = buf; gN.gain.setValueAtTime(0.56, time); gN.gain.exponentialRampToValueAtTime(0.001, time + 0.04); const hp = ctx.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 2000; src.connect(hp); hp.connect(gN); gN.connect(ctx.destination); src.start(time); src.stop(time + 0.06); break; }
+        case "clave": { const o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = 2500; g.gain.setValueAtTime(0.9, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.022); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.04); break; }
+        case "cowbell": { const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(); o1.type = "square"; o2.type = "square"; o1.frequency.value = 565; o2.frequency.value = 845; g.gain.setValueAtTime(0.7, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.08); const bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 800; bp.Q.value = 2; o1.connect(bp); o2.connect(bp); bp.connect(g); g.connect(ctx.destination); o1.start(time); o2.start(time); o1.stop(time + 0.1); o2.stop(time + 0.1); break; }
+      }
+    } catch {}
+  }, []);
+  const u = (k, v) => {
+    const next = { ...s, [k]: v };
+    // Reset clickSound to sine if leaving advanced mode with an advanced-only sound
+    if (k === "appMode" && v !== "advanced" && !["sine", "noise"].includes(next.clickSound)) next.clickSound = "sine";
+    onChange(next);
+  };
+  const soundOpts = s.appMode === "advanced"
+    ? [["sine", t("settings.sound.sine")], ["noise", t("settings.sound.noise")], ["wood", t("settings.sound.wood")], ["rimshot", t("settings.sound.rimshot")], ["clave", t("settings.sound.clave")], ["cowbell", t("settings.sound.cowbell")]]
+    : [["sine", t("settings.sound.sine")], ["noise", t("settings.sound.noise")]];
+  const langOpts = [["en", "English"], ["zh-CN", "简体中文"], ["zh-TW", "繁體中文"]];
+  const modeOpts = [["basic", t("settings.basic")], ["default", t("settings.default")], ["advanced", t("settings.advanced")]];
+  const accentOpts = [["accented", t("settings.accented")], ["flat", t("settings.flatTip")]];
+  const beatsOpts = [["all", t("settings.allBeats")], ["downbeat", t("settings.downbeatOnly")]];
+  const visOpts = [["dots", t("settings.pulse")], ["dots+flash", t("settings.full")], ["flash", t("settings.flash")]];
+  const ciOpts = [[0, t("settings.countInOff")], [1, t("settings.countIn1")], [2, t("settings.countIn2")]];
+  const silOpts = [[0, t("off")], [4, "4s"], [8, "8s"], [12, "12s"], [16, "16s"]];
+  return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "80vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{t("settings.title")}</div><button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button></div>
+    <SR l={t("settings.language")}><TextStepper options={langOpts} value={s.lang} onChange={v => { u("lang", v); setAppLang(v); }} /></SR>
+    <SR l={t("settings.mode")}><TextStepper options={modeOpts} value={s.appMode} onChange={v => u("appMode", v)} /></SR>
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10, fontFamily: "'Outfit',sans-serif" }}>{t("settings.click")}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingLeft: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.accent")}</span><TextStepper options={accentOpts} value={s.accented ? "accented" : "flat"} onChange={v => u("accented", v === "accented")} /></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.sound")}</span><TextStepper options={soundOpts} value={s.clickSound || "sine"} onChange={v => { u("clickSound", v); preview(v); }} /></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.beats")}</span><TextStepper options={beatsOpts} value={s.downbeatOnly ? "downbeat" : "all"} onChange={v => u("downbeatOnly", v === "downbeat")} /></div>
+      </div>
+    </div>
+    <SR l={t("settings.visual")}><TextStepper options={visOpts} value={s.visualMode} onChange={v => u("visualMode", v)} /></SR>
+    <SR l={t("settings.countIn")}><TextStepper options={ciOpts} value={s.countIn} onChange={v => u("countIn", v)} /></SR>
+    {s.appMode === "advanced" && <SR l={t("settings.silentCycle")}><TextStepper options={silOpts} value={s.silentInterval} onChange={v => u("silentInterval", v)} /></SR>}
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
       <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>{t("settings.deviceId")} {getDeviceId()}</div>
       <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>{t("settings.privacy")}</div>
     </div></div></div>);
 }
-function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
+function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex" }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved, videoUrl: savedVideoUrl, videoSync: savedVideoSync, loadedProfileId }) {
   const existing = useMemo(() => { if (!loadedProfileId) return null; const p = ldP(); return p.find(x => x.id === loadedProfileId) || null; }, [loadedProfileId]);
   const [ti, sTi] = useState(existing?.title || ""), [c, sC] = useState(existing?.composer || ""), [perf, setPerf] = useState(existing?.performer || ""), [vUrl, setVUrl] = useState(savedVideoUrl || existing?.videoUrl || "");
@@ -1494,7 +1567,7 @@ export default function Tempus() {
   useEffect(() => { if (videoUrl) _setLS("tempus_videoUrl", videoUrl); else { try { localStorage.removeItem("tempus_videoUrl"); } catch {} } }, [videoUrl]);
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
-  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en" }; });
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const parsed = JSON.parse(saved); if (parsed.pitched !== undefined && !parsed.clickSound) { parsed.clickSound = parsed.pitched ? "sine" : "noise"; delete parsed.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", ...parsed }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en" }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); if (settings.lang) setAppLang(settings.lang); }, [settings]);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
@@ -1566,7 +1639,7 @@ export default function Tempus() {
   const totalBars = tl.length;
 
   useEffect(() => { met.updS({ muted }); }, [muted]);
-  useEffect(() => { met.updS({ accented: settings.accented, pitched: settings.pitched, downbeatOnly: settings.downbeatOnly, silentInterval: settings.silentInterval }); }, [settings.accented, settings.pitched, settings.downbeatOnly, settings.silentInterval]);
+  useEffect(() => { met.updS({ accented: settings.accented, clickSound: settings.clickSound, downbeatOnly: settings.downbeatOnly, silentInterval: settings.silentInterval }); }, [settings.accented, settings.clickSound, settings.downbeatOnly, settings.silentInterval]);
 
   useEffect(() => {
     met.setCb(evt => {
@@ -1581,7 +1654,7 @@ export default function Tempus() {
   }, [met, tl, pracSections, pracStep]);
 
   const prePlayTempos = useRef(null);
-  const go = useCallback((fi = 0, countInOverride, syncDelayMs) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const ci = countInOverride !== undefined ? countInOverride : settings.countIn; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, ci, { accented: settings.accented, pitched: settings.pitched, muted, ...(syncDelayMs != null ? { syncDelayMs } : {}) }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
+  const go = useCallback((fi = 0, countInOverride, syncDelayMs) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const ci = countInOverride !== undefined ? countInOverride : settings.countIn; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, ci, { accented: settings.accented, clickSound: settings.clickSound, muted, ...(syncDelayMs != null ? { syncDelayMs } : {}) }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
   const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
   useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
   const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => prev.map((s, i) => ({ ...s, tempo: i < saved.length ? (saved[i] ?? s.tempo) : s.tempo }))); } } catch {} prePlayTempos.current = null; }, [met]);
@@ -1621,7 +1694,7 @@ export default function Tempus() {
         } else {
           if (isP) { met.stop(); setIsP(false); }
           else if (ps && (ps.ended || ps.countIn)) { met.tap(); go(0); }
-          else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }
+          else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, clickSound: settings.clickSound, muted }); } }
           else { met.tap(); go(0); }
         }
       }
@@ -1809,7 +1882,7 @@ export default function Tempus() {
         </div>
       </div>}
 
-      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
+      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, clickSound: settings.clickSound, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
