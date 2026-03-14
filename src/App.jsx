@@ -105,7 +105,7 @@ const S = {
   "video.invalidUrl": { en: "Invalid URL Format", "zh-CN": "无效的 URL 格式", "zh-TW": "無效的 URL 格式" },
 
   // --- Settings ---
-  "settings.title": { en: "Settings", "zh-CN": "设置", "zh-TW": "設定" },
+  "settings.title": { en: "Global Settings", "zh-CN": "全局设置", "zh-TW": "全域設定" },
   "settings.language": { en: "Language", "zh-CN": "语言", "zh-TW": "語言" },
   "settings.mode": { en: "Mode", "zh-CN": "模式", "zh-TW": "模式" },
   "settings.click": { en: "Click", "zh-CN": "节拍器音色", "zh-TW": "節拍器音色" },
@@ -522,7 +522,7 @@ function useMetronome() {
 // ============ STYLES ============
 export const nI = { width: 62, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.text, textAlign: "center", fontSize: 18, borderRadius: 8, fontFamily: "'DM Mono',monospace", outline: "none", margin: "0 6px" };
 const sB = { width: 48, height: 48, background: C.surface, border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" };
-const oB = on => ({ padding: "8px 16px", borderRadius: 8, border: `1px solid ${on ? C.downbeat : C.border}`, background: on ? C.downbeat + "15" : "transparent", color: on ? C.downbeat : C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" });
+const oB = on => ({ padding: "8px 16px", borderRadius: 8, border: `1px solid ${on ? C.downbeat : C.border}`, background: on ? C.downbeat + "15" : "transparent", color: on ? C.downbeat : C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif", textAlign: "center", minWidth: 56 });
 
 // ============ INPUTS ============
 function NI({ value, onChange, min, max, style = {}, step = 1, validate }) { const [d, setD] = useState(String(value)); const drg = useRef({ on: false, active: false, stY: 0, stV: 0 }); useEffect(() => setD(String(value)), [value]); const cm = v => { const n = typeof v === "number" ? v : parseFloat(d); if (!isNaN(n) && n >= min && n <= max) { if (validate && !validate(n)) { setD(String(value)); return; } onChange(n); setD(String(n)); } else setD(String(value)); }; const pD = e => { drg.current = { on: true, active: false, stY: e.clientY, stV: value }; }; const pM = e => { if (!drg.current.on) return; const dY = drg.current.stY - e.clientY; if (!drg.current.active && Math.abs(dY) < 8) return; if (!drg.current.active) { drg.current.active = true; e.target.setPointerCapture(e.pointerId); } const nv = Math.min(max, Math.max(min, drg.current.stV + Math.round(dY / 5) * step)); setD(String(nv)); }; const pU = e => { if (drg.current.active) { drg.current.on = false; drg.current.active = false; try { e.target.releasePointerCapture(e.pointerId); } catch { } cm(parseFloat(d)); } else { drg.current.on = false; } }; return <input type="text" inputMode="decimal" value={d} onChange={e => setD(e.target.value)} onBlur={() => cm()} onKeyDown={e => { if (e.key === "Enter") { cm(); e.target.blur(); } }} onPointerDown={pD} onPointerMove={pM} onPointerUp={pU} onPointerCancel={pU} style={{ ...nI, cursor: "ns-resize", ...style }} />; }
@@ -862,7 +862,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
 const nv = { padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", justifyContent: "center" };
 const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", background: C.downbeat, color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.downbeat}33` };
 const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
-const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" };
+const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap", minWidth: 52, textAlign: "center" };
 
 // ============ VIDEO VIEW ============
 function fmtTime(s) { if (s == null) return "--:--.-"; const m = Math.floor(s / 60), sec = s % 60; return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`; }
@@ -1404,41 +1404,42 @@ function SetP({ settings: s, onChange, onClose }) {
   }, []);
   const u = (k, v) => {
     const next = { ...s, [k]: v };
-    // Reset clickSound to sine if leaving advanced mode with an advanced-only sound
     if (k === "appMode" && v !== "advanced" && !["sine", "noise"].includes(next.clickSound)) next.clickSound = "sine";
     onChange(next);
   };
   const soundOpts = s.appMode === "advanced"
     ? [["sine", t("settings.sound.sine")], ["noise", t("settings.sound.noise")], ["wood", t("settings.sound.wood")], ["rimshot", t("settings.sound.rimshot")], ["clave", t("settings.sound.clave")], ["cowbell", t("settings.sound.cowbell")]]
     : [["sine", t("settings.sound.sine")], ["noise", t("settings.sound.noise")]];
-  const langOpts = [["en", "English"], ["zh-CN", "简体中文"], ["zh-TW", "繁體中文"]];
-  const modeOpts = [["basic", t("settings.basic")], ["default", t("settings.default")], ["advanced", t("settings.advanced")]];
-  const accentOpts = [["accented", t("settings.accented")], ["flat", t("settings.flatTip")]];
-  const beatsOpts = [["all", t("settings.allBeats")], ["downbeat", t("settings.downbeatOnly")]];
-  const visOpts = [["dots", t("settings.pulse")], ["dots+flash", t("settings.full")], ["flash", t("settings.flash")]];
-  const ciOpts = [[0, t("settings.countInOff")], [1, t("settings.countIn1")], [2, t("settings.countIn2")]];
   const silOpts = [[0, t("off")], [4, "4s"], [8, "8s"], [12, "12s"], [16, "16s"]];
   return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "80vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{t("settings.title")}</div><button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button></div>
-    <SR l={t("settings.language")}><TextStepper options={langOpts} value={s.lang} onChange={v => { u("lang", v); setAppLang(v); }} /></SR>
-    <SR l={t("settings.mode")}><TextStepper options={modeOpts} value={s.appMode} onChange={v => u("appMode", v)} /></SR>
+    <SR l={t("settings.language")}>{[["en","English"],["zh-CN","简体中文"],["zh-TW","繁體中文"]].map(([v,l])=><button key={v} onClick={()=>{u("lang",v);setAppLang(v)}} style={{...oB(s.lang===v), flex: 1}}>{l}</button>)}</SR>
+    <SR l={t("settings.mode")}>{[["basic",t("settings.basic")], ["default",t("settings.default")], ["advanced",t("settings.advanced")]].map(([v,l]) => <button key={v} onClick={() => u("appMode", v)} style={{...oB(s.appMode === v), flex: 1}}>{l}</button>)}</SR>
     <div style={{ marginBottom: 16 }}>
       <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 10, fontFamily: "'Outfit',sans-serif" }}>{t("settings.click")}</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingLeft: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.accent")}</span><TextStepper options={accentOpts} value={s.accented ? "accented" : "flat"} onChange={v => u("accented", v === "accented")} /></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.sound")}</span><TextStepper options={soundOpts} value={s.clickSound || "sine"} onChange={v => { u("clickSound", v); preview(v); }} /></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}><span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.beats")}</span><TextStepper options={beatsOpts} value={s.downbeatOnly ? "downbeat" : "all"} onChange={v => u("downbeatOnly", v === "downbeat")} /></div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingLeft: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.accent")}</span>
+          {["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} style={{...oB(s.accented === (v === "accented")), flex: 1}}>{v === "accented" ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>)}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.sound")}</span>
+          <TextStepper options={soundOpts} value={s.clickSound || "sine"} onChange={v => { u("clickSound", v); preview(v); }} />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ color: C.textMuted + "aa", fontSize: 11, fontFamily: "'Outfit',sans-serif", width: 52, flexShrink: 0 }}>{t("settings.beats")}</span>
+          {[false, true].map(v => <button key={String(v)} onClick={() => u("downbeatOnly", v)} style={{...oB(s.downbeatOnly === v), flex: 1}}>{v ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>)}
+        </div>
       </div>
     </div>
-    <SR l={t("settings.visual")}><TextStepper options={visOpts} value={s.visualMode} onChange={v => u("visualMode", v)} /></SR>
-    <SR l={t("settings.countIn")}><TextStepper options={ciOpts} value={s.countIn} onChange={v => u("countIn", v)} /></SR>
+    <SR l={t("settings.countIn")}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={{...oB(s.countIn === v), flex: 1}}>{v === 0 ? t("settings.countInOff") : v === 1 ? t("settings.countIn1") : t("settings.countIn2")}</button>)}</SR>
     {s.appMode === "advanced" && <SR l={t("settings.silentCycle")}><TextStepper options={silOpts} value={s.silentInterval} onChange={v => u("silentInterval", v)} /></SR>}
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
       <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>{t("settings.deviceId")} {getDeviceId()}</div>
       <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>{t("settings.privacy")}</div>
     </div></div></div>);
 }
-function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex" }}>{children}</div></div>); }
+function SR({ l, children }) { return (<div style={{ marginBottom: 16 }}><div style={{ fontSize: 12, color: C.textMuted, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{l}</div><div style={{ display: "flex", gap: 8 }}>{children}</div></div>); }
 function SaveM({ sections, onClose, onSaved, videoUrl: savedVideoUrl, videoSync: savedVideoSync, loadedProfileId }) {
   const existing = useMemo(() => { if (!loadedProfileId) return null; const p = ldP(); return p.find(x => x.id === loadedProfileId) || null; }, [loadedProfileId]);
   const [ti, sTi] = useState(existing?.title || ""), [c, sC] = useState(existing?.composer || ""), [perf, setPerf] = useState(existing?.performer || ""), [vUrl, setVUrl] = useState(savedVideoUrl || existing?.videoUrl || "");
@@ -1862,7 +1863,7 @@ export default function Tempus() {
       </div>
 
       <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", gap: 16, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>
-        <span>{sections.length} {tp("unit.sec", sections.length)}</span><span>{totalBars} {tp("unit.bar", totalBars)}</span>
+        <span style={{ minWidth: 72 }}>{sections.length} {tp("unit.sec", sections.length)}</span><span style={{ minWidth: 48 }}>{totalBars} {tp("unit.bar", totalBars)}</span>
         {totalBars > 0 && <span>{Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur)}s</span>}
       </div>
 
