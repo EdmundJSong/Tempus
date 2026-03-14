@@ -174,6 +174,11 @@ const S = {
   "prac.repeats": { en: "Repeats", "zh-CN": "重复", "zh-TW": "重複" },
   "prac.startBtn": { en: "Start", "zh-CN": "开始", "zh-TW": "開始" },
 
+  // --- Tempo History ---
+  "tempo.progress": { en: "Tempo Progress", "zh-CN": "速度进度", "zh-TW": "速度進度" },
+  "tempo.last": { en: "Last", "zh-CN": "上次", "zh-TW": "上次" },
+  "tempo.best": { en: "Best", "zh-CN": "最佳", "zh-TW": "最佳" },
+
   // --- Undo ---
   "undo.cleared": { en: "Sections cleared", "zh-CN": "段落已清除", "zh-TW": "段落已清除" },
   "undo.deleted": { en: "Section deleted", "zh-CN": "段落已删除", "zh-TW": "段落已刪除" },
@@ -249,6 +254,9 @@ const S = {
   "link.expired": { en: "Code expired", "zh-CN": "码已过期", "zh-TW": "碼已過期" },
   "link.notLinked": { en: "No linked devices", "zh-CN": "无关联设备", "zh-TW": "無關聯裝置" },
   "link.notLinkedDesc": { en: "Link your devices to sync profiles across them.", "zh-CN": "关联设备以同步曲目。", "zh-TW": "關聯裝置以同步曲目。" },
+  "link.unlinkForSync": { en: "Joining a sync room will unlink this device from your cluster.", "zh-CN": "加入同步房间将取消此设备的关联。", "zh-TW": "加入同步房間將取消此裝置的關聯。" },
+  "link.unlinkForSyncHost": { en: "Creating a sync room will unlink this device from your cluster.", "zh-CN": "创建同步房间将取消此设备的关联。", "zh-TW": "建立同步房間將取消此裝置的關聯。" },
+  "link.confirmUnlink": { en: "Unlink & Continue", "zh-CN": "取消关联并继续", "zh-TW": "取消關聯並繼續" },
 };
 export function t(key) { const e = S[key]; if (!e) return key; return e[_lang] || e.en || key; }
 export function tp(key, n) { const v = S[key]?.[_lang] || S[key]?.en || key; return _lang === "en" && n !== 1 ? v + "s" : v; }
@@ -381,7 +389,7 @@ function fbSyncDebounced(sections, profiles) {
 // ============ DEVICE LINKING ============
 const LINK_CODE_TTL = 300000; // 5 minutes
 
-function getClusterId() { return _getLS("tempus_cluster_id") || null; }
+export function getClusterId() { return _getLS("tempus_cluster_id") || null; }
 function setClusterId(id) { if (id) _setLS("tempus_cluster_id", id); else { try { localStorage.removeItem("tempus_cluster_id"); } catch {} } }
 
 function getDeviceName() {
@@ -585,6 +593,91 @@ async function cleanupExpiredLinkCode(code) {
     const rtdb = await getRTDB(); if (!rtdb) return;
     await rtdb.mod.remove(rtdb.mod.ref(rtdb.db, `link_codes/${code}`));
   } catch {}
+}
+
+// Unlink this device for sync room entry — always keeps profiles, dissolves cluster if ≤1 remains
+export async function unlinkDeviceForSync() {
+  const clusterId = getClusterId();
+  if (!clusterId) return;
+  const fsDb = await fbInit(); if (!fsDb) return;
+  const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+  const myDeviceId = getDeviceId();
+
+  try {
+    const clusterSnap = await fs.getDoc(fs.doc(fsDb, "tempus_clusters", clusterId));
+    if (!clusterSnap.exists()) { setClusterId(null); return; }
+    const clusterData = clusterSnap.data();
+
+    // Keep shared profiles locally
+    const clusterProfiles = clusterData.profiles || [];
+    if (clusterProfiles.length > 0) svP(clusterProfiles);
+
+    // Remove this device from cluster
+    await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
+      [`devices.${myDeviceId}`]: fs.deleteField(),
+      updatedAt: Date.now()
+    });
+    setClusterId(null);
+    try { localStorage.removeItem("tempus_prelink_profiles"); } catch {}
+
+    // Check remaining devices — if ≤1, dissolve the cluster
+    const remaining = { ...clusterData.devices };
+    delete remaining[myDeviceId];
+    if (Object.keys(remaining).length <= 1) {
+      // Delete the cluster doc — remaining device's onSnapshot will see it disappear and auto-unlink
+      try { await fs.deleteDoc(fs.doc(fsDb, "tempus_clusters", clusterId)); } catch {}
+    }
+  } catch {}
+}
+
+// ============ TEMPO HISTORY ============
+async function writeTempoHistory(profileId, entries) {
+  // entries: [{ sectionIndex, sectionName, lastTempo, bestTempo?, isComplete }]
+  if (!profileId || !FB_ENABLED || entries.length === 0) return;
+  try {
+    const fsDb = await fbInit(); if (!fsDb) return;
+    const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    const clusterId = getClusterId();
+    const now = new Date().toISOString();
+    const docPath = clusterId
+      ? ["tempus_clusters", clusterId]
+      : ["tempus_backups", getDeviceId()];
+    // Read existing history
+    const snap = await fs.getDoc(fs.doc(fsDb, ...docPath));
+    const existing = snap.exists() ? (snap.data().tempoHistory || {}) : {};
+    const profileHistory = existing[profileId] || {};
+    for (const e of entries) {
+      const key = String(e.sectionIndex);
+      const prev = profileHistory[key] || {};
+      profileHistory[key] = {
+        sectionName: e.sectionName || prev.sectionName || "",
+        lastTempo: e.lastTempo,
+        lastTimestamp: now,
+        bestTempo: e.isComplete && e.lastTempo > (prev.bestTempo || 0) ? e.lastTempo : (prev.bestTempo || null),
+        bestTimestamp: e.isComplete && e.lastTempo > (prev.bestTempo || 0) ? now : (prev.bestTimestamp || null)
+      };
+      // Clean up null fields
+      if (!profileHistory[key].bestTempo) { delete profileHistory[key].bestTempo; delete profileHistory[key].bestTimestamp; }
+    }
+    existing[profileId] = profileHistory;
+    await fs.updateDoc(fs.doc(fsDb, ...docPath), { tempoHistory: existing });
+  } catch {}
+}
+
+async function readTempoHistory(profileId) {
+  if (!profileId || !FB_ENABLED) return {};
+  try {
+    const fsDb = await fbInit(); if (!fsDb) return {};
+    const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    const clusterId = getClusterId();
+    const docPath = clusterId
+      ? ["tempus_clusters", clusterId]
+      : ["tempus_backups", getDeviceId()];
+    const snap = await fs.getDoc(fs.doc(fsDb, ...docPath));
+    if (!snap.exists()) return {};
+    const history = snap.data().tempoHistory || {};
+    return history[profileId] || {};
+  } catch { return {}; }
 }
 
 // ============ SVG NOTE ============
@@ -945,7 +1038,7 @@ function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew 
 }
 
 // ============ SECTION CARD ============
-const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx, onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx }, ref) {
+const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx, onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx, tempoProgress }, ref) {
   const isT = s.type === "timed";
   const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
   const [revealed, setRevealed] = useState(false);
@@ -985,7 +1078,7 @@ const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total:
       </div>
       {isT ? (<>{I.clock(16)}<div style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 15, color: C.text }}>{s.duration}s</div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{pM(s.markers).length} cue{pM(s.markers).length !== 1 ? "s" : ""}</div></>) : (<>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center" }}><span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted, margin: "1px 0" }} /><span>{s.tsDen}</span><div style={{ fontSize: 9, color: C.textMuted, fontWeight: 400, marginTop: 3 }}>{s.grouping}</div></div>
-        <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.text, flex: 1 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={16} /><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.textMuted }}>=</span><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 15 }}>{s.tempo}</span>{s.curve !== "constant" && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.accent, marginLeft: 4 }}>{s.curve === "accel" ? "→" : "←"}{s.endTempo}</span>}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.text, flex: 1 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={16} /><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.textMuted }}>=</span><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 15 }}>{s.tempo}</span>{s.curve !== "constant" && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.accent, marginLeft: 4 }}>{s.curve === "accel" ? "→" : "←"}{s.endTempo}</span>}{tempoProgress && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted + "99", marginLeft: 6 }}>{tempoProgress.lastTempo != null && <span>↗{tempoProgress.lastTempo}</span>}{tempoProgress.bestTempo != null && <span style={{ marginLeft: 4 }}>★{tempoProgress.bestTempo}</span>}</span>}</div>
         <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: s.loop ? C.downbeat : C.text }}>{s.loop ? "∞" : `${s.bars} bar${s.bars !== 1 ? "s" : ""}`}</div></div>
       </>)}
       <button onClick={e => { e.stopPropagation(); onStartHere(); }} data-tip-b="Play here" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
@@ -1906,6 +1999,7 @@ function SetP({ settings: s, onChange, onClose, onShowDeviceLink }) {
     </div>
     <SR l={t("settings.countIn")}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={{...oB(s.countIn === v), flex: 1}}>{v === 0 ? t("settings.countInOff") : v === 1 ? t("settings.countIn1") : t("settings.countIn2")}</button>)}</SR>
     {s.appMode === "advanced" && <SR l={t("settings.silentCycle")}><TextStepper options={silOpts} value={s.silentInterval} onChange={v => u("silentInterval", v)} /></SR>}
+    <SR l={t("tempo.progress")}>{[true, false].map(v => <button key={String(v)} onClick={() => u("showTempoHistory", v)} style={{...oB(s.showTempoHistory === v), flex: 1}}>{v ? t("secEd.on") : t("secEd.off")}</button>)}</SR>
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>{t("settings.deviceId")} {getDeviceId()}</div>
@@ -1985,10 +2079,14 @@ function LibP({ onLoad, onClose }) {
 }
 
 // ============ PRACTICE SETUP MODAL ============
-function PracSetup({ sections, onStart, onClose }) {
+function PracSetup({ sections, onStart, onClose, tempoHistory, loadedProfileId }) {
   const refSec = sections.find(s => s.type === "metered");
+  const refIdx = sections.findIndex(s => s.type === "metered");
   const refTempo = refSec?.tempo || 120;
-  const [startBpm, setStartBpm] = useState(Math.round(refTempo * 0.7));
+  // Default to lastTempo from history if available, otherwise 70%
+  const historyTempo = loadedProfileId && refIdx >= 0 && tempoHistory[String(refIdx)]?.lastTempo;
+  const defaultStart = historyTempo && historyTempo > 0 && historyTempo <= refTempo ? historyTempo : Math.round(refTempo * 0.7);
+  const [startBpm, setStartBpm] = useState(defaultStart);
   const [inc, setInc] = useState(5);
   const [reps, setReps] = useState(2);
   const pct = Math.round((startBpm / refTempo) * 100);
@@ -2040,6 +2138,13 @@ export default function Tempus() {
   const [videoSync, setVideoSync] = useState(() => { try { const s = _getLS("tempus_videoSync"); return s ? JSON.parse(s) : null; } catch { return null; } });
   const [showVideo, setShowVideo] = useState(false);
   const [loadedProfileId, setLoadedProfileId] = useState(null);
+  // Load tempo history when profile changes
+  useEffect(() => {
+    if (!loadedProfileId) { setTempoHistory({}); return; }
+    let cancelled = false;
+    readTempoHistory(loadedProfileId).then(h => { if (!cancelled) setTempoHistory(h || {}); });
+    return () => { cancelled = true; };
+  }, [loadedProfileId]);
   useEffect(() => { if (videoUrl) _setLS("tempus_videoUrl", videoUrl); else { try { localStorage.removeItem("tempus_videoUrl"); } catch {} } }, [videoUrl]);
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
@@ -2047,35 +2152,14 @@ export default function Tempus() {
   const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const parsed = JSON.parse(saved); if (parsed.pitched !== undefined && !parsed.clickSound) { parsed.clickSound = parsed.pitched ? "sine" : "noise"; delete parsed.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", showTempoHistory: false, ...parsed }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", showTempoHistory: false }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); if (settings.lang) setAppLang(settings.lang); }, [settings]);
 
-  // Background cluster profile sync (runs when linked, even with modal closed)
-  useEffect(() => {
-    const cId = getClusterId();
-    if (!cId || !FB_ENABLED) return;
-    let unsub = null;
-    (async () => {
-      try {
-        const fsDb = await fbInit(); if (!fsDb) return;
-        const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
-        unsub = fs.onSnapshot(fs.doc(fsDb, "tempus_clusters", cId), snap => {
-          if (!snap.exists()) return;
-          const clusterProfiles = snap.data().profiles || [];
-          if (clusterProfiles.length > 0) {
-            _setLS(SK, JSON.stringify(clusterProfiles));
-          }
-        });
-      } catch {}
-    })();
-    // Periodic last-seen heartbeat (every 60s)
-    const hb = setInterval(() => updateClusterLastSeen(), 60000);
-    updateClusterLastSeen();
-    return () => { if (unsub) unsub(); clearInterval(hb); };
-  }, []);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
   const [isP, setIsP] = useState(false);
   const [mode, setMode] = useState("normal"); // "normal"|"record"|"practice"
   const [pracSections, setPracSections] = useState(null);
   const [pracStep, setPracStep] = useState(0);
+  const pracConfig = useRef(null); // { startPct, pctInc, pctReps, targetPct, origCount }
+  const [tempoHistory, setTempoHistory] = useState({}); // { [sectionIndex]: { lastTempo, bestTempo, ... } }
   const met = useMetronome();
   const fto = useRef(null);
   const splitPoints = useRef([]);
@@ -2155,10 +2239,70 @@ export default function Tempus() {
   }, [met, tl, pracSections, pracStep]);
 
   const prePlayTempos = useRef(null);
+  const modeRef = useRef(mode); useEffect(() => { modeRef.current = mode; }, [mode]);
+  const loadedProfileIdRef = useRef(loadedProfileId); useEffect(() => { loadedProfileIdRef.current = loadedProfileId; }, [loadedProfileId]);
+  const psRef = useRef(ps); useEffect(() => { psRef.current = ps; }, [ps]);
+  const pracSectionsRef = useRef(pracSections); useEffect(() => { pracSectionsRef.current = pracSections; }, [pracSections]);
+  const sectionsRef = useRef(sections); useEffect(() => { sectionsRef.current = sections; }, [sections]);
   const go = useCallback((fi = 0, countInOverride, syncDelayMs) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const ci = countInOverride !== undefined ? countInOverride : settings.countIn; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, ci, { accented: settings.accented, clickSound: settings.clickSound, muted, ...(syncDelayMs != null ? { syncDelayMs } : {}) }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
   const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
   useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
-  const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => prev.map((s, i) => ({ ...s, tempo: i < saved.length ? (saved[i] ?? s.tempo) : s.tempo }))); } } catch {} prePlayTempos.current = null; }, [met]);
+  const exitPlay = useCallback(() => {
+    // Record tempo history before clearing state
+    const wasPractice = modeRef.current === "practice";
+    const pid = loadedProfileIdRef.current;
+    const curPs = psRef.current;
+    const curPracSections = pracSectionsRef.current;
+    const curSections = sectionsRef.current;
+    const cfg = pracConfig.current;
+    if (wasPractice && pid && cfg && curPs && curSections) {
+      try {
+        const isComplete = !!(curPs.ended);
+        // Compute current step percentage from position in flat pracSections array
+        const groupSize = cfg.origCount * cfg.pctReps;
+        const si = curPs.sectionIndex || 0;
+        const stepIdx = Math.floor(si / Math.max(1, groupSize));
+        const curPct = Math.min(cfg.targetPct, cfg.startPct + stepIdx * cfg.pctInc);
+        const ratio = curPct / 100;
+        // For completed runs, use targetPct
+        const finalRatio = isComplete ? cfg.targetPct / 100 : ratio;
+        // Build entries for each metered section
+        const entries = [];
+        curSections.forEach((sec, i) => {
+          if (sec.type !== "metered") return;
+          const scaledTempo = Math.round(sec.tempo * finalRatio);
+          entries.push({
+            sectionIndex: i,
+            sectionName: `${sec.tsNum}/${sec.tsDen} @ ${sec.tempo}`,
+            lastTempo: scaledTempo,
+            isComplete
+          });
+        });
+        if (entries.length > 0) {
+          writeTempoHistory(pid, entries);
+          // Update local tempo history state
+          setTempoHistory(prev => {
+            const next = { ...prev };
+            for (const e of entries) {
+              const key = String(e.sectionIndex);
+              const p = next[key] || {};
+              next[key] = {
+                ...p,
+                lastTempo: e.lastTempo,
+                lastTimestamp: new Date().toISOString(),
+                ...(e.isComplete && e.lastTempo > (p.bestTempo || 0) ? { bestTempo: e.lastTempo, bestTimestamp: new Date().toISOString() } : {})
+              };
+            }
+            return next;
+          });
+        }
+      } catch {}
+    }
+    pracConfig.current = null;
+    met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null);
+    try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => prev.map((s, i) => ({ ...s, tempo: i < saved.length ? (saved[i] ?? s.tempo) : s.tempo }))); } } catch {}
+    prePlayTempos.current = null;
+  }, [met]);
 
   // ============ SYNC MODE ============
   const syncPause = useCallback(() => { met.stop(); setIsP(false); }, [met]);
@@ -2175,6 +2319,35 @@ export default function Tempus() {
     lastSyncSectionsJson.current = j;
     setSections(sync.syncState.sections);
   }, [sync.syncState?.sections, sync.isHost, sync.isInRoom, sync.syncState?.isAdmitted]);
+
+  // Background cluster profile sync — suspends while in a sync room
+  useEffect(() => {
+    const cId = getClusterId();
+    if (!cId || !FB_ENABLED || sync.isInRoom) return;
+    let unsub = null;
+    (async () => {
+      try {
+        const fsDb = await fbInit(); if (!fsDb) return;
+        const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+        unsub = fs.onSnapshot(fs.doc(fsDb, "tempus_clusters", cId), snap => {
+          if (!snap.exists()) {
+            // Cluster was dissolved — auto-unlink this device
+            setClusterId(null);
+            try { localStorage.removeItem("tempus_prelink_profiles"); } catch {}
+            return;
+          }
+          const clusterProfiles = snap.data().profiles || [];
+          if (clusterProfiles.length > 0) {
+            _setLS(SK, JSON.stringify(clusterProfiles));
+          }
+        });
+      } catch {}
+    })();
+    const hb = setInterval(() => updateClusterLastSeen(), 60000);
+    updateClusterLastSeen();
+    return () => { if (unsub) unsub(); clearInterval(hb); };
+  }, [sync.isInRoom]);
+
   const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
@@ -2245,6 +2418,7 @@ export default function Tempus() {
       }
     }
     setPracSections(allSecs); setPracStep(startPct); setMode("practice");
+    pracConfig.current = { startPct, pctInc, pctReps, targetPct, origCount: sections.length };
     setPracPending(true);
   }, [sections, go]);
 
@@ -2302,7 +2476,7 @@ export default function Tempus() {
   }, [ps]));
 
   return (
-    <div className={sync.syncGlowPulse ? "sync-glow-pulse" : ""} style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : undefined, transition: sync.syncGlowPulse ? undefined : "box-shadow 0.4s ease" }}>
+    <div className={sync.syncGlowPulse ? "sync-glow-pulse" : ""} style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : getClusterId() ? `inset 0 0 0 2px ${C.accent}44, inset 0 0 20px ${C.accent}11` : undefined, transition: sync.syncGlowPulse ? undefined : "box-shadow 0.4s ease" }}>
       <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${sync.isInRoom ? sync.SYNC_COLOR + '15' : mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet" />
       <style>{`
@@ -2370,7 +2544,7 @@ export default function Tempus() {
       {sync.isInRoom && <SyncStatusBar sync={sync} onOpenLobby={() => sync.setShowLobby(true)} />}
 
       <div style={{ padding: "8px 16px 120px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
-        {sections.map((sec, i) => { const locked = sync.isMemberLocked; const noop = () => {}; return <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={locked ? noop : () => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={locked ? noop : () => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={locked ? noop : (d => moveSec(i, d))} onDelete={locked ? null : (sections.length > 1 ? handleDelete : null)} onDragStart={locked ? noop : handleDragStart} onDragEnter={locked ? noop : handleDragEnter} onDragOver={locked ? noop : handleDragOver} onDragEnd={locked ? noop : handleDragEnd} onDrop={locked ? noop : handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={locked ? noop : onGripTouchStart} cancelTouchDrag={locked ? noop : cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} />; })}
+        {sections.map((sec, i) => { const locked = sync.isMemberLocked; const noop = () => {}; const tp = settings.showTempoHistory && loadedProfileId && tempoHistory[String(i)] ? tempoHistory[String(i)] : null; return <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={locked ? noop : () => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={locked ? noop : () => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={locked ? noop : (d => moveSec(i, d))} onDelete={locked ? null : (sections.length > 1 ? handleDelete : null)} onDragStart={locked ? noop : handleDragStart} onDragEnter={locked ? noop : handleDragEnter} onDragOver={locked ? noop : handleDragOver} onDragEnd={locked ? noop : handleDragEnd} onDrop={locked ? noop : handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={locked ? noop : onGripTouchStart} cancelTouchDrag={locked ? noop : cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} tempoProgress={tp} />; })}
         {!sync.isMemberLocked && <button onClick={addSec} style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(20)}</button>}
       </div>
 
@@ -2388,7 +2562,7 @@ export default function Tempus() {
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} onShowDeviceLink={() => setShowDeviceLink(true)} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
       {showLib && <LibP onLoad={(s, v, vs, pid) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); setLoadedProfileId(pid || null); }} onClose={() => setShowLib(false)} />}
-      {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
+      {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} tempoHistory={tempoHistory} loadedProfileId={loadedProfileId} />}
       {showDeviceLink && <DeviceLinkModal onClose={() => setShowDeviceLink(false)} onProfilesUpdated={p => { /* cluster snapshot pushed new profiles */ }} />}
       {sync.showLobby && <SyncLobby sync={sync} onLoadSections={handleSyncLoadSections} />}
       <SyncToast message={sync.toast} />
