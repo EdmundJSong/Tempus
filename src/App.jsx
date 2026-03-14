@@ -258,6 +258,13 @@ const S = {
   "link.unlinkForSync": { en: "Joining a sync room will unlink this device from your cluster.", "zh-CN": "加入同步房间将取消此设备的关联。", "zh-TW": "加入同步房間將取消此裝置的關聯。" },
   "link.unlinkForSyncHost": { en: "Creating a sync room will unlink this device from your cluster.", "zh-CN": "创建同步房间将取消此设备的关联。", "zh-TW": "建立同步房間將取消此裝置的關聯。" },
   "link.confirmUnlink": { en: "Unlink & Continue", "zh-CN": "取消关联并继续", "zh-TW": "取消關聯並繼續" },
+
+  // --- Offline / PWA ---
+  "offline.videoNeeds": { en: "Video sync needs internet", "zh-CN": "视频同步需要网络", "zh-TW": "影片同步需要網路" },
+  "offline.syncNeeds": { en: "Sync needs internet", "zh-CN": "同步需要网络", "zh-TW": "同步需要網路" },
+  "offline.linkNeeds": { en: "Device linking needs internet", "zh-CN": "设备关联需要网络", "zh-TW": "裝置關聯需要網路" },
+  "offline.dismiss": { en: "OK", "zh-CN": "确定", "zh-TW": "確定" },
+  "settings.offlineMode": { en: "Offline Mode", "zh-CN": "离线模式", "zh-TW": "離線模式" },
 };
 export function t(key) { const e = S[key]; if (!e) return key; return e[_lang] || e.en || key; }
 export function tp(key, n) { const v = S[key]?.[_lang] || S[key]?.en || key; return _lang === "en" && n !== 1 ? v + "s" : v; }
@@ -364,27 +371,60 @@ export function getDeviceId() {
 }
 
 let _fbSyncTimer = null;
+const BACKUP_QUEUE_KEY = "tempus_backup_queue";
+
+function _buildBackupPayload(sections, profiles) {
+  const deviceId = getDeviceId();
+  return {
+    deviceId,
+    sections,
+    profiles: profiles || ldP(),
+    settings: (() => { try { return JSON.parse(_getLS("tempus_settings")) || {}; } catch { return {}; } })(),
+    videoUrl: (() => { try { return _getLS("tempus_videoUrl") || null; } catch { return null; } })(),
+    videoSync: (() => { try { return JSON.parse(_getLS("tempus_videoSync")) || null; } catch { return null; } })(),
+    lastUpdated: new Date().toISOString(),
+    userAgent: navigator.userAgent || ""
+  };
+}
+
 function fbSyncDebounced(sections, profiles) {
   if (!FB_ENABLED) return;
   if (_fbSyncTimer) clearTimeout(_fbSyncTimer);
   _fbSyncTimer = setTimeout(async () => {
+    const payload = _buildBackupPayload(sections, profiles);
+    if (!navigator.onLine) {
+      // Queue for later — latest state only, overwrites previous queue
+      _setLS(BACKUP_QUEUE_KEY, JSON.stringify(payload));
+      return;
+    }
     try {
       const db = await fbInit();
       if (!db) return;
       const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
-      const deviceId = getDeviceId();
-      await setDoc(doc(db, "tempus_backups", deviceId), {
-        deviceId,
-        sections,
-        profiles: profiles || ldP(),
-        settings: (() => { try { return JSON.parse(_getLS("tempus_settings")) || {}; } catch { return {}; } })(),
-        videoUrl: (() => { try { return _getLS("tempus_videoUrl") || null; } catch { return null; } })(),
-        videoSync: (() => { try { return JSON.parse(_getLS("tempus_videoSync")) || null; } catch { return null; } })(),
-        lastUpdated: new Date().toISOString(),
-        userAgent: navigator.userAgent || ""
-      }, { merge: true });
+      await setDoc(doc(db, "tempus_backups", payload.deviceId), payload, { merge: true });
+      // Clear queue on success
+      try { localStorage.removeItem(BACKUP_QUEUE_KEY); } catch {}
     } catch {}
   }, 5000);
+}
+
+async function flushBackupQueue() {
+  if (!FB_ENABLED || !navigator.onLine) return;
+  try {
+    const raw = _getLS(BACKUP_QUEUE_KEY);
+    if (!raw) return;
+    const payload = JSON.parse(raw);
+    const db = await fbInit();
+    if (!db) return;
+    const { doc, setDoc } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    await setDoc(doc(db, "tempus_backups", payload.deviceId), payload, { merge: true });
+    try { localStorage.removeItem(BACKUP_QUEUE_KEY); } catch {}
+  } catch {}
+}
+
+// Flush queued backup when connection returns
+if (typeof window !== "undefined") {
+  window.addEventListener("online", () => { flushBackupQueue(); });
 }
 
 // ============ DEVICE LINKING ============
@@ -1948,6 +1988,21 @@ function DeviceLinkModal({ onClose, onProfilesUpdated }) {
   </div></div>);
 }
 
+// ============ OFFLINE PROMPT ============
+function OfflinePrompt({ message, onDismiss }) {
+  return (
+    <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onDismiss}>
+      <div className="modal-content" style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 16, padding: "28px 32px", textAlign: "center", maxWidth: 300 }} onClick={e => e.stopPropagation()}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 12 }}>
+          <path d="M1 1l22 22" /><path d="M16.72 11.06A10.94 10.94 0 0119 12.55" /><path d="M5 12.55a10.94 10.94 0 015.17-2.39" /><path d="M10.71 5.05A16 16 0 0122.56 9" /><path d="M1.42 9a15.91 15.91 0 014.7-2.88" /><path d="M8.53 16.11a6 6 0 016.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" />
+        </svg>
+        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 18 }}>{message}</div>
+        <button onClick={onDismiss} style={{ padding: "8px 32px", borderRadius: 8, border: "none", background: C.accent, color: "#000", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("offline.dismiss")}</button>
+      </div>
+    </div>
+  );
+}
+
 // ============ SETTINGS / SAVE / LIBRARY ============
 // AGENT NOTE: Do NOT add inline description text beneath settings rows.
 // All setting explanations should use data-tip or data-tip-b tooltip attributes only.
@@ -2001,6 +2056,7 @@ function SetP({ settings: s, onChange, onClose, onShowDeviceLink }) {
     </div>
     <SR l={t("settings.countIn")}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={{...oB(s.countIn === v), flex: 1}}>{v === 0 ? t("settings.countInOff") : v === 1 ? t("settings.countIn1") : t("settings.countIn2")}</button>)}</SR>
     {s.appMode === "advanced" && <SR l={t("settings.silentCycle")}><TextStepper options={silOpts} value={s.silentInterval} onChange={v => u("silentInterval", v)} /></SR>}
+    {s.appMode === "advanced" && <SR l={t("settings.offlineMode")}>{[true, false].map(v => <button key={String(v)} onClick={() => u("offlineMode", v)} style={{...oB(s.offlineMode === v), flex: 1}}>{v ? t("secEd.on") : t("secEd.off")}</button>)}</SR>}
     <SR l={t("tempo.progress")}>{[true, false].map(v => <button key={String(v)} onClick={() => u("showTempoHistory", v)} style={{...oB(s.showTempoHistory === v), flex: 1}}>{v ? t("secEd.on") : t("secEd.off")}</button>)}</SR>
     <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -2151,8 +2207,23 @@ export default function Tempus() {
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
   const [showDeviceLink, setShowDeviceLink] = useState(false);
-  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const parsed = JSON.parse(saved); if (parsed.pitched !== undefined && !parsed.clickSound) { parsed.clickSound = parsed.pitched ? "sine" : "noise"; delete parsed.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", showTempoHistory: false, ...parsed }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", showTempoHistory: false }; });
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const parsed = JSON.parse(saved); if (parsed.pitched !== undefined && !parsed.clickSound) { parsed.clickSound = parsed.pitched ? "sine" : "noise"; delete parsed.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", showTempoHistory: false, offlineMode: false, ...parsed }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, lang: "en", showTempoHistory: false, offlineMode: false }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); if (settings.lang) setAppLang(settings.lang); }, [settings]);
+
+  // --- Offline prompt state ---
+  const [offlineMsg, setOfflineMsg] = useState(null);
+
+  // --- PWA service worker: register/unregister based on offlineMode setting ---
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    if (settings.offlineMode) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    } else {
+      navigator.serviceWorker.getRegistrations().then(regs => {
+        regs.forEach(r => r.unregister());
+      });
+    }
+  }, [settings.offlineMode]);
 
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
@@ -2530,10 +2601,10 @@ export default function Tempus() {
         <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
           {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? t("toolbar.tapAgain") : t("toolbar.new")} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{confirmClear ? t("toolbar.clearQ") : I.fileNew(18)}</button>}
-          {videoUrl && !sync.isMemberLocked && <button onClick={() => setShowVideo(true)} data-tip-b={t("toolbar.video")} style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
+          {videoUrl && !sync.isMemberLocked && <button onClick={() => { if (!navigator.onLine) { setOfflineMsg(t("offline.videoNeeds")); return; } setShowVideo(true); }} data-tip-b={t("toolbar.video")} style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b={t("toolbar.library")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b={t("toolbar.save")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
-          {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b={t("toolbar.sync")} style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => { if (!navigator.onLine && !sync.isInRoom) { setOfflineMsg(t("offline.syncNeeds")); return; } sync.setShowLobby(true); }} data-tip-b={t("toolbar.sync")} style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
           <button onClick={() => setShowSet(true)} data-tip-b={t("toolbar.settings")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
         </div>
       </div>
@@ -2561,7 +2632,7 @@ export default function Tempus() {
 
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, clickSound: settings.clickSound, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
-      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} onShowDeviceLink={() => setShowDeviceLink(true)} />}
+      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} onShowDeviceLink={() => { if (!navigator.onLine) { setOfflineMsg(t("offline.linkNeeds")); return; } setShowDeviceLink(true); }} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
       {showLib && <LibP onLoad={(s, v, vs, pid) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); setLoadedProfileId(pid || null); }} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} tempoHistory={tempoHistory} loadedProfileId={loadedProfileId} />}
@@ -2573,6 +2644,7 @@ export default function Tempus() {
         <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? t("undo.cleared") : t("undo.deleted")}</span>
         <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} {t("undo.undo")}</button>
       </div>}
+      {offlineMsg && <OfflinePrompt message={offlineMsg} onDismiss={() => setOfflineMsg(null)} />}
     </div>
   );
 }
