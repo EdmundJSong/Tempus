@@ -215,7 +215,7 @@ const S = {
   "sync.removed": { en: "You were removed by the host", "zh-CN": "您已被主持人移除", "zh-TW": "您已被主持人移除" },
   "sync.resetAll": { en: "Sync reset — all devices reloaded", "zh-CN": "同步重置 — 所有设备已重载", "zh-TW": "同步重置 — 所有裝置已重載" },
   "sync.enterName": { en: "Enter your display name", "zh-CN": "请输入显示名称", "zh-TW": "請輸入顯示名稱" },
-  "sync.enter4Digit": { en: "Enter a 4-digit room code", "zh-CN": "请输入4位房间代码", "zh-TW": "請輸入4位房間代碼" },
+  "sync.enter4Digit": { en: "Enter a 6-character room code", "zh-CN": "请输入6位房间代码", "zh-TW": "請輸入6位房間代碼" },
   "sync.couldNotJoin": { en: "Could not join room", "zh-CN": "无法加入房间", "zh-TW": "無法加入房間" },
   "sync.syncReset": { en: "Sync Reset", "zh-CN": "同步重置", "zh-TW": "同步重置" },
   "sync.confirmQ": { en: "Confirm?", "zh-CN": "确认?", "zh-TW": "確認?" },
@@ -336,18 +336,30 @@ const FIREBASE_CONFIG = {
 };
 const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY" && FIREBASE_CONFIG.apiKey !== "disabled";
 
-let _fb = null, _fbDb = null;
+let _fb = null, _fbDb = null, _fbAuth = null, _authReady = null;
 export async function fbInit() {
-  if (_fb) return _fbDb;
+  if (_fb) { await _authReady; return _fbDb; }
   if (!FB_ENABLED) return null;
   try {
     const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js");
     const { getFirestore } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    const { getAuth, signInAnonymously, onAuthStateChanged } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js");
     _fb = initializeApp(FIREBASE_CONFIG);
     _fbDb = getFirestore(_fb);
+    _fbAuth = getAuth(_fb);
+    // Wait for auth to be ready (resolves on first auth state)
+    _authReady = new Promise((resolve) => {
+      const unsub = onAuthStateChanged(_fbAuth, (user) => {
+        unsub();
+        if (user) { resolve(); }
+        else { signInAnonymously(_fbAuth).then(resolve).catch(resolve); }
+      });
+    });
+    await _authReady;
     return _fbDb;
   } catch { return null; }
 }
+export function getAuthUid() { return _fbAuth?.currentUser?.uid || null; }
 
 let _fbRtdb = null, _rtdbModule = null;
 async function getRTDB() {
@@ -377,6 +389,7 @@ function _buildBackupPayload(sections, profiles) {
   const deviceId = getDeviceId();
   return {
     deviceId,
+    authUid: getAuthUid(),
     sections,
     profiles: profiles || ldP(),
     settings: (() => { try { return JSON.parse(_getLS("tempus_settings")) || {}; } catch { return {}; } })(),
@@ -463,9 +476,11 @@ async function createLinkCode() {
     // Backup current profiles before linking
     _setLS("tempus_prelink_profiles", _getLS(SK) || "[]");
     const deviceName = getDeviceName();
+    const myAuthUid = getAuthUid();
     await fs.setDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
       clusterId,
-      devices: { [deviceId]: { name: deviceName, linkedAt: Date.now(), lastSeen: Date.now() } },
+      devices: { [deviceId]: { name: deviceName, authUid: myAuthUid, linkedAt: Date.now(), lastSeen: Date.now() } },
+      authUids: [myAuthUid],
       profiles: ldP(),
       tempoHistory: {},
       createdAt: Date.now(),
@@ -479,6 +494,7 @@ async function createLinkCode() {
   const now = Date.now();
   await mod.set(mod.ref(db, `link_codes/${code}`), {
     creatorDeviceId: deviceId,
+    creatorAuthUid: getAuthUid(),
     clusterId,
     createdAt: now,
     expiresAt: now + LINK_CODE_TTL,
@@ -490,23 +506,36 @@ async function createLinkCode() {
 async function joinWithLinkCode(code) {
   const rtdb = await getRTDB(); if (!rtdb) throw new Error("RTDB not available");
   const { db, mod } = rtdb;
-  const snap = await mod.get(mod.ref(db, `link_codes/${code}`));
-  if (!snap.exists()) throw new Error("invalid");
-  const data = snap.val();
-  if (Date.now() > data.expiresAt) throw new Error("expired");
-  if (data.joinedDeviceId) throw new Error("already_used");
-
+  const codeRef = mod.ref(db, `link_codes/${code}`);
   const deviceId = getDeviceId();
-  if (data.creatorDeviceId === deviceId) throw new Error("same_device");
+
+  // Use RTDB transaction to atomically claim the link code
+  let txData = null;
+  const { committed } = await mod.runTransaction(codeRef, (current) => {
+    if (!current) return; // code doesn't exist — abort
+    if (Date.now() > current.expiresAt) return; // expired — abort
+    if (current.joinedDeviceId) return; // already claimed — abort
+    if (current.creatorDeviceId === deviceId) return; // same device — abort
+    txData = current;
+    return { ...current, joinedDeviceId: deviceId };
+  });
+
+  if (!committed || !txData) {
+    // Determine specific error
+    const snap = await mod.get(codeRef);
+    if (!snap.exists()) throw new Error("invalid");
+    const d = snap.val();
+    if (Date.now() > d.expiresAt) throw new Error("expired");
+    if (d.joinedDeviceId) throw new Error("already_used");
+    if (d.creatorDeviceId === deviceId) throw new Error("same_device");
+    throw new Error("invalid");
+  }
 
   // Backup current profiles before linking
   if (!getClusterId()) _setLS("tempus_prelink_profiles", _getLS(SK) || "[]");
 
-  // Write self as joined
-  await mod.update(mod.ref(db, `link_codes/${code}`), { joinedDeviceId: deviceId });
-
   // Add self to cluster in Firestore
-  const clusterId = data.clusterId;
+  const clusterId = txData.clusterId;
   const fsDb = await fbInit(); if (!fsDb) throw new Error("Firestore not available");
   const fs = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
   const deviceName = getDeviceName();
@@ -517,8 +546,10 @@ async function joinWithLinkCode(code) {
   const localProfiles = ldP();
   const mergedProfiles = mergeProfiles(clusterData.profiles || [], localProfiles);
 
+  const myAuthUid = getAuthUid();
   await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
-    [`devices.${deviceId}`]: { name: deviceName, linkedAt: Date.now(), lastSeen: Date.now() },
+    [`devices.${deviceId}`]: { name: deviceName, authUid: myAuthUid, linkedAt: Date.now(), lastSeen: Date.now() },
+    authUids: fs.arrayUnion(myAuthUid),
     profiles: mergedProfiles,
     updatedAt: Date.now()
   });
@@ -578,10 +609,15 @@ async function unlinkDevice(deviceIdToRemove, keepProfiles) {
   const clusterData = clusterSnap.data();
 
   // Remove device from cluster
-  await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
+  const removedDeviceAuthUid = clusterData.devices?.[deviceIdToRemove]?.authUid;
+  const updatePayload = {
     [`devices.${deviceIdToRemove}`]: fs.deleteField(),
     updatedAt: Date.now()
-  });
+  };
+  if (removedDeviceAuthUid) {
+    updatePayload.authUids = fs.arrayRemove(removedDeviceAuthUid);
+  }
+  await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), updatePayload);
 
   if (isSelf) {
     if (keepProfiles) {
@@ -654,10 +690,13 @@ export async function unlinkDeviceForSync() {
     if (clusterProfiles.length > 0) svP(clusterProfiles);
 
     // Remove this device from cluster
-    await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), {
+    const myAuthUid = clusterData.devices?.[myDeviceId]?.authUid;
+    const unlinkUpdate = {
       [`devices.${myDeviceId}`]: fs.deleteField(),
       updatedAt: Date.now()
-    });
+    };
+    if (myAuthUid) unlinkUpdate.authUids = fs.arrayRemove(myAuthUid);
+    await fs.updateDoc(fs.doc(fsDb, "tempus_clusters", clusterId), unlinkUpdate);
     setClusterId(null);
     try { localStorage.removeItem("tempus_prelink_profiles"); } catch {}
 
