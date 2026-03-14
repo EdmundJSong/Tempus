@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { fbInit, getDeviceId, C, I, buildTL, nI, SyncIcon, t, tp } from "./App";
+import { fbInit, getDeviceId, C, I, buildTL, nI, SyncIcon, t, tp, getClusterId, unlinkDeviceForSync } from "./App";
 
 // ============ SYNC CONSTANTS ============
 const SYNC_COLOR = "#06b6d4";
@@ -528,6 +528,8 @@ export function SyncLobby({ sync, onLoadSections }) {
   const [error, setError] = useState(null);
   const [confirmKickId, setConfirmKickId] = useState(null);
   const [confirmKickAll, setConfirmKickAll] = useState(false);
+  const [unlinkAction, setUnlinkAction] = useState(null); // null | "create" | "join"
+  const [unlinking, setUnlinking] = useState(false);
   const kt = useRef(null); const kat = useRef(null);
   const [presence, setPresence] = useState({});
 
@@ -600,13 +602,46 @@ export function SyncLobby({ sync, onLoadSections }) {
   const bo = (c = C.textMuted) => ({ width: "100%", padding: "10px", borderRadius: 8, border: `1px solid ${c}55`, background: "transparent", color: c, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" });
   const closeBtn = { background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" };
 
+  const handleEntryCreate = () => {
+    if (getClusterId()) { setUnlinkAction("create"); return; }
+    setView("create");
+  };
+  const handleEntryJoin = () => {
+    if (getClusterId()) { setUnlinkAction("join"); return; }
+    setView("join");
+  };
+  const handleConfirmUnlink = async () => {
+    setUnlinking(true);
+    try { await unlinkDeviceForSync(); } catch {}
+    setUnlinking(false);
+    const target = unlinkAction;
+    setUnlinkAction(null);
+    setView(target);
+  };
+
+  // UNLINK CONFIRMATION
+  if (view === "entry" && unlinkAction) return (
+    <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.mode")}</div><button className="close-btn" onClick={() => { setUnlinkAction(null); }} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={{ textAlign: "center", padding: "16px 0 20px" }}>
+        <div style={{ fontSize: 13, color: C.text, fontFamily: "'Outfit',sans-serif", lineHeight: 1.5 }}>
+          {unlinkAction === "create" ? t("link.unlinkForSyncHost") : t("link.unlinkForSync")}
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <button onClick={handleConfirmUnlink} disabled={unlinking} style={{ ...bp, opacity: unlinking ? 0.6 : 1 }}>{unlinking ? "..." : t("link.confirmUnlink")}</button>
+        <button onClick={() => setUnlinkAction(null)} style={bo(C.textMuted)}>{t("link.cancelUnlink")}</button>
+      </div>
+    </div></div>
+  );
+
   // ENTRY
   if (view === "entry") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
       <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.mode")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <button onClick={() => setView("create")} style={bp}>{t("sync.createRoom")}</button>
-        <button onClick={() => setView("join")} style={bo(SYNC_COLOR)}>{t("sync.joinRoom")}</button>
+        <button onClick={handleEntryCreate} style={bp}>{t("sync.createRoom")}</button>
+        <button onClick={handleEntryJoin} style={bo(SYNC_COLOR)}>{t("sync.joinRoom")}</button>
       </div>
       <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>{t("sync.upTo")} {MAX_MEMBERS} {t("sync.maxDevices")}</div>
     </div></div>
