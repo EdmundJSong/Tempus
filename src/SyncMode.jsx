@@ -121,7 +121,7 @@ async function heartbeat(code) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
   const deviceId = getDeviceId();
   try {
-    await fs.setDoc(fs.doc(db, "tempus_rooms", code, "presence", deviceId), { lastSeen: Date.now() }, { merge: true });
+    await fs.setDoc(fs.doc(db, "tempus_rooms", code, "presence", deviceId), { lastSeen: Date.now(), authUid: getAuthUid() }, { merge: true });
   } catch {}
 }
 
@@ -163,7 +163,7 @@ async function calibrateClock() {
     const samples = [];
     for (let p = 0; p < PINGS; p++) {
       const localBefore = Date.now();
-      await fs.setDoc(calRef, { t: fs.serverTimestamp() });
+      await fs.setDoc(calRef, { t: fs.serverTimestamp(), authUid: getAuthUid() });
       const localAfter = Date.now();
       const snap = await fs.getDoc(calRef);
       const serverMs = snap.data()?.t?.toMillis?.();
@@ -195,7 +195,7 @@ async function recalibrateSingle() {
     const deviceId = getDeviceId();
     const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
     const localBefore = Date.now();
-    await fs.setDoc(calRef, { t: fs.serverTimestamp() });
+    await fs.setDoc(calRef, { t: fs.serverTimestamp(), authUid: getAuthUid() });
     const localAfter = Date.now();
     const snap = await fs.getDoc(calRef);
     const serverMs = snap.data()?.t?.toMillis?.();
