@@ -62,12 +62,12 @@ service cloud.firestore {
                         || !('hostAuthUid' in resource.data));
 
       // ── presence subcollection ──────────────────────────────────
-      // Note: ideally scoped per-member, but presence docs are keyed by
-      // deviceId (not auth UID) so we can only enforce auth-required.
+      // Note: Presence docs are keyed by deviceId, but the client writes its
+      // authUid into the doc payload to ensure strict ownership.
       match /presence/{memberId} {
         allow read:   if isAuth();
-        allow write:  if isAuth();
-        allow delete: if isAuth();
+        allow create, update: if isAuth() && request.resource.data.authUid == uid();
+        allow delete: if isAuth() && resource.data.authUid == uid();
       }
     }
 
@@ -92,7 +92,8 @@ service cloud.firestore {
     // ── tempus_clock_cal ─────────────────────────────────────────────
     // Each device writes its own calibration doc (keyed by deviceId)
     match /tempus_clock_cal/{deviceId} {
-      allow read, write, delete: if isAuth();
+      allow read, delete: if isAuth() && resource.data.authUid == uid();
+      allow create, update: if isAuth() && request.resource.data.authUid == uid();
     }
 
     // ── Deny everything else ─────────────────────────────────────────
