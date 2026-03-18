@@ -766,10 +766,10 @@ function NoteSVG({ type, dotted, size = 24 }) {
   const op = type === "w" || type === "h", hs = type !== "w", uf = type === "e", bm = type === "16" ? 2 : type === "32" ? 3 : 0;
   const np = `M${hX - 4.5},${hY + 1} C${hX - 4.5},${hY + 3.5} ${hX - 1},${hY + 4} ${hX + 1.5},${hY + 2.5} C${hX + 4},${hY + 1} ${hX + 4.5},${hY - 1.5} ${hX + 4.5},${hY - 3.5} C${hX + 4.5},${hY - 6} ${hX + 1},${hY - 6.5} ${hX - 1.5},${hY - 5} C${hX - 4},${hY - 3.5} ${hX - 4.5},${hY - 1} ${hX - 4.5},${hY + 1} Z`;
   return (<svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} style={{ display: "block" }} aria-hidden="true">
-    {op ? <path d={np} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" transform={`rotate(-15,${hX},${hY})`} /> : <path d={np} fill="currentColor" stroke="currentColor" strokeWidth={0.5} strokeLinejoin="round" strokeLinecap="round" transform={`rotate(-15,${hX},${hY})`} />}
+    {op ? <path d={np} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" transform={`rotate(-15,${hX},${hY})`} /> : <path d={np} fill="currentColor" stroke="currentColor" strokeWidth={0.8} strokeLinejoin="round" strokeLinecap="round" transform={`rotate(-15,${hX},${hY})`} />}
     {hs && <line x1={sX} y1={hY} x2={sX} y2={sT} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />}
     {uf && <path d={`M${sX},${sT} C${sX + 4},${sT + 2} ${sX + 7},${sT + 8} ${sX + 5},${sT + 14} C${sX + 5},${sT + 12} ${sX + 3},${sT + 8} ${sX},${sT + 6}`} fill="currentColor" />}
-    {bm > 0 && Array.from({ length: bm }).map((_, i) => <line key={i} x1={sX} y1={sT + i * 4} x2={sX + 8} y2={sT + i * 4 + 2} stroke="currentColor" strokeWidth={2} strokeLinecap="round" />)}
+    {bm > 0 && Array.from({ length: bm }).map((_, i) => <line key={i} x1={sX} y1={sT + i * 4} x2={sX + 8} y2={sT + i * 4 + 2} stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" />)}
     {dotted && <circle cx={hX + 8.5} cy={hY} r={1.5} fill="currentColor" />}
   </svg>);
 }
@@ -1214,7 +1214,7 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
         <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "min(260px, 45vh)", height: "min(260px, 45vh)" }}>
           <svg width="100%" height="100%" viewBox="0 0 280 280" style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)", pointerEvents: "none" }}>
             <circle cx={140} cy={140} r={cR} fill="none" stroke={C.border} strokeWidth={8} />
-            <circle cx={140} cy={140} r={cR} fill="none" stroke={borderColor || C.downbeat} strokeWidth={8} strokeDasharray={cC} strokeDashoffset={sDo} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.1s linear" }} />
+            <circle cx={140} cy={140} r={cR} fill="none" stroke={borderColor || C.downbeat} strokeWidth={8} strokeDasharray={cC} strokeDashoffset={sDo} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.1s linear", willChange: "stroke-dashoffset" }} />
           </svg>
           <div style={{ fontSize: 20, color: C.textMuted, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, position: "relative", zIndex: 1, marginBottom: 8 }}>
             {isEnded ? "" : isCI ? <><span style={{ fontSize: 14 }}>{t("play.countIn")}</span><span style={{ fontSize: 14, color: C.downbeat, fontWeight: 600 }}>{t("play.bar")} {ab}</span></> : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} {t("play.free")}</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
@@ -1235,8 +1235,8 @@ function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, o
           </>}
         </div>
         <div style={{ height: 24, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
-          {showD && !isT && !isCI && !isEnded && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)", border: on ? `2px solid ${c}` : "2px solid transparent", transform: on ? "scale(1.1)" : "scale(1)", boxShadow: on ? `0 0 10px ${c}66` : "none" }} />; })}</div>}
-          {showD && isT && !isEnded && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent", transform: on ? "scale(1.1)" : "scale(1)", boxShadow: on ? `0 0 10px ${C.downbeat}66` : "none" }} />; })}</div>}
+          {showD && !isT && !isCI && !isEnded && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} className={`beat-dot ${on ? "active" : ""}`} style={{ width: on ? 16 : 10, height: on ? 16 : 10, background: on ? c : `${c}55`, border: on ? `2px solid ${c}` : "2px solid transparent" }}><div className="beat-glow" style={{ boxShadow: `0 0 10px ${c}66` }} /></div>; })}</div>}
+          {showD && isT && !isEnded && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} className={`beat-dot ${on ? "active" : ""}`} style={{ width: on ? 16 : 10, height: on ? 16 : 10, background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, border: on ? `2px solid ${C.downbeat}` : "2px solid transparent" }}><div className="beat-glow" style={{ boxShadow: `0 0 10px ${C.downbeat}66` }} /></div>; })}</div>}
         </div>
         {/* Record hint - reserved height */}
         <div style={{ height: 20, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
@@ -2588,7 +2588,9 @@ export default function Tempus() {
   }, [ps]));
 
   return (
-    <div className={sync.syncGlowPulse ? "sync-glow-pulse" : ""} style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : getClusterId() ? `inset 0 0 0 2px ${C.accent}44, inset 0 0 20px ${C.accent}11` : undefined, transition: sync.syncGlowPulse ? undefined : "box-shadow 0.4s ease" }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative" }}>
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0, transition: "opacity 0.4s ease", opacity: sync.isInRoom || getClusterId() ? 1 : 0, boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : getClusterId() ? `inset 0 0 0 2px ${C.accent}44, inset 0 0 20px ${C.accent}11` : undefined }} />
+      <div className={sync.syncGlowPulse ? "sync-glow-opacity-pulse" : ""} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 0, opacity: 0, boxShadow: sync.isInRoom ? `inset 0 0 0 4px ${sync.SYNC_COLOR}e6, inset 0 0 60px ${sync.SYNC_COLOR}55` : undefined }} />
       <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${sync.isInRoom ? sync.SYNC_COLOR + '15' : mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet" />
       <style>{`
@@ -2603,7 +2605,7 @@ export default function Tempus() {
         .sec-card:hover { transform: translateY(-2px) scale(1.005); box-shadow: 0 12px 30px rgba(0,0,0,0.5); border-color: ${C.textMuted}66; background: ${C.surfaceHover} !important; }
         .sec-card:hover::before { opacity: 1; }
         .sec-card:active { transform: translateY(0) scale(0.995); }
-        .glass-pill { background: rgba(20, 20, 28, 0.8); border-radius: 40px; border: 1px solid rgba(255,255,255,0.08); padding: 8px 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        .glass-pill { background: rgba(20, 20, 28, 0.85); border-radius: 40px; border: 1px solid rgba(255,255,255,0.08); padding: 8px 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
         .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
         .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
         .pump { transform: scale(1.05); }
@@ -2625,15 +2627,19 @@ export default function Tempus() {
 
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
-        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.7) !important; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
-        .modal-content { animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(19, 19, 26, 0.85) !important; border: 1px solid rgba(255,255,255,0.1) !important; border-top: 1px solid rgba(255,255,255,0.2) !important; box-shadow: 0 -20px 50px rgba(139, 124, 246, 0.1), 0 -10px 40px rgba(0,0,0,0.7); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); }
+        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.85) !important; backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); will-change: opacity; }
+        .modal-content { animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(19, 19, 26, 0.92) !important; border: 1px solid rgba(255,255,255,0.1) !important; border-top: 1px solid rgba(255,255,255,0.2) !important; box-shadow: 0 -20px 50px rgba(139, 124, 246, 0.1), 0 -10px 40px rgba(0,0,0,0.7); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); will-change: transform, opacity; }
         .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
         @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-        .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; will-change: transform, opacity; }
         @keyframes syncPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
-        .sync-pulse { animation: syncPulse 1.5s ease-in-out infinite; }
-        @keyframes syncGlowBright { 0% { box-shadow: inset 0 0 0 3px rgba(6,182,212,0.4), inset 0 0 30px rgba(6,182,212,0.13); } 50% { box-shadow: inset 0 0 0 4px rgba(6,182,212,0.9), inset 0 0 60px rgba(6,182,212,0.35); } 100% { box-shadow: inset 0 0 0 3px rgba(6,182,212,0.4), inset 0 0 30px rgba(6,182,212,0.13); } }
-        .sync-glow-pulse { animation: syncGlowBright 1.2s ease-in-out; }
+        .sync-pulse { animation: syncPulse 1.5s ease-in-out infinite; will-change: transform, opacity; }
+        @keyframes syncGlowOp { 0% { opacity: 0; } 50% { opacity: 1; } 100% { opacity: 0; } }
+        .sync-glow-opacity-pulse { animation: syncGlowOp 1.2s ease-in-out; will-change: opacity; }
+        .beat-dot { border-radius: 50%; transition: width 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), height 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.1s, border-color 0.1s, transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1); position: relative; }
+        .beat-dot.active { transform: scale(1.1); }
+        .beat-glow { position: absolute; inset: 0; border-radius: 50%; opacity: 0; transition: opacity 0.1s cubic-bezier(0.34, 1.56, 0.64, 1); pointer-events: none; }
+        .beat-dot.active .beat-glow { opacity: 1; }
       `}</style>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
