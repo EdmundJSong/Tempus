@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { fbInit, getDeviceId, getAuthUid, C, I, buildTL, nI, SyncIcon, t, tp, getClusterId, unlinkDeviceForSync } from "./App";
+import { fbInit, getDeviceId, C, buildTL } from "./utils";
+import { I, nI, SyncIcon } from "./components";
 
 // ============ SYNC CONSTANTS ============
 const SYNC_COLOR = "#06b6d4";
@@ -15,14 +16,7 @@ async function getFS() {
   return _fsModule;
 }
 
-// 6-char alphanumeric code, excludes ambiguous chars: 0/O, 1/I/L
-const ROOM_CODE_CHARS = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-const ROOM_CODE_LEN = 6;
-function genRoomCode() {
-  let code = "";
-  for (let i = 0; i < ROOM_CODE_LEN; i++) code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
-  return code;
-}
+function genRoomCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
 
 async function createRoom(sections, settings, _retries = 0) {
   if (_retries >= 10) throw new Error("Could not generate a unique room code");
@@ -39,13 +33,12 @@ async function createRoom(sections, settings, _retries = 0) {
       return createRoom(sections, settings, _retries + 1);
     }
   }
-  const authUid = getAuthUid();
   await fs.setDoc(fs.doc(db, "tempus_rooms", code), {
-    code, hostId: deviceId, hostAuthUid: authUid, hostName: "", status: "lobby",
+    code, hostId: deviceId, hostName: "", status: "lobby",
     sections: JSON.parse(JSON.stringify(sections)),
     commandSeq: 0, command: null, startAtMs: null,
     resumeFromBar: 1, countInBars: settings.countIn || 1,
-    members: { [deviceId]: { name: "", authUid: authUid, joinedAt: Date.now(), lastSeen: Date.now() } },
+    members: { [deviceId]: { name: "", joinedAt: Date.now(), lastSeen: Date.now() } },
     pending: {}, kicked: [], createdAt: Date.now()
   });
   return code;
@@ -62,10 +55,10 @@ async function joinRoomPending(code, displayName) {
   if (data.kicked?.includes(deviceId)) throw new Error("You were removed from this room");
   if (Object.keys(data.members || {}).length + Object.keys(data.pending || {}).length >= MAX_MEMBERS) throw new Error("Room is full");
   if (data.members?.[deviceId]) {
-    await fs.updateDoc(ref, { [`members.${deviceId}.name`]: displayName, [`members.${deviceId}.lastSeen`]: Date.now(), [`members.${deviceId}.authUid`]: getAuthUid() });
+    await fs.updateDoc(ref, { [`members.${deviceId}.name`]: displayName, [`members.${deviceId}.lastSeen`]: Date.now() });
     return { admitted: true };
   }
-  await fs.updateDoc(ref, { [`pending.${deviceId}`]: { name: displayName, authUid: getAuthUid(), requestedAt: Date.now() } });
+  await fs.updateDoc(ref, { [`pending.${deviceId}`]: { name: displayName, requestedAt: Date.now() } });
   return { admitted: false };
 }
 
@@ -73,7 +66,7 @@ async function admitMember(code, memberId) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
   const snap = await fs.getDoc(fs.doc(db, "tempus_rooms", code)); if (!snap.exists()) return;
   const p = snap.data().pending?.[memberId]; if (!p) return;
-  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${memberId}`]: { name: p.name, authUid: p.authUid || null, joinedAt: Date.now(), lastSeen: Date.now() }, [`pending.${memberId}`]: fs.deleteField() });
+  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${memberId}`]: { name: p.name, joinedAt: Date.now(), lastSeen: Date.now() }, [`pending.${memberId}`]: fs.deleteField() });
 }
 
 async function admitAll(code) {
@@ -81,7 +74,7 @@ async function admitAll(code) {
   const snap = await fs.getDoc(fs.doc(db, "tempus_rooms", code)); if (!snap.exists()) return;
   const updates = {};
   for (const [id, info] of Object.entries(snap.data().pending || {})) {
-    updates[`members.${id}`] = { name: info.name, authUid: info.authUid || null, joinedAt: Date.now(), lastSeen: Date.now() };
+    updates[`members.${id}`] = { name: info.name, joinedAt: Date.now(), lastSeen: Date.now() };
     updates[`pending.${id}`] = fs.deleteField();
   }
   if (Object.keys(updates).length > 0) await fs.updateDoc(fs.doc(db, "tempus_rooms", code), updates);
@@ -121,7 +114,7 @@ async function heartbeat(code) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
   const deviceId = getDeviceId();
   try {
-    await fs.setDoc(fs.doc(db, "tempus_rooms", code, "presence", deviceId), { lastSeen: Date.now(), authUid: getAuthUid() }, { merge: true });
+    await fs.setDoc(fs.doc(db, "tempus_rooms", code, "presence", deviceId), { lastSeen: Date.now() }, { merge: true });
   } catch {}
 }
 
@@ -163,7 +156,7 @@ async function calibrateClock() {
     const samples = [];
     for (let p = 0; p < PINGS; p++) {
       const localBefore = Date.now();
-      await fs.setDoc(calRef, { t: fs.serverTimestamp(), authUid: getAuthUid() });
+      await fs.setDoc(calRef, { t: fs.serverTimestamp() });
       const localAfter = Date.now();
       const snap = await fs.getDoc(calRef);
       const serverMs = snap.data()?.t?.toMillis?.();
@@ -195,7 +188,7 @@ async function recalibrateSingle() {
     const deviceId = getDeviceId();
     const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
     const localBefore = Date.now();
-    await fs.setDoc(calRef, { t: fs.serverTimestamp(), authUid: getAuthUid() });
+    await fs.setDoc(calRef, { t: fs.serverTimestamp() });
     const localAfter = Date.now();
     const snap = await fs.getDoc(calRef);
     const serverMs = snap.data()?.t?.toMillis?.();
@@ -278,13 +271,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     unsubRef.current = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
       if (!snap.exists()) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
-        if (originalSections.current) showToast(t("sync.roomClosed"));
+        if (originalSections.current) showToast("Room closed by host");
         return;
       }
       const d = snap.data(); const myId = getDeviceId();
       if (d.kicked?.includes(myId)) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
-        showToast(t("sync.removed")); return;
+        showToast("You were removed by the host"); return;
       }
       // On first snapshot, initialize lastCmdSeq and mark connection as ready
       if (firstSnapshot) {
@@ -457,7 +450,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (!roomCode || !isHost) return;
     // Host stops locally immediately
     exitPlayRef.current();
-    showToast(t("sync.resetAll"));
+    showToast("Sync reset — all devices reloaded");
     // Write to Firestore for members
     updateRoomSections(roomCode, sectionsRef.current);
     sendCommand(roomCode, "sync-reset");
@@ -508,18 +501,18 @@ export function SyncStatusBar({ sync, onOpenLobby }) {
     <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", borderTop: `1px solid ${SYNC_COLOR}33`, borderBottom: `1px solid ${SYNC_COLOR}33`, background: SYNC_COLOR + "08" }}>
       <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: SYNC_COLOR, fontWeight: 600, background: SYNC_COLOR + "18", padding: "2px 8px", borderRadius: 4, letterSpacing: 1 }}>{syncState?.code}</span>
       <div style={{ display: "flex", gap: 3, alignItems: "center" }}>
-        {Object.keys(members).map(id => <div key={id} style={{ width: 6, height: 6, borderRadius: "50%", background: SYNC_COLOR }} />)}
+        {Object.keys(members).map(id => <div key={id} style={{ width: 6, height: 6, borderRadius: "50%", background: SYNC_COLOR, boxShadow: `0 0 4px ${SYNC_COLOR}` }} />)}
         {pendingCount > 0 && <span style={{ fontSize: 10, color: "#f59e0b", fontFamily: "'DM Mono',monospace", marginLeft: 2 }}>+{pendingCount}</span>}
       </div>
       <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{memberCount}</span>
       <div style={{ flex: 1 }} />
 
-      {isHost && <button onClick={handleSyncReset} style={sb(confirmReset ? "#000" : SYNC_COLOR, confirmReset ? SYNC_COLOR : SYNC_COLOR + "15", SYNC_COLOR + (confirmReset ? "" : "55"))}>{confirmReset ? t("sync.confirmQ") : t("sync.syncReset")}</button>}
-      {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>{t("sync.stop")}</button>}
-      {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>{t("sync.resume")}</button>}
-      {isHost && status === "paused" && <button onClick={doRestart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>{t("sync.restart")}</button>}
-      {isHost && (pendingCount > 0 || memberCount > 1) && <button onClick={onOpenLobby} style={sb(SYNC_COLOR, "transparent", SYNC_COLOR + "55")}>{pendingCount > 0 ? `${pendingCount} ${t("sync.pending").toLowerCase()}` : t("sync.manage")}</button>}
-      <button onClick={handleLeave} style={sb(confirmLeave ? C.danger : C.textMuted, confirmLeave ? C.danger + "15" : "transparent", confirmLeave ? C.danger + "55" : C.border)}>{confirmLeave ? t("sync.leaveQ") : I.x(12)}</button>
+      {isHost && <button onClick={handleSyncReset} style={sb(confirmReset ? "#000" : SYNC_COLOR, confirmReset ? SYNC_COLOR : SYNC_COLOR + "15", SYNC_COLOR + (confirmReset ? "" : "55"))}>{confirmReset ? "Confirm?" : "Sync Reset"}</button>}
+      {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>Stop</button>}
+      {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>Resume</button>}
+      {isHost && status === "paused" && <button onClick={doRestart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>Restart</button>}
+      {isHost && (pendingCount > 0 || memberCount > 1) && <button onClick={onOpenLobby} style={sb(SYNC_COLOR, "transparent", SYNC_COLOR + "55")}>{pendingCount > 0 ? `${pendingCount} pending` : "Manage"}</button>}
+      <button onClick={handleLeave} style={sb(confirmLeave ? C.danger : C.textMuted, confirmLeave ? C.danger + "15" : "transparent", confirmLeave ? C.danger + "55" : C.border)}>{confirmLeave ? "Leave?" : I.x(12)}</button>
     </div>
   );
 }
@@ -536,8 +529,6 @@ export function SyncLobby({ sync, onLoadSections }) {
   const [error, setError] = useState(null);
   const [confirmKickId, setConfirmKickId] = useState(null);
   const [confirmKickAll, setConfirmKickAll] = useState(false);
-  const [unlinkAction, setUnlinkAction] = useState(null); // null | "create" | "join"
-  const [unlinking, setUnlinking] = useState(false);
   const kt = useRef(null); const kat = useRef(null);
   const [presence, setPresence] = useState({});
 
@@ -555,18 +546,18 @@ export function SyncLobby({ sync, onLoadSections }) {
   }, [view, syncState?.code]);
 
   const handleCreate = async () => {
-    if (!name.trim()) { setError(t("sync.enterName")); return; }
+    if (!name.trim()) { setError("Enter your display name"); return; }
     setLoading(true); setError(null);
     const c = await doCreateRoom(name.trim()); setLoading(false);
     if (c) { setView("room"); setTimeout(() => setShowLobby(false), 500); }
   };
 
   const handleJoin = async () => {
-    if (!name.trim()) { setError(t("sync.enterName")); return; }
-    if (code.length !== ROOM_CODE_LEN) { setError(t("sync.enter4Digit")); return; }
+    if (!name.trim()) { setError("Enter your display name"); return; }
+    if (code.length !== 4) { setError("Enter a 4-digit room code"); return; }
     setLoading(true); setError(null);
     const ok = await doJoinRoom(code, name.trim()); setLoading(false);
-    if (ok) setView("room"); else setError(t("sync.couldNotJoin"));
+    if (ok) setView("room"); else setError("Could not join room");
   };
 
   const handleLeave = async () => {
@@ -610,149 +601,116 @@ export function SyncLobby({ sync, onLoadSections }) {
   const bo = (c = C.textMuted) => ({ width: "100%", padding: "10px", borderRadius: 8, border: `1px solid ${c}55`, background: "transparent", color: c, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" });
   const closeBtn = { background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" };
 
-  const handleEntryCreate = () => {
-    if (getClusterId()) { setUnlinkAction("create"); return; }
-    setView("create");
-  };
-  const handleEntryJoin = () => {
-    if (getClusterId()) { setUnlinkAction("join"); return; }
-    setView("join");
-  };
-  const handleConfirmUnlink = async () => {
-    setUnlinking(true);
-    try { await unlinkDeviceForSync(); } catch {}
-    setUnlinking(false);
-    const target = unlinkAction;
-    setUnlinkAction(null);
-    setView(target);
-  };
-
-  // UNLINK CONFIRMATION
-  if (view === "entry" && unlinkAction) return (
-    <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.mode")}</div><button className="close-btn" onClick={() => { setUnlinkAction(null); }} style={closeBtn}>{I.x(18)}</button></div>
-      <div style={{ textAlign: "center", padding: "16px 0 20px" }}>
-        <div style={{ fontSize: 13, color: C.text, fontFamily: "'Outfit',sans-serif", lineHeight: 1.5 }}>
-          {unlinkAction === "create" ? t("link.unlinkForSyncHost") : t("link.unlinkForSync")}
-        </div>
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <button onClick={handleConfirmUnlink} disabled={unlinking} style={{ ...bp, opacity: unlinking ? 0.6 : 1 }}>{unlinking ? "..." : t("link.confirmUnlink")}</button>
-        <button onClick={() => setUnlinkAction(null)} style={bo(C.textMuted)}>{t("link.cancelUnlink")}</button>
-      </div>
-    </div></div>
-  );
-
   // ENTRY
   if (view === "entry") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.mode")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <button onClick={handleEntryCreate} style={bp}>{t("sync.createRoom")}</button>
-        <button onClick={handleEntryJoin} style={bo(SYNC_COLOR)}>{t("sync.joinRoom")}</button>
+        <button onClick={() => setView("create")} style={bp}>Create Room</button>
+        <button onClick={() => setView("join")} style={bo(SYNC_COLOR)}>Join Room</button>
       </div>
-      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>{t("sync.upTo")} {MAX_MEMBERS} {t("sync.maxDevices")}</div>
+      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>Up to {MAX_MEMBERS} devices can sync together.</div>
     </div></div>
   );
 
   // CREATE
   if (view === "create") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.createRoom")}</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder={t("sync.displayName")} autoFocus style={inp} onKeyDown={e => { if (e.key === "Enter") handleCreate(); }} />
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Create Room</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name" autoFocus style={inp} onKeyDown={e => { if (e.key === "Enter") handleCreate(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
-      <button onClick={handleCreate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? t("sync.creating") : t("sync.createRoom")}</button>
+      <button onClick={handleCreate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "Creating..." : "Create Room"}</button>
     </div></div>
   );
 
   // JOIN
   if (view === "join") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.joinRoom")}</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder={t("sync.displayName")} autoFocus style={inp} />
-      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 6 }}>{t("sync.roomCode")}</div>
-      <input value={code} onChange={e => setCode(e.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, ROOM_CODE_LEN))} placeholder="ABC123" style={{ ...inp, letterSpacing: code ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Join Room</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name" autoFocus style={inp} />
+      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 6 }}>Room code</div>
+      <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="0000" inputMode="numeric" style={{ ...inp, letterSpacing: code ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
-      <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? t("sync.joining") : t("sync.joinRoom")}</button>
+      <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "Joining..." : "Join Room"}</button>
     </div></div>
   );
 
   // WAITING ROOM (member pending)
   if (!isHost && syncState?.isPending) return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.waitingRoom")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Waiting Room</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ textAlign: "center", padding: "32px 0" }}>
-        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("sync.waitingForHost")}</div>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{t("sync.room")} {syncState.code}</div>
-        <div style={{ marginTop: 8 }}><div style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, margin: "0 auto", opacity: 0.8 }} /></div>
+        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Waiting for the host to let you in...</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>Room {syncState.code}</div>
+        <div style={{ marginTop: 8 }}><div className="sync-pulse" style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, margin: "0 auto" }} /></div>
       </div>
-      <button onClick={handleLeave} style={bo(C.textMuted)}>{t("sync.leave")}</button>
+      <button onClick={handleLeave} style={bo(C.textMuted)}>Leave</button>
     </div></div>
   );
 
   // LATE JOIN during performance
   if (!isHost && syncState?.isAdmitted && syncState?.status === "playing") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.mode")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ textAlign: "center", padding: "32px 0" }}>
-        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("sync.performanceInProgress")}</div>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("sync.waitingForNext")}</div>
+        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Performance in progress</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>Waiting for next start...</div>
         <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 16 }}>
           {Object.keys(members).map(id => <div key={id} style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR }} />)}
         </div>
       </div>
-      <button onClick={handleLeave} style={bo(C.textMuted)}>{t("sync.leaveRoom")}</button>
+      <button onClick={handleLeave} style={bo(C.textMuted)}>Leave Room</button>
     </div></div>
   );
 
   // ROOM MANAGEMENT (host: manage members; anyone: view room)
   return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync.room")} {syncState?.code}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Room {syncState?.code}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 28, color: SYNC_COLOR, letterSpacing: 6, fontWeight: 700 }}>{syncState?.code}</div>
         <button onClick={() => navigator.clipboard?.writeText(syncState?.code || "")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: 6, display: "flex" }}>{I.copy(14)}</button>
       </div>
-      <div style={{ textAlign: "center", fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace", marginBottom: 16 }}>{memberCount}/{MAX_MEMBERS} {tp("unit.member", memberCount)}</div>
+      <div style={{ textAlign: "center", fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace", marginBottom: 16 }}>{memberCount}/{MAX_MEMBERS} members</div>
 
       {/* Pending (host) */}
       {isHost && pendingList.length > 0 && <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>{t("sync.pending")} ({pendingList.length})</span>
-          {pendingList.length > 1 && <button onClick={() => doAdmitAll()} style={{ background: "none", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "3px 8px", fontFamily: "'Outfit',sans-serif" }}>{t("sync.admitAll")}</button>}
+          <span>Pending ({pendingList.length})</span>
+          {pendingList.length > 1 && <button onClick={() => doAdmitAll()} style={{ background: "none", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "3px 8px", fontFamily: "'Outfit',sans-serif" }}>Admit All</button>}
         </div>
         {pendingList.map(([id, info]) => (
           <div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
-            <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || t("sync.unknown")}</div>
-            <button onClick={() => doAdmit(id)} style={{ background: SYNC_COLOR + "22", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "4px 10px", fontFamily: "'Outfit',sans-serif" }}>{t("sync.admit")}</button>
-            <button onClick={() => handleKick(id)} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'Outfit',sans-serif", opacity: 0.7 }}>{t("sync.decline")}</button>
+            <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "Unknown"}</div>
+            <button onClick={() => doAdmit(id)} style={{ background: SYNC_COLOR + "22", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "4px 10px", fontFamily: "'Outfit',sans-serif" }}>Admit</button>
+            <button onClick={() => handleKick(id)} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'Outfit',sans-serif", opacity: 0.7 }}>Decline</button>
           </div>
         ))}
       </div>}
 
       {/* Members */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("sync.members")}</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Members</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, flexShrink: 0 }} />
-          <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || t("sync.host")}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>{t("sync.host")}</span></div>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, flexShrink: 0, boxShadow: `0 0 6px ${SYNC_COLOR}` }} />
+          <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || "Host"}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>HOST</span></div>
         </div>
         {memberList.map(([id, info]) => {
           const pres = presence[id];
           const stale = pres?.lastSeen ? (Date.now() - pres.lastSeen) > STALE_MS : false;
           return (<div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: stale ? C.textMuted : SYNC_COLOR, flexShrink: 0 }} />
-            <div style={{ flex: 1, fontSize: 13, color: stale ? C.textMuted : C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || t("sync.unknown")}</div>
-            {isHost && <button onClick={() => handleKick(id)} style={{ background: confirmKickId === id ? C.danger + "22" : "none", border: `1px solid ${confirmKickId === id ? C.danger : C.border}`, borderRadius: 6, color: confirmKickId === id ? C.danger : C.textMuted, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'DM Mono',monospace", transition: "all 0.15s" }}>{confirmKickId === id ? t("sync.kickQ") : I.x(12)}</button>}
+            <div style={{ width: 8, height: 8, borderRadius: "50%", background: stale ? C.textMuted : SYNC_COLOR, flexShrink: 0, boxShadow: stale ? "none" : `0 0 6px ${SYNC_COLOR}` }} />
+            <div style={{ flex: 1, fontSize: 13, color: stale ? C.textMuted : C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "Unknown"}</div>
+            {isHost && <button onClick={() => handleKick(id)} style={{ background: confirmKickId === id ? C.danger + "22" : "none", border: `1px solid ${confirmKickId === id ? C.danger : C.border}`, borderRadius: 6, color: confirmKickId === id ? C.danger : C.textMuted, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'DM Mono',monospace", transition: "all 0.15s" }}>{confirmKickId === id ? "Kick?" : I.x(12)}</button>}
           </div>);
         })}
       </div>
 
-      {isHost && memberList.length > 0 && <button onClick={handleKickAll} style={{ ...bo(confirmKickAll ? C.danger : C.textMuted), borderColor: confirmKickAll ? C.danger + "88" : C.border, color: confirmKickAll ? C.danger : C.textMuted, fontSize: 12, marginBottom: 8 }}>{confirmKickAll ? t("sync.removeAllConfirm") : t("sync.removeAll")}</button>}
-      {!isHost && syncState?.isAdmitted && <button onClick={handleLeave} style={bo(C.textMuted)}>{t("sync.leaveRoom")}</button>}
-      <button onClick={close} style={{ ...bo(SYNC_COLOR), marginTop: 8 }}>{t("sync.backToSections")}</button>
+      {isHost && memberList.length > 0 && <button onClick={handleKickAll} style={{ ...bo(confirmKickAll ? C.danger : C.textMuted), borderColor: confirmKickAll ? C.danger + "88" : C.border, color: confirmKickAll ? C.danger : C.textMuted, fontSize: 12, marginBottom: 8 }}>{confirmKickAll ? "Tap again to remove everyone" : "Remove all members"}</button>}
+      {!isHost && syncState?.isAdmitted && <button onClick={handleLeave} style={bo(C.textMuted)}>Leave Room</button>}
+      <button onClick={close} style={{ ...bo(SYNC_COLOR), marginTop: 8 }}>Back to sections</button>
     </div></div>
   );
 }
