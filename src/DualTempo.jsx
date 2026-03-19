@@ -25,10 +25,10 @@ function LandscapePrompt({ onDismiss, onDontShowAgain }) {
           {I.desktop(48)}
         </div>
         <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>
-          Best on desktop or tablet
+          Best on a larger screen
         </div>
         <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted, marginBottom: 20, lineHeight: 1.5 }}>
-          Dual Tempo needs room for two panels. On mobile, portrait keeps all controls accessible — landscape may lose space to browser toolbars.
+          Two side-by-side panels need room. Use portrait on mobile.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button onClick={onDismiss} style={{
