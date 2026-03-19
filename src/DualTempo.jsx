@@ -7,8 +7,9 @@ import { I, SecEd, NoteSVG } from "./components";
 const LS_KEY = "tempus_dual_landscape_dismissed";
 
 function LandscapePrompt({ onDismiss, onDontShowAgain }) {
-  const isLandscape = typeof window !== "undefined" && window.innerWidth > window.innerHeight;
-  if (isLandscape) return null;
+  // Show on small screens (phones) regardless of orientation
+  const isLargeScreen = typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) > 600;
+  if (isLargeScreen) return null;
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.75)",
@@ -20,14 +21,14 @@ function LandscapePrompt({ onDismiss, onDontShowAgain }) {
         padding: "28px 24px", maxWidth: 300, textAlign: "center",
         boxShadow: "0 20px 60px rgba(0,0,0,0.5)"
       }} onClick={e => e.stopPropagation()}>
-        <div style={{ fontSize: 48, marginBottom: 12, lineHeight: 1 }}>
-          <span style={{ display: "inline-block", animation: "dualRotateHint 2s ease-in-out infinite" }}>📱</span>
+        <div style={{ marginBottom: 16, lineHeight: 1, display: "flex", justifyContent: "center", color: C.textMuted }}>
+          {I.desktop(48)}
         </div>
         <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>
-          Rotate for best experience
+          Best on desktop or tablet
         </div>
         <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted, marginBottom: 20, lineHeight: 1.5 }}>
-          Dual Tempo works best in landscape mode so both panels have room to breathe.
+          Dual Tempo needs room for two panels. On mobile, portrait keeps all controls accessible — landscape may lose space to browser toolbars.
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button onClick={onDismiss} style={{
@@ -43,12 +44,6 @@ function LandscapePrompt({ onDismiss, onDontShowAgain }) {
           }}>Don't show this again</button>
         </div>
       </div>
-      <style>{`
-        @keyframes dualRotateHint {
-          0%, 100% { transform: rotate(0deg); }
-          30%, 70% { transform: rotate(90deg); }
-        }
-      `}</style>
     </div>
   );
 }
@@ -89,7 +84,7 @@ function useProportionalHeights(secA, secB) {
     const durA = secA.map(getSectionDuration);
     const durB = secB.map(getSectionDuration);
     const maxDur = Math.max(...durA, ...durB, 1);
-    const MIN_H = 44, MAX_H = 120, SCALE_BASE = 60;
+    const MIN_H = 40, MAX_H = 110, SCALE_BASE = 55;
     const toH = d => Math.max(MIN_H, Math.min(MAX_H, MIN_H + (d / maxDur) * SCALE_BASE));
     return { heightsA: durA.map(toH), heightsB: durB.map(toH) };
   }, [secA, secB]);
@@ -203,12 +198,12 @@ const MiniSec = React.forwardRef(function MiniSec({ section: s, index: i, total,
       onClick={canEdit ? onClick : undefined}
       style={{
         background: isCurrent ? C.downbeat + "12" : C.surface,
-        borderRadius: 10, padding: "8px 10px",
+        borderRadius: 10, padding: "6px 8px",
         border: `1px solid ${isCurrent ? C.downbeat + "55" : (isDropTarget || isDesktopDrop) ? C.downbeat + "88" : C.border}`,
         cursor: canEdit ? "pointer" : "default",
-        display: "flex", alignItems: "center", gap: 8,
+        display: "flex", alignItems: "center", gap: 5, overflow: "hidden",
         transition: "all 0.15s", opacity: (isDragging || isDesktopDrag) ? 0.4 : (!canEdit && !linked ? 0.5 : 1),
-        minHeight: Math.max(44, heightPx || 44), height: Math.max(44, heightPx || 44), flexShrink: 0,
+        minHeight: Math.max(40, heightPx || 40), height: Math.max(40, heightPx || 40), flexShrink: 0,
         transform: isDragging ? `translateY(${tDrag.offsetY}px)` : undefined,
         zIndex: isDragging ? 10 : undefined,
         borderTop: (isDropTarget || isDesktopDrop) ? `2px solid ${C.downbeat}` : undefined
@@ -218,63 +213,63 @@ const MiniSec = React.forwardRef(function MiniSec({ section: s, index: i, total,
         onTouchStart={canEdit ? e => onGripTouchStart(i, e) : undefined}
         onTouchEnd={canEdit ? cancelTouchDrag : undefined}
         onTouchCancel={canEdit ? cancelTouchDrag : undefined}
-        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, flexShrink: 0, minWidth: 16, touchAction: "none" }}>
+        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, flexShrink: 0, minWidth: 14, touchAction: "none" }}>
         {canEdit && i > 0 ? (
-          <button onClick={e => { e.stopPropagation(); onMove(-1); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 0, lineHeight: 1, fontSize: 10 }}>↑</button>
-        ) : <span style={{ fontSize: 10, color: "transparent" }}>↑</span>}
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted, lineHeight: 1 }}>{i + 1}</span>
+          <button onClick={e => { e.stopPropagation(); onMove(-1); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, lineHeight: 1, display: "flex" }}>{I.arrowUp(10)}</button>
+        ) : <span style={{ width: 14, height: 14 }}></span>}
+        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted, lineHeight: 1 }}>{i + 1}</span>
         {canEdit && i < total - 1 ? (
-          <button onClick={e => { e.stopPropagation(); onMove(1); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 0, lineHeight: 1, fontSize: 10 }}>↓</button>
-        ) : <span style={{ fontSize: 10, color: "transparent" }}>↓</span>}
+          <button onClick={e => { e.stopPropagation(); onMove(1); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, lineHeight: 1, display: "flex" }}>{I.arrowDown(10)}</button>
+        ) : <span style={{ width: 14, height: 14 }}></span>}
       </div>
 
       {isT ? (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, fontWeight: 700 }}>{s.duration}s</span>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>timed</span>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, minWidth: 0, overflow: "hidden" }}>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.text, fontWeight: 700 }}>{s.duration}s</span>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted }}>timed</span>
         </div>
       ) : (
         <>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, minWidth: 24 }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, minWidth: 20 }}>
             <div style={{
               fontFamily: "'DM Mono',monospace", fontWeight: 700, color: C.text, lineHeight: 1,
               textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center"
             }}>
-              <span style={{ fontSize: 16 }}>{s.tsNum}</span>
+              <span style={{ fontSize: 14 }}>{s.tsNum}</span>
               <div style={{ height: 1, width: "100%", background: C.textMuted + "88", margin: "1px 0" }} />
-              <span style={{ fontSize: 16 }}>{s.tsDen}</span>
+              <span style={{ fontSize: 14 }}>{s.tsDen}</span>
             </div>
-            {s.grouping && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: C.textMuted + "88", marginTop: 1, whiteSpace: "nowrap" }}>{Array.isArray(s.grouping) ? s.grouping.join("+") : s.grouping}</span>}
+            {s.grouping && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 6, color: C.textMuted + "88", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", maxWidth: 30 }}>{Array.isArray(s.grouping) ? s.grouping.join("+") : s.grouping}</span>}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 3, flex: 1, minWidth: 0 }}>
-            <NoteSVG type={s.beatUnit} dotted={s.dotted} size={14} />
-            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.textMuted }}>=</span>
-            <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: C.text, letterSpacing: 0.5 }}>{s.tempo}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, minWidth: 0, overflow: "hidden" }}>
+            <NoteSVG type={s.beatUnit} dotted={s.dotted} size={12} />
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>=</span>
+            <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17, color: C.text, letterSpacing: 0.5 }}>{s.tempo}</span>
           </div>
         </>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
         {!isT && (
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: s.loop ? C.downbeat : C.textMuted }}>
-            {s.loop ? "∞" : `${s.bars} bar${s.bars !== 1 ? "s" : ""}`}
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: s.loop ? C.downbeat : C.textMuted, whiteSpace: "nowrap" }}>
+            {s.loop ? "∞" : `${s.bars}b`}
           </span>
         )}
         <button onClick={e => { e.stopPropagation(); onStartHere(); }} style={{
-          background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, display: "flex"
-        }}>{I.play(12)}</button>
+          background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 1, display: "flex"
+        }}>{I.play(10)}</button>
       </div>
 
       {canDelete && (
         <button onClick={handleDelete} style={{
           background: confirmDel ? C.danger + "22" : "none",
           border: confirmDel ? `1px solid ${C.danger}` : "none",
-          borderRadius: 5, color: confirmDel ? C.danger : C.danger + "66",
-          cursor: "pointer", padding: confirmDel ? "2px 6px" : 2,
+          borderRadius: 4, color: confirmDel ? C.danger : C.danger + "66",
+          cursor: "pointer", padding: confirmDel ? "1px 4px" : 1,
           display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
-          fontSize: 9, fontFamily: "'DM Mono',monospace", transition: "all 0.15s"
+          fontSize: 8, fontFamily: "'DM Mono',monospace", transition: "all 0.15s"
         }}>
-          {confirmDel ? "Del?" : I.trash(10)}
+          {confirmDel ? "Del?" : I.trash(9)}
         </button>
       )}
     </div>
@@ -405,44 +400,65 @@ function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundTogg
 function CenterControls({ linked, toggleLink, swapPanels, isPA, isPB, linkedPlay, linkedStop,
   colorA, colorB, linkedCountInPs }) {
   const showCountIn = linked && linkedCountInPs?.countIn;
+  const isPlaying = isPA || isPB;
+  // Visibility rules:
+  // Link toggle + Swap: only when NOT playing
+  // Central play: only when linked
+  const showLink = !isPlaying;
+  const showSwap = !isPlaying;
   return (
     <div style={{
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       padding: "0 4px", flexShrink: 0, width: 48
     }}>
-      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-        <button onClick={swapPanels} title="Swap A ↔ B" style={{
-          background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 5px",
-          color: C.textMuted, fontSize: 9, fontFamily: "'DM Mono',monospace", cursor: "pointer",
-          whiteSpace: "nowrap", lineHeight: 1, transition: "all 0.15s"
-        }}>A⇄B</button>
+      {/* Slot 1: Swap — hidden during playback */}
+      <div style={{ height: 30, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+        {showSwap ? (
+          <button onClick={swapPanels} title="Swap A ↔ B" style={{
+            background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 6px",
+            color: C.textMuted, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s"
+          }}>{I.swap(14)}</button>
+        ) : <div style={{ width: 36, height: 30 }} />}
       </div>
 
-      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
-        <button onClick={toggleLink} style={{
-          background: linked ? colorA + "15" : C.surface, border: `1px solid ${linked ? colorA : C.border}`,
-          borderRadius: 8, cursor: "pointer", width: 36, height: 36,
-          color: linked ? colorA : C.textMuted, display: "flex",
-          alignItems: "center", justifyContent: "center", transition: "all 0.2s"
-        }}>
-          {I.sync(14)}
-        </button>
+      {/* Slot 2: Link/Unlink — hidden during playback */}
+      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+        {showLink ? (
+          <button onClick={toggleLink} style={{
+            background: linked ? colorA + "15" : C.surface, border: `1px solid ${linked ? colorA : C.border}`,
+            borderRadius: 8, cursor: "pointer", width: 36, height: 36,
+            color: linked ? colorA : C.textMuted, display: "flex",
+            alignItems: "center", justifyContent: "center", transition: "all 0.2s"
+          }}>
+            {linked ? I.sync(14) : I.unlink(14)}
+          </button>
+        ) : <div style={{ width: 36, height: 36 }} />}
       </div>
 
-      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: showCountIn ? 10 : 0 }}>
+      {/* Style for pulsing center button */}
+      <style>{`
+        @keyframes dtPulseCenter { 0% { box-shadow: 0 0 0 0px var(--dt-pulse-c, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
+      `}</style>
+      
+      {/* Slot 3: Central play — only when linked */}
+      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: showCountIn ? 8 : 0 }}>
         {linked ? (
-          <button onClick={() => { if (isPA || isPB) linkedStop(); else linkedPlay(0); }} style={{
+          <button onClick={() => { if (isPlaying) linkedStop(); else linkedPlay(0); }} style={{
             width: 36, height: 36, borderRadius: "50%", border: "none",
-            background: (isPA || isPB) ? C.danger : `linear-gradient(135deg, ${colorA}, ${colorB})`,
+            background: isPlaying ? C.danger : `linear-gradient(135deg, ${colorA}, ${colorB})`,
             color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: `0 0 12px ${(isPA || isPB) ? C.danger + "44" : colorA + "33"}`,
-            transition: "all 0.2s"
-          }}>{(isPA || isPB) ? I.pause(14) : I.play(14)}</button>
+            boxShadow: `0 0 12px ${isPlaying ? C.danger + "44" : colorA + "33"}`,
+            transition: "all 0.2s",
+            "--dt-pulse-c": isPlaying ? C.danger + "88" : colorA + "88",
+            animation: (isPlaying || showCountIn) ? "dtPulseCenter 1.5s infinite" : "none"
+          }}>{isPlaying ? I.pause(14) : I.play(14)}</button>
         ) : (
           <div style={{ width: 36, height: 36 }} />
         )}
       </div>
 
+      {/* Slot 4: merged count-in indicator */}
       {showCountIn && (
         <div style={{
           display: "flex", flexDirection: "column", alignItems: "center", gap: 2
@@ -768,10 +784,29 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
           linkedCountIn={!!linkedCountInPs} />
       </div>
 
-      {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew}
-        editIndex={(editPanel === "A" ? secA : secB).findIndex(s => s.id === editId) + 1}
-        onSave={handleSaveEdit} onClose={() => { setEditId(null); setEditPanel(null); }}
-        onDelete={((editPanel === "A" ? secA : secB).length > 1) ? handleDeleteFromEditor : null} />}
+      {editSec && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "stretch", justifyContent: "stretch" }}>
+          {/* Colour glow border for active panel */}
+          <div style={{
+            position: "absolute", inset: 0,
+            boxShadow: `inset 0 0 0 2px ${editPanel === "A" ? colorA : colorB}44, inset 0 0 40px ${editPanel === "A" ? colorA : colorB}15`,
+            pointerEvents: "none", zIndex: 101, borderRadius: 0
+          }} />
+          {/* A/B badge */}
+          <div style={{
+            position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 102,
+            background: (editPanel === "A" ? colorA : colorB) + "22",
+            border: `1px solid ${editPanel === "A" ? colorA : colorB}66`,
+            borderRadius: 6, padding: "2px 10px",
+            fontFamily: "'Bebas Neue',sans-serif", fontSize: 12, letterSpacing: 1,
+            color: editPanel === "A" ? colorA : colorB, pointerEvents: "none"
+          }}>Editing {editPanel}</div>
+          <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew}
+            editIndex={(editPanel === "A" ? secA : secB).findIndex(s => s.id === editId) + 1}
+            onSave={handleSaveEdit} onClose={() => { setEditId(null); setEditPanel(null); }}
+            onDelete={((editPanel === "A" ? secA : secB).length > 1) ? handleDeleteFromEditor : null} />
+        </div>
+      )}
 
       {showLandscape && <LandscapePrompt onDismiss={dismissLandscape} onDontShowAgain={dontShowLandscape} />}
 
