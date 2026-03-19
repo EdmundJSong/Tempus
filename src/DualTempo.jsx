@@ -81,14 +81,95 @@ function getSectionDuration(sec) {
   return bars * cpb * cd;
 }
 
+// ============ PROPORTIONAL HEIGHTS ============
+function useProportionalHeights(secA, secB) {
+  return useMemo(() => {
+    const allSections = [...secA, ...secB];
+    if (!allSections.length) return { heightsA: [], heightsB: [] };
+    const durA = secA.map(getSectionDuration);
+    const durB = secB.map(getSectionDuration);
+    const maxDur = Math.max(...durA, ...durB, 1);
+    const MIN_H = 44, MAX_H = 120, SCALE_BASE = 60;
+    const toH = d => Math.max(MIN_H, Math.min(MAX_H, MIN_H + (d / maxDur) * SCALE_BASE));
+    return { heightsA: durA.map(toH), heightsB: durB.map(toH) };
+  }, [secA, secB]);
+}
+
+// ============ PANEL DRAG HOOK ============
+function usePanelDrag(sections, setSections, canEdit) {
+  const [dragIdx, setDragIdx] = useState(null);
+  const [dropIdx, setDropIdx] = useState(null);
+  const [tDrag, setTDrag] = useState(null);
+  const [tDropIdx, setTDropIdx] = useState(null);
+  const cardRefs = useRef([]);
+  const tDragTimer = useRef(null);
+
+  const onGripTouchStart = useCallback((idx, e) => {
+    if (!canEdit) return;
+    const touch = e.touches[0];
+    const startY = touch.clientY;
+    tDragTimer.current = setTimeout(() => {
+      if (navigator.vibrate) try { navigator.vibrate(20); } catch {}
+      const positions = cardRefs.current.map(el => el ? el.getBoundingClientRect() : null);
+      setTDrag({ idx, startY, offsetY: 0, positions });
+      setTDropIdx(idx);
+    }, 300);
+  }, [canEdit]);
+
+  useEffect(() => {
+    if (!tDrag) return;
+    const onMove = e => {
+      e.preventDefault();
+      const y = e.touches[0].clientY;
+      const offsetY = y - tDrag.startY;
+      setTDrag(prev => prev ? { ...prev, offsetY } : null);
+      const positions = tDrag.positions;
+      let newDrop = tDrag.idx;
+      for (let i = 0; i < positions.length; i++) {
+        if (!positions[i]) continue;
+        const midY = positions[i].top + positions[i].height / 2;
+        if (y < midY) { newDrop = i; break; }
+        newDrop = i + 1;
+      }
+      newDrop = Math.max(0, Math.min(sections.length - 1, newDrop));
+      setTDropIdx(newDrop);
+    };
+    const onEnd = () => {
+      if (tDrag && tDropIdx !== null && tDrag.idx !== tDropIdx) {
+        setSections(p => { const c = [...p]; const [m] = c.splice(tDrag.idx, 1); c.splice(tDropIdx, 0, m); return c; });
+      }
+      setTDrag(null); setTDropIdx(null);
+    };
+    document.addEventListener("touchmove", onMove, { passive: false });
+    document.addEventListener("touchend", onEnd);
+    document.addEventListener("touchcancel", onEnd);
+    return () => { document.removeEventListener("touchmove", onMove); document.removeEventListener("touchend", onEnd); document.removeEventListener("touchcancel", onEnd); };
+  }, [tDrag, tDropIdx, sections.length, setSections]);
+
+  const cancelTouchDrag = useCallback(() => { if (tDragTimer.current) { clearTimeout(tDragTimer.current); tDragTimer.current = null; } }, []);
+
+  const handleDragStart = useCallback((e, idx) => { if (!canEdit) return; setDragIdx(idx); e.dataTransfer.effectAllowed = "move"; }, [canEdit]);
+  const handleDragEnter = useCallback((e, idx) => { setDropIdx(idx); e.preventDefault(); }, []);
+  const handleDragOver = useCallback(e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }, []);
+  const handleDragEnd = useCallback(() => { setDragIdx(null); setDropIdx(null); }, []);
+  const handleDrop = useCallback((e, idx) => {
+    e.preventDefault(); if (dragIdx === null || dragIdx === idx) { setDragIdx(null); setDropIdx(null); return; }
+    setSections(p => { const c = [...p]; const [m] = c.splice(dragIdx, 1); c.splice(idx, 0, m); return c; });
+    setDragIdx(null); setDropIdx(null);
+  }, [dragIdx, setSections]);
+
+  return { dragIdx, dropIdx, tDrag, tDropIdx, cardRefs, onGripTouchStart, cancelTouchDrag, handleDragStart, handleDragEnter, handleDragOver, handleDragEnd, handleDrop };
+}
+
 // ============ MINI SECTION CARD (main-page style) ============
-function MiniSec({ section: s, index: i, total, onClick, onDelete, onStartHere, onMove,
-  canDelete, canEdit, isCurrent, linked }) {
+const MiniSec = React.forwardRef(function MiniSec({ section: s, index: i, total, onClick, onDelete, onStartHere, onMove,
+  canDelete, canEdit, isCurrent, linked, heightPx,
+  onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx,
+  onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx }, ref) {
   const isT = s.type === "timed";
   const [confirmDel, setConfirmDel] = useState(false);
   const confirmTimer = useRef(null);
 
-  // Reset confirm on unmount or linked change
   useEffect(() => () => { if (confirmTimer.current) clearTimeout(confirmTimer.current); }, []);
   useEffect(() => { setConfirmDel(false); }, [linked]);
 
@@ -106,18 +187,38 @@ function MiniSec({ section: s, index: i, total, onClick, onDelete, onStartHere, 
     }
   }, [canDelete, confirmDel, onDelete]);
 
+  const isDragging = tDrag?.idx === i;
+  const isDropTarget = tDropIdx === i && tDrag && tDrag.idx !== i;
+  const isDesktopDrag = dragIdx === i;
+  const isDesktopDrop = dropIdx === i && dragIdx !== null && dragIdx !== i;
+
   return (
-    <div onClick={canEdit ? onClick : undefined} style={{
-      background: isCurrent ? C.downbeat + "12" : C.surface,
-      borderRadius: 10, padding: "8px 10px",
-      border: `1px solid ${isCurrent ? C.downbeat + "55" : C.border}`,
-      cursor: canEdit ? "pointer" : "default",
-      display: "flex", alignItems: "center", gap: 8,
-      transition: "all 0.15s", opacity: !canEdit && !linked ? 0.5 : 1,
-      minHeight: 48
-    }}>
-      {/* Left: reorder arrows + index */}
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, flexShrink: 0, minWidth: 16 }}>
+    <div ref={ref}
+      draggable={canEdit}
+      onDragStart={canEdit ? e => onDragStart(e, i) : undefined}
+      onDragEnter={canEdit ? e => onDragEnter(e, i) : undefined}
+      onDragOver={canEdit ? onDragOver : undefined}
+      onDragEnd={canEdit ? onDragEnd : undefined}
+      onDrop={canEdit ? e => onDrop(e, i) : undefined}
+      onClick={canEdit ? onClick : undefined}
+      style={{
+        background: isCurrent ? C.downbeat + "12" : C.surface,
+        borderRadius: 10, padding: "8px 10px",
+        border: `1px solid ${isCurrent ? C.downbeat + "55" : (isDropTarget || isDesktopDrop) ? C.downbeat + "88" : C.border}`,
+        cursor: canEdit ? "pointer" : "default",
+        display: "flex", alignItems: "center", gap: 8,
+        transition: "all 0.15s", opacity: (isDragging || isDesktopDrag) ? 0.4 : (!canEdit && !linked ? 0.5 : 1),
+        minHeight: Math.max(44, heightPx || 44), height: Math.max(44, heightPx || 44), flexShrink: 0,
+        transform: isDragging ? `translateY(${tDrag.offsetY}px)` : undefined,
+        zIndex: isDragging ? 10 : undefined,
+        borderTop: (isDropTarget || isDesktopDrop) ? `2px solid ${C.downbeat}` : undefined
+      }}>
+      {/* Left: grip / reorder arrows + index */}
+      <div
+        onTouchStart={canEdit ? e => onGripTouchStart(i, e) : undefined}
+        onTouchEnd={canEdit ? cancelTouchDrag : undefined}
+        onTouchCancel={canEdit ? cancelTouchDrag : undefined}
+        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, flexShrink: 0, minWidth: 16, touchAction: "none" }}>
         {canEdit && i > 0 ? (
           <button onClick={e => { e.stopPropagation(); onMove(-1); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 0, lineHeight: 1, fontSize: 10 }}>↑</button>
         ) : <span style={{ fontSize: 10, color: "transparent" }}>↑</span>}
@@ -128,18 +229,13 @@ function MiniSec({ section: s, index: i, total, onClick, onDelete, onStartHere, 
       </div>
 
       {isT ? (
-        /* Timed section */
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: C.text, fontWeight: 700 }}>{s.duration}s</span>
           <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>timed</span>
         </div>
       ) : (
-        /* Metered section — matches main page layout */
         <>
-          {/* Time signature + grouping */}
-          <div style={{
-            display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, minWidth: 24
-          }}>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, minWidth: 24 }}>
             <div style={{
               fontFamily: "'DM Mono',monospace", fontWeight: 700, color: C.text, lineHeight: 1,
               textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center"
@@ -150,37 +246,25 @@ function MiniSec({ section: s, index: i, total, onClick, onDelete, onStartHere, 
             </div>
             {s.grouping && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 7, color: C.textMuted + "88", marginTop: 1, whiteSpace: "nowrap" }}>{Array.isArray(s.grouping) ? s.grouping.join("+") : s.grouping}</span>}
           </div>
-
-          {/* Note = Tempo */}
           <div style={{ display: "flex", alignItems: "center", gap: 3, flex: 1, minWidth: 0 }}>
             <NoteSVG type={s.beatUnit} dotted={s.dotted} size={14} />
             <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.textMuted }}>=</span>
             <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: C.text, letterSpacing: 0.5 }}>{s.tempo}</span>
           </div>
-
         </>
       )}
 
-      {/* Right: bars + play */}
-      {!isT && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+        {!isT && (
           <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: s.loop ? C.downbeat : C.textMuted }}>
             {s.loop ? "∞" : `${s.bars} bar${s.bars !== 1 ? "s" : ""}`}
           </span>
-          <button onClick={e => { e.stopPropagation(); onStartHere(); }} style={{
-            background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, display: "flex"
-          }}>{I.play(12)}</button>
-        </div>
-      )}
-      {isT && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          <button onClick={e => { e.stopPropagation(); onStartHere(); }} style={{
-            background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, display: "flex"
-          }}>{I.play(12)}</button>
-        </div>
-      )}
+        )}
+        <button onClick={e => { e.stopPropagation(); onStartHere(); }} style={{
+          background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, display: "flex"
+        }}>{I.play(12)}</button>
+      </div>
 
-      {/* Delete button with confirmation */}
       {canDelete && (
         <button onClick={handleDelete} style={{
           background: confirmDel ? C.danger + "22" : "none",
@@ -195,10 +279,13 @@ function MiniSec({ section: s, index: i, total, onClick, onDelete, onStartHere, 
       )}
     </div>
   );
-}
+});
 
 // ============ BEAT DISPLAY ============
-function BeatDisplay({ ps, color }) {
+function BeatDisplay({ ps, color, linkedCountIn }) {
+  if (linkedCountIn && ps?.countIn) return (
+    <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 11 }}>Counting...</div>
+  );
   if (!ps) return (
     <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 11 }}>Ready</div>
   );
@@ -242,7 +329,7 @@ function BeatDisplay({ ps, color }) {
 // ============ PANEL ============
 function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundToggle,
   onPlay, onStop, onStartHere, onAddSec, onEditSec, onDeleteSec, onMoveSec,
-  canAdd, canEdit, linked }) {
+  canAdd, canEdit, linked, heights, drag, linkedCountIn }) {
   const totalBars = tl.length;
   const currentSi = ps?.sectionIndex ?? -1;
   return (
@@ -251,7 +338,6 @@ function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundTogg
       background: C.surface + "44", borderRadius: 10, border: `1px solid ${color}33`,
       overflow: "hidden"
     }}>
-      {/* Panel header */}
       <div style={{
         display: "flex", alignItems: "center", gap: 4, padding: "6px 8px",
         borderBottom: `1px solid ${C.border}`, background: color + "08", flexShrink: 0
@@ -269,7 +355,6 @@ function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundTogg
           padding: "2px 5px", cursor: "pointer", color: C.textMuted,
           fontSize: 9, fontFamily: "'DM Mono',monospace", flexShrink: 0
         }}>{soundSettings.pitched ? "♪" : "◌"}</button>
-        {/* Item 6: hide per-panel play when linked */}
         {!linked && (
           <button onClick={() => isP ? onStop() : onPlay(0)} disabled={!totalBars} style={{
             width: 28, height: 28, borderRadius: "50%", border: "none",
@@ -283,15 +368,14 @@ function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundTogg
         )}
       </div>
 
-      {/* Beat display */}
       <div style={{ flexShrink: 0 }}>
-        <BeatDisplay ps={ps} color={color} />
+        <BeatDisplay ps={ps} color={color} linkedCountIn={linkedCountIn} />
       </div>
 
-      {/* Section list — main-page style cards */}
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px 6px", display: "flex", flexDirection: "column", gap: 4, minHeight: 0 }}>
         {sections.map((sec, i) => (
-          <MiniSec key={sec.id} section={sec} index={i} total={sections.length}
+          <MiniSec key={sec.id} ref={el => drag.cardRefs.current[i] = el}
+            section={sec} index={i} total={sections.length}
             onClick={() => onEditSec(sec.id)}
             onDelete={() => onDeleteSec(sec.id)}
             onStartHere={() => onStartHere(i)}
@@ -299,7 +383,13 @@ function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundTogg
             canDelete={sections.length > 1 && canEdit}
             canEdit={canEdit}
             isCurrent={currentSi === i}
-            linked={linked} />
+            linked={linked}
+            heightPx={heights[i] || 44}
+            onDragStart={drag.handleDragStart} onDragEnter={drag.handleDragEnter}
+            onDragOver={drag.handleDragOver} onDragEnd={drag.handleDragEnd}
+            onDrop={drag.handleDrop} dragIdx={drag.dragIdx} dropIdx={drag.dropIdx}
+            onGripTouchStart={drag.onGripTouchStart} cancelTouchDrag={drag.cancelTouchDrag}
+            tDrag={drag.tDrag} tDropIdx={drag.tDropIdx} />
         ))}
         {canAdd && <button onClick={onAddSec} style={{
           width: "100%", padding: 10, borderRadius: 10, border: `1px dashed ${C.border}`,
@@ -312,15 +402,14 @@ function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundTogg
 }
 
 // ============ CENTER CONTROLS ============
-// Item 1: fixed-position layout — link always centred, swap above, play below
-function CenterControls({ linked, toggleLink, swapPanels, isPA, isPB, linkedPlay, linkedStop, colorA, colorB }) {
-  // Item 1: fixed-position layout using 3 equal slots so link button never moves
+function CenterControls({ linked, toggleLink, swapPanels, isPA, isPB, linkedPlay, linkedStop,
+  colorA, colorB, linkedCountInPs }) {
+  const showCountIn = linked && linkedCountInPs?.countIn;
   return (
     <div style={{
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       padding: "0 4px", flexShrink: 0, width: 48
     }}>
-      {/* Slot 1 (top): Swap — always rendered */}
       <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
         <button onClick={swapPanels} title="Swap A ↔ B" style={{
           background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 5px",
@@ -329,7 +418,6 @@ function CenterControls({ linked, toggleLink, swapPanels, isPA, isPB, linkedPlay
         }}>A⇄B</button>
       </div>
 
-      {/* Slot 2 (centre): Link/Unlink — always at exact same position */}
       <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 10 }}>
         <button onClick={toggleLink} style={{
           background: linked ? colorA + "15" : C.surface, border: `1px solid ${linked ? colorA : C.border}`,
@@ -341,8 +429,7 @@ function CenterControls({ linked, toggleLink, swapPanels, isPA, isPB, linkedPlay
         </button>
       </div>
 
-      {/* Slot 3 (bottom): Play — always takes space, visible only when linked */}
-      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: showCountIn ? 10 : 0 }}>
         {linked ? (
           <button onClick={() => { if (isPA || isPB) linkedStop(); else linkedPlay(0); }} style={{
             width: 36, height: 36, borderRadius: "50%", border: "none",
@@ -352,23 +439,34 @@ function CenterControls({ linked, toggleLink, swapPanels, isPA, isPB, linkedPlay
             transition: "all 0.2s"
           }}>{(isPA || isPB) ? I.pause(14) : I.play(14)}</button>
         ) : (
-          <div style={{ width: 36, height: 36 }} /> /* invisible spacer */
+          <div style={{ width: 36, height: 36 }} />
         )}
       </div>
+
+      {showCountIn && (
+        <div style={{
+          display: "flex", flexDirection: "column", alignItems: "center", gap: 2
+        }}>
+          <div style={{
+            fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: C.text,
+            opacity: linkedCountInPs.flash ? 1 : 0.5, transition: "opacity 0.05s",
+            textShadow: linkedCountInPs.flash ? `0 0 12px ${colorA}` : "none"
+          }}>{(linkedCountInPs.beatIndex ?? 0) + 1}</div>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: C.textMuted }}>count-in</span>
+        </div>
+      )}
     </div>
   );
 }
 
 // ============ MAIN DUAL TEMPO ============
 export default function DualTempo({ sections: initialSections, settings, onExit }) {
-  // ---- Landscape prompt ----
   const [showLandscape, setShowLandscape] = useState(() => {
     try { return _getLS(LS_KEY) !== "1"; } catch { return true; }
   });
   const dismissLandscape = useCallback(() => setShowLandscape(false), []);
   const dontShowLandscape = useCallback(() => { _setLS(LS_KEY, "1"); setShowLandscape(false); }, []);
 
-  // ---- Toast ----
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const showToast = useCallback(msg => {
@@ -377,19 +475,16 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     toastTimer.current = setTimeout(() => setToast(null), 2200);
   }, []);
 
-  // ---- Shared AudioContext ----
   const ctxRef = useRef(null);
   if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
   useEffect(() => () => { if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null; } }, []);
 
-  // ---- Panel A state ----
   const [secA, setSecA] = useState(() => initialSections.map(s => ({ ...s })));
   const [psA, setPsA] = useState(null);
   const [isPA, setIsPA] = useState(false);
   const metA = useMetronome(ctxRef.current);
   const [soundA, setSoundA] = useState({ pitched: true, accented: true });
 
-  // ---- Panel B state ----
   const cloneForB = useCallback(secs => secs.map(s => ({ ...s, id: "b_" + String(s.id).replace(/^b_/, "") })), []);
   const [secB, setSecB] = useState(() => cloneForB(initialSections));
   const [psB, setPsB] = useState(null);
@@ -397,27 +492,26 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
   const metB = useMetronome(ctxRef.current);
   const [soundB, setSoundB] = useState({ pitched: false, accented: true });
 
-  // ---- Shared state ----
-  const [linked, setLinked] = useState(false); // Item 4: default unlinked
+  const [linked, setLinked] = useState(false);
   const [editPanel, setEditPanel] = useState(null);
   const [editId, setEditId] = useState(null);
   const [editIsNew, setEditIsNew] = useState(false);
 
-  // ---- Timelines ----
   const tlA = useMemo(() => buildTL(secA), [secA]);
   const tlB = useMemo(() => buildTL(secB), [secB]);
 
-  // ---- Item 4: NO linked propagation effect. Linking only controls playback + edit lock. ----
+  const { heightsA, heightsB } = useProportionalHeights(secA, secB);
 
-  // ---- Sound settings ----
+  const canEdit = !linked;
+  const dragA = usePanelDrag(secA, setSecA, canEdit);
+  const dragB = usePanelDrag(secB, setSecB, canEdit);
+
   useEffect(() => { metA.updS({ ...soundA, muted: false }); }, [soundA, metA]);
   useEffect(() => { metB.updS({ ...soundB, muted: false }); }, [soundB, metB]);
 
-  // ---- Hot-swap timeline for live tempo updates ----
   useEffect(() => { if (isPA) metA.hotSwapTL(tlA); }, [tlA, isPA, metA]);
   useEffect(() => { if (isPB) metB.hotSwapTL(tlB); }, [tlB, isPB, metB]);
 
-  // ---- Beat callbacks ----
   const ftoA = useRef(null);
   useEffect(() => {
     metA.setCb(evt => {
@@ -464,7 +558,6 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     });
   }, [metB, tlB]);
 
-  // ---- Play / Stop ----
   const ci = settings.countIn || 0;
 
   const goA = useCallback((fi = 0, syncDelayMs, ciOverride) => {
@@ -486,19 +579,11 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
   const stopA = useCallback(() => { metA.stop(); setIsPA(false); }, [metA]);
   const stopB = useCallback(() => { metB.stop(); setIsPB(false); }, [metB]);
 
-  // Item 5: linked count-in uses the longer meter
   const linkedPlay = useCallback((fi = 0) => {
     const delay = 150;
     metA.tap();
-    // Determine count-in: use longer first-section meter
     const cpbA = secA[0]?.tsNum || 4;
     const cpbB = secB[0]?.tsNum || 4;
-    const linkedCi = ci > 0 ? Math.max(cpbA, cpbB) / Math.max(cpbA, cpbB) * ci : 0;
-    // Actually: ci is in "bars of count-in". The engine multiplies ci * cpb.
-    // To make both hear the same total beats, we need both to get ci bars
-    // but the bar with fewer beats needs proportionally more bars.
-    // Simplest correct approach: pass ci to both but override with the max cpb
-    // We'll calculate explicit beat counts and pass as ci bars based on each panel's cpb.
     const maxCpb = Math.max(cpbA, cpbB);
     const ciBarsA = ci > 0 ? Math.ceil((maxCpb * ci) / cpbA) : 0;
     const ciBarsB = ci > 0 ? Math.ceil((maxCpb * ci) / cpbB) : 0;
@@ -535,10 +620,6 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     const fi = tlB.findIndex(b => b.si === secIdx);
     if (fi >= 0) handlePlayB(fi);
   }, [tlB, handlePlayB]);
-
-  // ---- Section CRUD ----
-  // Item 4: canEdit = !linked for both panels
-  const canEdit = !linked;
 
   const addSecA = useCallback(() => {
     if (linked) { showToast("Unlink to edit sections"); return; }
@@ -607,15 +688,12 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     if (editPanel === "A") deleteSecA(id); else deleteSecB(id);
   }, [editPanel, deleteSecA, deleteSecB]);
 
-  // ---- Item 2: Swap A↔B (single tap, non-destructive) ----
   const swapPanels = useCallback(() => {
     if (isPA || isPB) { showToast("Stop playback before swapping"); return; }
     const tmpA = secA.map(s => ({ ...s }));
     const tmpB = secB.map(s => ({ ...s }));
-    // Strip b_ prefix from B sections, add b_ prefix to A sections
     setSecA(tmpB.map(s => ({ ...s, id: String(s.id).replace(/^b_/, "") || (Date.now() + Math.random()) })));
     setSecB(tmpA.map(s => ({ ...s, id: "b_" + String(s.id).replace(/^b_/, "") })));
-    // Swap sound settings too
     const sA = { ...soundA }, sB = { ...soundB };
     setSoundA(sB);
     setSoundB(sA);
@@ -623,12 +701,8 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     showToast("Panels swapped");
   }, [secA, secB, soundA, soundB, isPA, isPB, showToast]);
 
-  // ---- Toggle link ----
-  // Item 4: linking locks both panels; unlinking restores editing
   const toggleLink = useCallback(() => {
-    // Stop playback on toggle
     stopA(); stopB(); setPsA(null); setPsB(null);
-    // Close any open editor
     setEditId(null); setEditPanel(null);
     setLinked(l => {
       if (!l) showToast("Linked — sections locked for playback");
@@ -637,7 +711,9 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     });
   }, [stopA, stopB, showToast]);
 
-  // ---- Keyboard shortcuts ----
+  // Merged count-in state for central display
+  const linkedCountInPs = linked && psA?.countIn ? psA : null;
+
   useEffect(() => {
     const hk = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
@@ -655,13 +731,11 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     return () => window.removeEventListener("keydown", hk);
   }, [isPA, isPB, linked, linkedStop, linkedPlay, stopA, stopB, goA, goB, editId, onExit]);
 
-  // ---- Colors ----
   const colorA = C.downbeat;
   const colorB = C.accent;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 90, background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px 4px", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <span className="dt-grad" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 2 }}>DUAL TEMPO</span>
@@ -674,34 +748,33 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
         <button className="close-btn" onClick={onExit} style={{ width: 36, height: 36 }}>{I.x(18)}</button>
       </div>
 
-      {/* Main area: Panel A | Center Controls | Panel B */}
       <div style={{ flex: 1, display: "flex", flexDirection: "row", gap: 0, padding: "0 6px 8px", minHeight: 0, overflow: "hidden" }}>
         <Panel label="A" color={colorA} sections={secA} tl={tlA} ps={psA} isP={isPA}
           soundSettings={soundA} onSoundToggle={() => setSoundA(p => ({ ...p, pitched: !p.pitched }))}
           onPlay={handlePlayA} onStop={handleStopA} onStartHere={startHereA}
           onAddSec={addSecA} onEditSec={editSecA} onDeleteSec={deleteSecA} onMoveSec={moveSecA}
-          canAdd={canEdit} canEdit={canEdit} linked={linked} />
+          canAdd={canEdit} canEdit={canEdit} linked={linked} heights={heightsA} drag={dragA}
+          linkedCountIn={!!linkedCountInPs} />
 
         <CenterControls linked={linked} toggleLink={toggleLink} swapPanels={swapPanels}
-          isPA={isPA} isPB={isPB} linkedPlay={linkedPlay} linkedStop={linkedStop} colorA={colorA} colorB={colorB} />
+          isPA={isPA} isPB={isPB} linkedPlay={linkedPlay} linkedStop={linkedStop}
+          colorA={colorA} colorB={colorB} linkedCountInPs={linkedCountInPs} />
 
         <Panel label="B" color={colorB} sections={secB} tl={tlB} ps={psB} isP={isPB}
           soundSettings={soundB} onSoundToggle={() => setSoundB(p => ({ ...p, pitched: !p.pitched }))}
           onPlay={handlePlayB} onStop={handleStopB} onStartHere={startHereB}
           onAddSec={addSecB} onEditSec={editSecB} onDeleteSec={deleteSecB} onMoveSec={moveSecB}
-          canAdd={canEdit} canEdit={canEdit} linked={linked} />
+          canAdd={canEdit} canEdit={canEdit} linked={linked} heights={heightsB} drag={dragB}
+          linkedCountIn={!!linkedCountInPs} />
       </div>
 
-      {/* Section editor */}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew}
         editIndex={(editPanel === "A" ? secA : secB).findIndex(s => s.id === editId) + 1}
         onSave={handleSaveEdit} onClose={() => { setEditId(null); setEditPanel(null); }}
         onDelete={((editPanel === "A" ? secA : secB).length > 1) ? handleDeleteFromEditor : null} />}
 
-      {/* Landscape prompt */}
       {showLandscape && <LandscapePrompt onDismiss={dismissLandscape} onDontShowAgain={dontShowLandscape} />}
 
-      {/* Toast */}
       <DualToast message={toast} />
 
       <style>{`
