@@ -7,6 +7,7 @@ import { I, SecCard, SecEd } from "./components";
 import PlayView from "./PlayView";
 import VideoView from "./VideoView";
 import { SetP, SaveM, LibP, PracSetup } from "./modals";
+import DualTempo from "./DualTempo";
 
 // ============ MAIN ============
 export default function Tempus() {
@@ -24,7 +25,8 @@ export default function Tempus() {
   useEffect(() => { if (videoUrl) _setLS("tempus_videoUrl", videoUrl); else { try { localStorage.removeItem("tempus_videoUrl"); } catch {} } }, [videoUrl]);
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
-  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0 }; });
+  const [showDual, setShowDual] = useState(false);
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
@@ -95,6 +97,7 @@ export default function Tempus() {
 
   useEffect(() => { met.updS({ muted }); }, [muted]);
   useEffect(() => { met.updS({ accented: settings.accented, pitched: settings.pitched, downbeatOnly: settings.downbeatOnly, silentInterval: settings.silentInterval }); }, [settings.accented, settings.pitched, settings.downbeatOnly, settings.silentInterval]);
+  useEffect(() => { if (isP) met.hotSwapTL(tl); }, [tl, isP, met]);
 
   useEffect(() => {
     met.setCb(evt => {
@@ -136,6 +139,7 @@ export default function Tempus() {
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      if (showDual) return; // DualTempo handles its own keys
       const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear || sync.showLobby;
       if (e.code === "Space") {
         if (anyModalOpen || sync.isMemberLocked) return;
@@ -156,7 +160,7 @@ export default function Tempus() {
       else if (isP && !sync.isMemberLocked && e.code === "ArrowRight") jumpSec(1);
     };
     window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
-  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, confirmClear, sync.showLobby, sync.isMemberLocked]);
+  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, showDual, confirmClear, sync.showLobby, sync.isMemberLocked]);
 
   const lastSplitTime = useRef(0);
   const lastSplitBar = useRef(0);
@@ -208,8 +212,9 @@ export default function Tempus() {
     if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
     setConfirmClear(false);
     const backup = [...sections];
+    const backupMeta = { videoUrl, videoSync, loadedProfileId };
     setSections([mkM()]); setEditId(null); setVideoUrl(null); setVideoSync(null); setLoadedProfileId(null);
-    setUndoToast({ section: backup, index: -1 });
+    setUndoToast({ section: backup, index: -1, meta: backupMeta });
     if (undoTimer.current) clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
   };
@@ -228,6 +233,7 @@ export default function Tempus() {
     if (!undoToast) return;
     if (undoToast.index === -1 && Array.isArray(undoToast.section)) {
       setSections(undoToast.section);
+      if (undoToast.meta) { setVideoUrl(undoToast.meta.videoUrl); setVideoSync(undoToast.meta.videoSync); setLoadedProfileId(undoToast.meta.loadedProfileId); }
     } else {
       setSections(p => { const c = [...p]; c.splice(undoToast.index, 0, undoToast.section); return c; });
     }
@@ -306,6 +312,7 @@ export default function Tempus() {
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
           {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b="Sync" style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
+          {settings.appMode === "advanced" && settings.dualTempo && !sync.isMemberLocked && <button onClick={() => setShowDual(true)} data-tip-b="Dual" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>A|B</button>}
           <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
         </div>
       </div>
@@ -334,7 +341,7 @@ export default function Tempus() {
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
-      {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
+      {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} onVideoUrl={setVideoUrl} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
       {showLib && <LibP onLoad={(s, v, vs, pid) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); setLoadedProfileId(pid || null); }} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
       {sync.showLobby && <SyncLobby sync={sync} onLoadSections={handleSyncLoadSections} />}
@@ -344,6 +351,7 @@ export default function Tempus() {
         <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
         <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
       </div>}
+      {showDual && <DualTempo sections={sections} settings={settings} onExit={() => setShowDual(false)} />}
     </div>
   );
 }
