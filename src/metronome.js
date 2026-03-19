@@ -2,10 +2,10 @@ import { useRef, useCallback, useEffect, useState } from "react";
 import { BU, D2Q } from "./utils";
 
 // ============ AUDIO ENGINE ============
-export function useMetronome() {
+export function useMetronome(externalCtx) {
   const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, pitched: true, muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false);
   const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false);
-  const init = useCallback(() => { if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, []);
+  const init = useCallback(() => { if (externalCtx) { actx.current = externalCtx; return actx.current; } if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, [externalCtx]);
   const rwl = useCallback(async () => { try { if ("wakeLock" in navigator) wl.current = await navigator.wakeLock.request("screen"); } catch { } if (sa.current && sa.current.paused) { try { await sa.current.play(); } catch { } } }, []);
   const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) { sa.current.pause(); sa.current.currentTime = 0; } }, []);
   const prime = useCallback(async () => { const ctx = init(); if (ctx.state === "suspended") await ctx.resume(); return ctx; }, [init]);
@@ -80,9 +80,10 @@ export function useMetronome() {
   }, [stop, init, sched]);
   const updS = useCallback(s => { sR.current = { ...sR.current, ...s }; }, []);
   const setCb = useCallback(cb => { cbR.current = cb; }, []);
-  useEffect(() => () => { stop(); if (actx.current) actx.current.close().catch(() => { }); }, [stop]);
+  useEffect(() => () => { stop(); if (!externalCtx && actx.current) actx.current.close().catch(() => { }); }, [stop, externalCtx]);
   const tap = useCallback(() => { const ctx = init(); if (ctx.state === "suspended") ctx.resume(); const buf = ctx.createBuffer(1, 1, ctx.sampleRate), src = ctx.createBufferSource(); src.buffer = buf; src.connect(ctx.destination); src.start(0); if (!sa.current) { const a = document.createElement("audio"); a.setAttribute("loop", "true"); a.setAttribute("playsinline", "true"); a.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA="; sa.current = a; } try { sa.current.play().catch(() => {}); } catch {} return ctx; }, [init]);
-  return { start, stop, setCb, pl, updS, tap };
+  const hotSwapTL = useCallback(newTL => { tlR.current = newTL; }, []);
+  return { start, stop, setCb, pl, updS, tap, hotSwapTL };
 }
 
 // ============ TAP TEMPO ============
