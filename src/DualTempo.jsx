@@ -3,75 +3,74 @@ import { useMetronome, useTapTempo } from "./metronome";
 import { C, mkM, mkT, buildTL, pG, pM } from "./utils";
 import { I, SecEd, NoteSVG } from "./components";
 
-// ============ MINI SECTION CARD ============
-function MiniSec({ section: s, index: i, onClick, onDelete, onStartHere, canDelete, isPlaying, isCurrent }) {
+// ============ MINI SECTION CARD (compact for narrow panels) ============
+function MiniSec({ section: s, index: i, onClick, onDelete, onStartHere, canDelete, isCurrent }) {
   const isT = s.type === "timed";
   return (
     <div onClick={onClick} style={{
-      background: isCurrent ? C.downbeat + "15" : C.surface, borderRadius: 8, padding: "8px 10px",
+      background: isCurrent ? C.downbeat + "15" : C.surface, borderRadius: 6, padding: "6px 8px",
       border: `1px solid ${isCurrent ? C.downbeat + "66" : C.border}`, cursor: "pointer",
-      display: "flex", alignItems: "center", gap: 8, transition: "all 0.15s", minHeight: 40
+      display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s", minHeight: 34
     }}>
-      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted, minWidth: 16, textAlign: "center" }}>{i + 1}</span>
+      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted, minWidth: 12, textAlign: "center" }}>{i + 1}</span>
       {isT ? (
-        <><span style={{ color: C.textMuted }}>{I.clock(12)}</span><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.text, flex: 1 }}>{s.duration}s</span></>
+        <><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text, flex: 1 }}>{s.duration}s</span></>
       ) : (
         <>
-          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 22, display: "flex", flexDirection: "column", alignItems: "center" }}>
-            <span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted + "66", margin: "0px 0" }} /><span>{s.tsDen}</span>
+          <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 18, display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted + "66" }} /><span>{s.tsDen}</span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1 }}>
-            <NoteSVG type={s.beatUnit} dotted={s.dotted} size={12} />
-            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>=</span>
-            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.text }}>{s.tempo}</span>
-            {s.curve !== "constant" && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.accent, marginLeft: 2 }}>{s.curve === "accel" ? "→" : "←"}{s.endTempo}</span>}
+          <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, minWidth: 0 }}>
+            <NoteSVG type={s.beatUnit} dotted={s.dotted} size={10} />
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>=</span>
+            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.text }}>{s.tempo}</span>
           </div>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: s.loop ? C.downbeat : C.textMuted }}>{s.loop ? "∞" : `${s.bars}b`}</span>
+          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: s.loop ? C.downbeat : C.textMuted, flexShrink: 0 }}>{s.loop ? "∞" : `${s.bars}b`}</span>
         </>
       )}
-      <button onClick={e => { e.stopPropagation(); onStartHere(); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, display: "flex" }}>{I.play(12)}</button>
-      {canDelete && <button onClick={e => { e.stopPropagation(); onDelete(); }} style={{ background: "none", border: "none", color: C.danger + "88", cursor: "pointer", padding: 2, display: "flex" }}>{I.trash(12)}</button>}
+      <button onClick={e => { e.stopPropagation(); onStartHere(); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 1, display: "flex", flexShrink: 0 }}>{I.play(10)}</button>
+      {canDelete && <button onClick={e => { e.stopPropagation(); onDelete(); }} style={{ background: "none", border: "none", color: C.danger + "88", cursor: "pointer", padding: 1, display: "flex", flexShrink: 0 }}>{I.trash(10)}</button>}
     </div>
   );
 }
 
 // ============ BEAT DISPLAY ============
-function BeatDisplay({ ps, color, label }) {
+function BeatDisplay({ ps, color }) {
   if (!ps) return (
-    <div style={{ textAlign: "center", padding: "12px 0", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12 }}>Ready</div>
+    <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 11 }}>Ready</div>
   );
   if (ps.ended) return (
-    <div style={{ textAlign: "center", padding: "12px 0", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 13 }}>Ended</div>
+    <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12 }}>Ended</div>
   );
   if (ps.countIn) return (
-    <div style={{ textAlign: "center", padding: "8px 0" }}>
-      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 22, color: C.textMuted, opacity: ps.flash ? 1 : 0.5, transition: "opacity 0.05s" }}>Count-in</span>
+    <div style={{ textAlign: "center", padding: "8px 4px" }}>
+      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 16, color: C.textMuted, opacity: ps.flash ? 1 : 0.5, transition: "opacity 0.05s" }}>Count-in</span>
     </div>
   );
   if (ps.isTimed) return (
-    <div style={{ textAlign: "center", padding: "8px 0" }}>
-      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 28, color, opacity: ps.flash ? 1 : 0.6, transition: "opacity 0.05s" }}>{ps.remaining != null ? ps.remaining.toFixed(1) + "s" : "—"}</span>
+    <div style={{ textAlign: "center", padding: "6px 4px" }}>
+      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 22, color, opacity: ps.flash ? 1 : 0.6, transition: "opacity 0.05s" }}>{ps.remaining != null ? ps.remaining.toFixed(1) + "s" : "—"}</span>
     </div>
   );
   const dots = ps.allBeatTypes || [];
   return (
-    <div style={{ textAlign: "center", padding: "6px 0" }}>
-      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginBottom: 4 }}>
+    <div style={{ textAlign: "center", padding: "6px 4px" }}>
+      <div style={{ display: "flex", justifyContent: "center", gap: 4, marginBottom: 4, flexWrap: "wrap" }}>
         {dots.map((bt, idx) => {
           const active = idx === ps.beatIndex;
           const dotColor = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.textMuted;
           return <div key={idx} style={{
-            width: active ? 14 : 8, height: active ? 14 : 8, borderRadius: "50%",
+            width: active ? 12 : 6, height: active ? 12 : 6, borderRadius: "50%",
             background: active ? dotColor : dotColor + "44",
-            boxShadow: active && ps.flash ? `0 0 12px ${dotColor}` : "none",
+            boxShadow: active && ps.flash ? `0 0 10px ${dotColor}` : "none",
             transition: "all 0.05s", alignSelf: "center"
           }} />;
         })}
       </div>
-      <div style={{ display: "flex", justifyContent: "center", alignItems: "baseline", gap: 8 }}>
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 12, color: C.textMuted }}>bar {ps.absoluteBar}</span>
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 700, color, opacity: ps.flash ? 1 : 0.7, transition: "opacity 0.05s" }}>{ps.tempo}</span>
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{ps.tsNum}/{ps.tsDen}</span>
+      <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color, opacity: ps.flash ? 1 : 0.7, transition: "opacity 0.05s", letterSpacing: 1 }}>{ps.tempo}</div>
+      <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
+        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>bar {ps.absoluteBar}</span>
+        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>{ps.tsNum}/{ps.tsDen}</span>
       </div>
     </div>
   );
@@ -84,76 +83,112 @@ function Panel({ label, color, sections, tl, ps, isP, met, soundSettings, onSoun
   const currentSi = ps?.sectionIndex ?? -1;
   return (
     <div style={{
-      flex: 1, minHeight: 0, display: "flex", flexDirection: "column",
-      background: C.surface + "44", borderRadius: 12, border: `1px solid ${color}33`,
+      flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
+      background: C.surface + "44", borderRadius: 10, border: `1px solid ${color}33`,
       overflow: "hidden"
     }}>
       {/* Panel header */}
       <div style={{
-        display: "flex", alignItems: "center", gap: 8, padding: "8px 12px",
-        borderBottom: `1px solid ${C.border}`, background: color + "08"
+        display: "flex", alignItems: "center", gap: 4, padding: "6px 8px",
+        borderBottom: `1px solid ${C.border}`, background: color + "08", flexShrink: 0
       }}>
         <div style={{
-          width: 24, height: 24, borderRadius: 6, background: color + "22",
+          width: 22, height: 22, borderRadius: 5, background: color + "22",
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "'Bebas Neue',sans-serif", fontSize: 14, color, letterSpacing: 1
+          fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, color, letterSpacing: 1, flexShrink: 0
         }}>{label}</div>
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, flex: 1 }}>
-          {sections.length} sec · {totalBars} bar{totalBars !== 1 ? "s" : ""}
+        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {sections.length}s · {totalBars}b
         </span>
-        {/* Sound toggle */}
-        <button onClick={onSoundToggle} data-tip={soundSettings.pitched ? "Pitched" : "Click"} style={{
-          background: "none", border: `1px solid ${C.border}`, borderRadius: 6,
-          padding: "3px 6px", cursor: "pointer", color: C.textMuted,
-          fontSize: 10, fontFamily: "'DM Mono',monospace"
+        <button onClick={onSoundToggle} style={{
+          background: "none", border: `1px solid ${C.border}`, borderRadius: 5,
+          padding: "2px 5px", cursor: "pointer", color: C.textMuted,
+          fontSize: 9, fontFamily: "'DM Mono',monospace", flexShrink: 0
         }}>{soundSettings.pitched ? "♪" : "◌"}</button>
-        {/* Play/Stop */}
         <button onClick={() => isP ? onStop() : onPlay(0)} disabled={!totalBars} style={{
-          width: 32, height: 32, borderRadius: "50%", border: "none",
+          width: 28, height: 28, borderRadius: "50%", border: "none",
           background: isP ? C.danger : color, color: isP ? "#fff" : "#000",
           cursor: totalBars ? "pointer" : "default", display: "flex",
-          alignItems: "center", justifyContent: "center",
+          alignItems: "center", justifyContent: "center", flexShrink: 0,
           opacity: totalBars ? 1 : 0.3,
-          boxShadow: isP ? `0 0 10px ${C.danger}44` : `0 0 10px ${color}33`,
+          boxShadow: isP ? `0 0 8px ${C.danger}44` : `0 0 8px ${color}33`,
           transition: "all 0.2s"
-        }}>{isP ? I.pause(14) : I.play(14)}</button>
+        }}>{isP ? I.pause(12) : I.play(12)}</button>
       </div>
 
       {/* Beat display */}
-      <BeatDisplay ps={ps} color={color} label={label} />
+      <div style={{ flexShrink: 0 }}>
+        <BeatDisplay ps={ps} color={color} />
+      </div>
 
       {/* Section list */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px 8px", display: "flex", flexDirection: "column", gap: 4 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px 6px", display: "flex", flexDirection: "column", gap: 3, minHeight: 0 }}>
         {sections.map((sec, i) => (
           <MiniSec key={sec.id} section={sec} index={i} onClick={() => onEditSec(sec.id)}
             onDelete={() => onDeleteSec(sec.id)} onStartHere={() => onStartHere(i)}
             canDelete={sections.length > 1 && !linked} isCurrent={currentSi === i} />
         ))}
         {!linked && <button onClick={onAddSec} style={{
-          width: "100%", padding: 8, borderRadius: 8, border: `1px dashed ${C.border}`,
+          width: "100%", padding: 6, borderRadius: 6, border: `1px dashed ${C.border}`,
           background: "transparent", color: C.textMuted, cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11
-        }}>{I.plus(14)}</button>}
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10
+        }}>{I.plus(12)}</button>}
       </div>
+    </div>
+  );
+}
+
+// ============ CENTER CONTROLS ============
+function CenterControls({ linked, toggleLink, copyAtoB, copyBtoA, isPA, isPB, linkedPlay, linkedStop, colorA, colorB }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      gap: 8, padding: "0 4px", flexShrink: 0, width: 44
+    }}>
+      {!linked && <button onClick={copyAtoB} style={{
+        background: "none", border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 4px",
+        color: C.textMuted, fontSize: 8, fontFamily: "'DM Mono',monospace", cursor: "pointer",
+        whiteSpace: "nowrap", lineHeight: 1
+      }}>A→B</button>}
+
+      <button onClick={toggleLink} style={{
+        background: linked ? colorA + "15" : C.surface, border: `1px solid ${linked ? colorA : C.border}`,
+        borderRadius: 8, padding: "6px 4px", cursor: "pointer", width: 36, height: 36,
+        color: linked ? colorA : C.textMuted, display: "flex",
+        alignItems: "center", justifyContent: "center", transition: "all 0.2s"
+      }}>
+        {I.sync(14)}
+      </button>
+
+      {linked && <button onClick={() => { if (isPA || isPB) linkedStop(); else linkedPlay(0); }} style={{
+        width: 36, height: 36, borderRadius: "50%", border: "none",
+        background: (isPA || isPB) ? C.danger : `linear-gradient(135deg, ${colorA}, ${colorB})`,
+        color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+        boxShadow: `0 0 12px ${(isPA || isPB) ? C.danger + "44" : colorA + "33"}`,
+        transition: "all 0.2s"
+      }}>{(isPA || isPB) ? I.pause(14) : I.play(14)}</button>}
+
+      {!linked && <button onClick={copyBtoA} style={{
+        background: "none", border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 4px",
+        color: C.textMuted, fontSize: 8, fontFamily: "'DM Mono',monospace", cursor: "pointer",
+        whiteSpace: "nowrap", lineHeight: 1
+      }}>B→A</button>}
     </div>
   );
 }
 
 // ============ MAIN DUAL TEMPO ============
 export default function DualTempo({ sections: initialSections, settings, onExit }) {
-  // Shared AudioContext — both metronomes use the same clock
   const ctxRef = useRef(null);
   if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
   useEffect(() => () => { if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null; } }, []);
 
-  // ---- Panel A state ----
   const [secA, setSecA] = useState(() => initialSections.map(s => ({ ...s })));
   const [psA, setPsA] = useState(null);
   const [isPA, setIsPA] = useState(false);
   const metA = useMetronome(ctxRef.current);
   const [soundA, setSoundA] = useState({ pitched: true, accented: true });
 
-  // ---- Panel B state (duplicate of A) ----
   const cloneForB = useCallback(secs => secs.map(s => ({ ...s, id: "b_" + String(s.id).replace(/^b_/, "") })), []);
   const [secB, setSecB] = useState(() => cloneForB(initialSections));
   const [psB, setPsB] = useState(null);
@@ -161,17 +196,14 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
   const metB = useMetronome(ctxRef.current);
   const [soundB, setSoundB] = useState({ pitched: false, accented: true });
 
-  // ---- Shared state ----
   const [linked, setLinked] = useState(true);
   const [editPanel, setEditPanel] = useState(null);
   const [editId, setEditId] = useState(null);
   const [editIsNew, setEditIsNew] = useState(false);
 
-  // ---- Timelines ----
   const tlA = useMemo(() => buildTL(secA), [secA]);
   const tlB = useMemo(() => buildTL(secB), [secB]);
 
-  // ---- Linked propagation: A changes → mirror to B ----
   const prevSecAJson = useRef(null);
   useEffect(() => {
     if (!linked) { prevSecAJson.current = null; return; }
@@ -181,11 +213,9 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     setSecB(cloneForB(secA));
   }, [linked, secA, cloneForB]);
 
-  // ---- Sound settings sync ----
   useEffect(() => { metA.updS({ ...soundA, muted: false }); }, [soundA, metA]);
   useEffect(() => { metB.updS({ ...soundB, muted: false }); }, [soundB, metB]);
 
-  // ---- Beat callbacks ----
   const ftoA = useRef(null);
   useEffect(() => {
     metA.setCb(evt => {
@@ -232,7 +262,6 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     });
   }, [metB, tlB]);
 
-  // ---- Play / Stop ----
   const ci = settings.countIn || 0;
 
   const goA = useCallback((fi = 0, syncDelayMs) => {
@@ -254,17 +283,15 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
   const stopA = useCallback(() => { metA.stop(); setIsPA(false); }, [metA]);
   const stopB = useCallback(() => { metB.stop(); setIsPB(false); }, [metB]);
 
-  // Linked play: start both from same bar index, same syncDelay
   const linkedPlay = useCallback((fi = 0) => {
-    const delay = 150; // ms — ensures both schedulers align on the same audio frame
-    metA.tap(); // prime audio context
+    const delay = 150;
+    metA.tap();
     goA(fi, delay);
     goB(fi, delay);
   }, [goA, goB, metA]);
 
   const linkedStop = useCallback(() => { stopA(); stopB(); }, [stopA, stopB]);
 
-  // ---- Panel play/stop handlers ----
   const handlePlayA = useCallback((fi = 0) => {
     metA.tap();
     if (linked) linkedPlay(fi); else goA(fi);
@@ -283,7 +310,6 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     if (linked) linkedStop(); else stopB();
   }, [linked, linkedStop, stopB]);
 
-  // ---- Start from section index ----
   const startHereA = useCallback(secIdx => {
     const fi = tlA.findIndex(b => b.si === secIdx);
     if (fi >= 0) handlePlayA(fi);
@@ -294,7 +320,6 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     if (fi >= 0) handlePlayB(fi);
   }, [tlB, handlePlayB]);
 
-  // ---- Section CRUD ----
   const addSecA = useCallback(() => {
     const ns = mkM();
     if (secA.length > 0) { const l = secA[secA.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } }
@@ -328,22 +353,18 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     if (editPanel === "A") deleteSecA(id); else deleteSecB(id);
   }, [editPanel, deleteSecA, deleteSecB]);
 
-  // ---- Copy A↔B ----
   const copyAtoB = useCallback(() => { setSecB(cloneForB(secA)); }, [secA, cloneForB]);
   const copyBtoA = useCallback(() => { setSecA(secB.map(s => ({ ...s, id: String(s.id).replace(/^b_/, "") || (Date.now() + Math.random()) }))); }, [secB]);
 
-  // ---- Toggle link ----
   const toggleLink = useCallback(() => {
-    // Stop both when toggling link state
     stopA(); stopB(); setPsA(null); setPsB(null);
     setLinked(l => !l);
   }, [stopA, stopB]);
 
-  // ---- Keyboard shortcuts ----
   useEffect(() => {
     const hk = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if (editId) return; // modal open
+      if (editId) return;
       if (e.code === "Space") {
         e.preventDefault();
         if (isPA || isPB) { if (linked) linkedStop(); else { stopA(); stopB(); } }
@@ -357,70 +378,39 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     return () => window.removeEventListener("keydown", hk);
   }, [isPA, isPB, linked, linkedStop, linkedPlay, stopA, stopB, goA, goB, editId, onExit]);
 
-  // ---- Colors ----
   const colorA = C.downbeat;
   const colorB = C.accent;
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 90, background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px 6px", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <span className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, letterSpacing: 2 }}>DUAL TEMPO</span>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px 4px", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 2 }}>DUAL TEMPO</span>
           <span style={{
-            padding: "2px 6px", borderRadius: 4, fontSize: 9, fontFamily: "'DM Mono',monospace",
+            padding: "2px 5px", borderRadius: 4, fontSize: 8, fontFamily: "'DM Mono',monospace",
             background: linked ? colorA + "22" : C.surface, color: linked ? colorA : C.textMuted,
             border: `1px solid ${linked ? colorA + "44" : C.border}`
           }}>{linked ? "LINKED" : "UNLINKED"}</span>
         </div>
-        <button className="close-btn" onClick={onExit}>{I.x(20)}</button>
+        <button className="close-btn" onClick={onExit} style={{ width: 36, height: 36 }}>{I.x(18)}</button>
       </div>
 
-      {/* Link bar */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, padding: "4px 16px 8px", flexShrink: 0 }}>
-        {!linked && <button onClick={copyAtoB} style={{
-          background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px",
-          color: C.textMuted, fontSize: 11, fontFamily: "'DM Mono',monospace", cursor: "pointer"
-        }}>A → B</button>}
-        <button onClick={toggleLink} style={{
-          background: linked ? colorA + "15" : C.surface, border: `1px solid ${linked ? colorA : C.border}`,
-          borderRadius: 8, padding: "6px 16px", cursor: "pointer",
-          color: linked ? colorA : C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif",
-          display: "flex", alignItems: "center", gap: 6, transition: "all 0.2s"
-        }}>
-          {I.sync(14)}
-          {linked ? "Linked" : "Link"}
-        </button>
-        {!linked && <button onClick={copyBtoA} style={{
-          background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 10px",
-          color: C.textMuted, fontSize: 11, fontFamily: "'DM Mono',monospace", cursor: "pointer"
-        }}>B → A</button>}
-      </div>
-
-      {/* Panels — compressed vertical stack */}
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, padding: "0 10px 10px", minHeight: 0, overflow: "hidden" }}>
+      {/* Main area: Panel A | Center Controls | Panel B — side by side */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "row", gap: 0, padding: "0 6px 8px", minHeight: 0, overflow: "hidden" }}>
         <Panel label="A" color={colorA} sections={secA} tl={tlA} ps={psA} isP={isPA} met={metA}
           soundSettings={soundA} onSoundToggle={() => setSoundA(p => ({ ...p, pitched: !p.pitched }))}
           onPlay={handlePlayA} onStop={handleStopA} onStartHere={startHereA}
           onAddSec={addSecA} onEditSec={editSecA} onDeleteSec={deleteSecA} linked={linked} />
+
+        <CenterControls linked={linked} toggleLink={toggleLink} copyAtoB={copyAtoB} copyBtoA={copyBtoA}
+          isPA={isPA} isPB={isPB} linkedPlay={linkedPlay} linkedStop={linkedStop} colorA={colorA} colorB={colorB} />
+
         <Panel label="B" color={colorB} sections={secB} tl={tlB} ps={psB} isP={isPB} met={metB}
           soundSettings={soundB} onSoundToggle={() => setSoundB(p => ({ ...p, pitched: !p.pitched }))}
           onPlay={handlePlayB} onStop={handleStopB} onStartHere={startHereB}
           onAddSec={addSecB} onEditSec={editSecB} onDeleteSec={deleteSecB} linked={linked} />
       </div>
-
-      {/* Linked master transport at bottom */}
-      {linked && <div style={{
-        flexShrink: 0, display: "flex", justifyContent: "center", padding: "8px 16px 20px", gap: 16
-      }}>
-        <button onClick={() => { if (isPA || isPB) linkedStop(); else linkedPlay(0); }} style={{
-          width: 52, height: 52, borderRadius: "50%", border: "none",
-          background: (isPA || isPB) ? C.danger : `linear-gradient(135deg, ${colorA}, ${colorB})`,
-          color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: `0 0 20px ${(isPA || isPB) ? C.danger + "44" : colorA + "33"}`,
-          transition: "all 0.2s"
-        }}>{(isPA || isPB) ? I.pause(22) : I.play(22)}</button>
-      </div>}
 
       {/* Section editor */}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew}
