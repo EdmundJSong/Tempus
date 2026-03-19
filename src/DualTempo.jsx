@@ -1,16 +1,96 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { useMetronome, useTapTempo } from "./metronome";
-import { C, mkM, mkT, buildTL, pG, pM } from "./utils";
+import { C, mkM, mkT, buildTL, pG, pM, _getLS, _setLS, gCD } from "./utils";
 import { I, SecEd, NoteSVG } from "./components";
 
-// ============ MINI SECTION CARD (compact for narrow panels) ============
-function MiniSec({ section: s, index: i, onClick, onDelete, onStartHere, canDelete, isCurrent }) {
+// ============ LANDSCAPE PROMPT ============
+const LS_KEY = "tempus_dual_landscape_dismissed";
+
+function LandscapePrompt({ onDismiss, onDontShowAgain }) {
+  const isLandscape = typeof window !== "undefined" && window.innerWidth > window.innerHeight;
+  if (isLandscape) return null;
+  return (
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.75)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)"
+    }} onClick={onDismiss}>
+      <div style={{
+        background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16,
+        padding: "28px 24px", maxWidth: 300, textAlign: "center",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.5)"
+      }} onClick={e => e.stopPropagation()}>
+        {/* Rotate animation */}
+        <div style={{ fontSize: 48, marginBottom: 12, lineHeight: 1 }}>
+          <span style={{ display: "inline-block", animation: "dualRotateHint 2s ease-in-out infinite" }}>📱</span>
+        </div>
+        <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>
+          Rotate for best experience
+        </div>
+        <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted, marginBottom: 20, lineHeight: 1.5 }}>
+          Dual Tempo works best in landscape mode so both panels have room to breathe.
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <button onClick={onDismiss} style={{
+            width: "100%", padding: 11, borderRadius: 8, border: "none",
+            background: C.downbeat, color: "#000", fontSize: 13, fontWeight: 600,
+            cursor: "pointer", fontFamily: "'Outfit',sans-serif"
+          }}>Got it</button>
+          <button onClick={onDontShowAgain} style={{
+            width: "100%", padding: 9, borderRadius: 8,
+            border: `1px solid ${C.border}`, background: "transparent",
+            color: C.textMuted, fontSize: 11, cursor: "pointer",
+            fontFamily: "'Outfit',sans-serif"
+          }}>Don't show this again</button>
+        </div>
+      </div>
+      <style>{`
+        @keyframes dualRotateHint {
+          0%, 100% { transform: rotate(0deg); }
+          30%, 70% { transform: rotate(90deg); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ============ TOAST ============
+function DualToast({ message }) {
+  if (!message) return null;
+  return (
+    <div style={{
+      position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 150,
+      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
+      padding: "10px 18px", boxShadow: "0 8px 30px rgba(0,0,0,0.5)",
+      fontSize: 12, color: C.text, fontFamily: "'Outfit',sans-serif",
+      animation: "dualToastUp 0.25s ease-out", whiteSpace: "nowrap"
+    }}>
+      {message}
+      <style>{`
+        @keyframes dualToastUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+      `}</style>
+    </div>
+  );
+}
+
+// ============ SECTION DURATION CALC ============
+function getSectionDuration(sec) {
+  if (sec.type === "timed") return sec.duration || 10;
+  const cpb = sec.tsNum || 4;
+  const bars = sec.loop ? 8 : (sec.bars || 1);
+  const cd = gCD(sec.tempo || 120, sec.beatUnit || "q", sec.dotted || false, sec.tsDen || 4);
+  return bars * cpb * cd;
+}
+
+// ============ MINI SECTION CARD ============
+function MiniSec({ section: s, index: i, onClick, onDelete, onStartHere, canDelete, isCurrent, heightPx }) {
   const isT = s.type === "timed";
   return (
     <div onClick={onClick} style={{
       background: isCurrent ? C.downbeat + "15" : C.surface, borderRadius: 6, padding: "6px 8px",
       border: `1px solid ${isCurrent ? C.downbeat + "66" : C.border}`, cursor: "pointer",
-      display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s", minHeight: 34
+      display: "flex", alignItems: "center", gap: 5, transition: "all 0.15s",
+      minHeight: Math.max(34, heightPx), height: Math.max(34, heightPx), flexShrink: 0
     }}>
       <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted, minWidth: 12, textAlign: "center" }}>{i + 1}</span>
       {isT ? (
@@ -76,9 +156,23 @@ function BeatDisplay({ ps, color }) {
   );
 }
 
+// ============ COMPUTE PROPORTIONAL HEIGHTS ============
+function useProportionalHeights(secA, secB) {
+  return useMemo(() => {
+    const allSections = [...secA, ...secB];
+    if (!allSections.length) return { heightsA: [], heightsB: [] };
+    const durA = secA.map(getSectionDuration);
+    const durB = secB.map(getSectionDuration);
+    const maxDur = Math.max(...durA, ...durB, 1);
+    const MIN_H = 34, MAX_H = 120, SCALE_BASE = 50;
+    const toH = d => Math.max(MIN_H, Math.min(MAX_H, MIN_H + (d / maxDur) * SCALE_BASE));
+    return { heightsA: durA.map(toH), heightsB: durB.map(toH) };
+  }, [secA, secB]);
+}
+
 // ============ PANEL ============
-function Panel({ label, color, sections, tl, ps, isP, met, soundSettings, onSoundToggle,
-  onPlay, onStop, onStartHere, onAddSec, onEditSec, onDeleteSec, linked }) {
+function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundToggle,
+  onPlay, onStop, onStartHere, onAddSec, onEditSec, onDeleteSec, canAdd, canEditSections, heights, onBlockedAction }) {
   const totalBars = tl.length;
   const currentSi = ps?.sectionIndex ?? -1;
   return (
@@ -124,14 +218,18 @@ function Panel({ label, color, sections, tl, ps, isP, met, soundSettings, onSoun
       {/* Section list */}
       <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px 6px", display: "flex", flexDirection: "column", gap: 3, minHeight: 0 }}>
         {sections.map((sec, i) => (
-          <MiniSec key={sec.id} section={sec} index={i} onClick={() => onEditSec(sec.id)}
-            onDelete={() => onDeleteSec(sec.id)} onStartHere={() => onStartHere(i)}
-            canDelete={sections.length > 1 && !linked} isCurrent={currentSi === i} />
+          <MiniSec key={sec.id} section={sec} index={i}
+            onClick={() => canEditSections ? onEditSec(sec.id) : onBlockedAction()}
+            onDelete={() => canEditSections ? onDeleteSec(sec.id) : onBlockedAction()}
+            onStartHere={() => onStartHere(i)}
+            canDelete={sections.length > 1 && canEditSections}
+            isCurrent={currentSi === i}
+            heightPx={heights[i] || 34} />
         ))}
-        {!linked && <button onClick={onAddSec} style={{
+        {canAdd && <button onClick={onAddSec} style={{
           width: "100%", padding: 6, borderRadius: 6, border: `1px dashed ${C.border}`,
           background: "transparent", color: C.textMuted, cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0
         }}>{I.plus(12)}</button>}
       </div>
     </div>
@@ -179,16 +277,35 @@ function CenterControls({ linked, toggleLink, copyAtoB, copyBtoA, isPA, isPB, li
 
 // ============ MAIN DUAL TEMPO ============
 export default function DualTempo({ sections: initialSections, settings, onExit }) {
+  // ---- Landscape prompt ----
+  const [showLandscape, setShowLandscape] = useState(() => {
+    try { return _getLS(LS_KEY) !== "1"; } catch { return true; }
+  });
+  const dismissLandscape = useCallback(() => setShowLandscape(false), []);
+  const dontShowLandscape = useCallback(() => { _setLS(LS_KEY, "1"); setShowLandscape(false); }, []);
+
+  // ---- Toast ----
+  const [toast, setToast] = useState(null);
+  const toastTimer = useRef(null);
+  const showToast = useCallback(msg => {
+    setToast(msg);
+    if (toastTimer.current) clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 2200);
+  }, []);
+
+  // ---- Shared AudioContext ----
   const ctxRef = useRef(null);
   if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
   useEffect(() => () => { if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null; } }, []);
 
+  // ---- Panel A state ----
   const [secA, setSecA] = useState(() => initialSections.map(s => ({ ...s })));
   const [psA, setPsA] = useState(null);
   const [isPA, setIsPA] = useState(false);
   const metA = useMetronome(ctxRef.current);
   const [soundA, setSoundA] = useState({ pitched: true, accented: true });
 
+  // ---- Panel B state ----
   const cloneForB = useCallback(secs => secs.map(s => ({ ...s, id: "b_" + String(s.id).replace(/^b_/, "") })), []);
   const [secB, setSecB] = useState(() => cloneForB(initialSections));
   const [psB, setPsB] = useState(null);
@@ -196,14 +313,20 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
   const metB = useMetronome(ctxRef.current);
   const [soundB, setSoundB] = useState({ pitched: false, accented: true });
 
+  // ---- Shared state ----
   const [linked, setLinked] = useState(true);
   const [editPanel, setEditPanel] = useState(null);
   const [editId, setEditId] = useState(null);
   const [editIsNew, setEditIsNew] = useState(false);
 
+  // ---- Timelines ----
   const tlA = useMemo(() => buildTL(secA), [secA]);
   const tlB = useMemo(() => buildTL(secB), [secB]);
 
+  // ---- Proportional heights ----
+  const { heightsA, heightsB } = useProportionalHeights(secA, secB);
+
+  // ---- Linked propagation: A → B ----
   const prevSecAJson = useRef(null);
   useEffect(() => {
     if (!linked) { prevSecAJson.current = null; return; }
@@ -213,9 +336,15 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     setSecB(cloneForB(secA));
   }, [linked, secA, cloneForB]);
 
+  // ---- Sound settings ----
   useEffect(() => { metA.updS({ ...soundA, muted: false }); }, [soundA, metA]);
   useEffect(() => { metB.updS({ ...soundB, muted: false }); }, [soundB, metB]);
 
+  // ---- Fix 3: Hot-swap timeline for live tempo updates ----
+  useEffect(() => { if (isPA) metA.hotSwapTL(tlA); }, [tlA, isPA, metA]);
+  useEffect(() => { if (isPB) metB.hotSwapTL(tlB); }, [tlB, isPB, metB]);
+
+  // ---- Beat callbacks ----
   const ftoA = useRef(null);
   useEffect(() => {
     metA.setCb(evt => {
@@ -262,6 +391,7 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     });
   }, [metB, tlB]);
 
+  // ---- Play / Stop ----
   const ci = settings.countIn || 0;
 
   const goA = useCallback((fi = 0, syncDelayMs) => {
@@ -320,6 +450,7 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     if (fi >= 0) handlePlayB(fi);
   }, [tlB, handlePlayB]);
 
+  // ---- Section CRUD ----
   const addSecA = useCallback(() => {
     const ns = mkM();
     if (secA.length > 0) { const l = secA[secA.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } }
@@ -327,16 +458,26 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
   }, [secA]);
 
   const addSecB = useCallback(() => {
+    if (linked) { showToast("Unlink to add sections to Panel B"); return; }
     const ns = mkM();
     if (secB.length > 0) { const l = secB[secB.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } }
     setSecB(p => [...p, ns]); setEditPanel("B"); setEditIsNew(true); setEditId(ns.id);
-  }, [secB]);
+  }, [secB, linked, showToast]);
 
   const deleteSecA = useCallback(id => { if (secA.length <= 1) return; setSecA(p => p.filter(s => s.id !== id)); }, [secA]);
-  const deleteSecB = useCallback(id => { if (secB.length <= 1) return; setSecB(p => p.filter(s => s.id !== id)); }, [secB]);
+  const deleteSecB = useCallback(id => {
+    if (linked) { showToast("Unlink to edit Panel B"); return; }
+    if (secB.length <= 1) return; setSecB(p => p.filter(s => s.id !== id));
+  }, [secB, linked, showToast]);
 
   const editSecA = useCallback(id => { setEditPanel("A"); setEditIsNew(false); setEditId(id); }, []);
-  const editSecB = useCallback(id => { setEditPanel("B"); setEditIsNew(false); setEditId(id); }, []);
+  const editSecB = useCallback(id => {
+    if (linked) { showToast("Unlink to edit Panel B independently"); return; }
+    setEditPanel("B"); setEditIsNew(false); setEditId(id);
+  }, [linked, showToast]);
+
+  // ---- Blocked action handler for Panel B when linked ----
+  const blockedB = useCallback(() => { showToast("Unlink to edit Panel B independently"); }, [showToast]);
 
   const editSec = editPanel === "A" ? secA.find(s => s.id === editId) : editPanel === "B" ? secB.find(s => s.id === editId) : null;
 
@@ -353,14 +494,21 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     if (editPanel === "A") deleteSecA(id); else deleteSecB(id);
   }, [editPanel, deleteSecA, deleteSecB]);
 
-  const copyAtoB = useCallback(() => { setSecB(cloneForB(secA)); }, [secA, cloneForB]);
-  const copyBtoA = useCallback(() => { setSecA(secB.map(s => ({ ...s, id: String(s.id).replace(/^b_/, "") || (Date.now() + Math.random()) }))); }, [secB]);
+  // ---- Copy A↔B ----
+  const copyAtoB = useCallback(() => { setSecB(cloneForB(secA)); showToast("Copied A → B"); }, [secA, cloneForB, showToast]);
+  const copyBtoA = useCallback(() => { setSecA(secB.map(s => ({ ...s, id: String(s.id).replace(/^b_/, "") || (Date.now() + Math.random()) }))); showToast("Copied B → A"); }, [secB, showToast]);
 
+  // ---- Toggle link ----
   const toggleLink = useCallback(() => {
     stopA(); stopB(); setPsA(null); setPsB(null);
-    setLinked(l => !l);
-  }, [stopA, stopB]);
+    setLinked(l => {
+      if (!l) showToast("Panels linked — B mirrors A");
+      else showToast("Panels unlinked — edit independently");
+      return !l;
+    });
+  }, [stopA, stopB, showToast]);
 
+  // ---- Keyboard shortcuts ----
   useEffect(() => {
     const hk = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
@@ -378,6 +526,7 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     return () => window.removeEventListener("keydown", hk);
   }, [isPA, isPB, linked, linkedStop, linkedPlay, stopA, stopB, goA, goB, editId, onExit]);
 
+  // ---- Colors ----
   const colorA = C.downbeat;
   const colorB = C.accent;
 
@@ -386,7 +535,7 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px 4px", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 2 }}>DUAL TEMPO</span>
+          <span className="dt-grad" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 2 }}>DUAL TEMPO</span>
           <span style={{
             padding: "2px 5px", borderRadius: 4, fontSize: 8, fontFamily: "'DM Mono',monospace",
             background: linked ? colorA + "22" : C.surface, color: linked ? colorA : C.textMuted,
@@ -396,30 +545,38 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
         <button className="close-btn" onClick={onExit} style={{ width: 36, height: 36 }}>{I.x(18)}</button>
       </div>
 
-      {/* Main area: Panel A | Center Controls | Panel B — side by side */}
+      {/* Main area: Panel A | Center Controls | Panel B */}
       <div style={{ flex: 1, display: "flex", flexDirection: "row", gap: 0, padding: "0 6px 8px", minHeight: 0, overflow: "hidden" }}>
-        <Panel label="A" color={colorA} sections={secA} tl={tlA} ps={psA} isP={isPA} met={metA}
+        <Panel label="A" color={colorA} sections={secA} tl={tlA} ps={psA} isP={isPA}
           soundSettings={soundA} onSoundToggle={() => setSoundA(p => ({ ...p, pitched: !p.pitched }))}
           onPlay={handlePlayA} onStop={handleStopA} onStartHere={startHereA}
-          onAddSec={addSecA} onEditSec={editSecA} onDeleteSec={deleteSecA} linked={linked} />
+          onAddSec={addSecA} onEditSec={editSecA} onDeleteSec={deleteSecA}
+          canAdd={true} canEditSections={true} heights={heightsA} onBlockedAction={() => {}} />
 
         <CenterControls linked={linked} toggleLink={toggleLink} copyAtoB={copyAtoB} copyBtoA={copyBtoA}
           isPA={isPA} isPB={isPB} linkedPlay={linkedPlay} linkedStop={linkedStop} colorA={colorA} colorB={colorB} />
 
-        <Panel label="B" color={colorB} sections={secB} tl={tlB} ps={psB} isP={isPB} met={metB}
+        <Panel label="B" color={colorB} sections={secB} tl={tlB} ps={psB} isP={isPB}
           soundSettings={soundB} onSoundToggle={() => setSoundB(p => ({ ...p, pitched: !p.pitched }))}
           onPlay={handlePlayB} onStop={handleStopB} onStartHere={startHereB}
-          onAddSec={addSecB} onEditSec={editSecB} onDeleteSec={deleteSecB} linked={linked} />
+          onAddSec={addSecB} onEditSec={editSecB} onDeleteSec={deleteSecB}
+          canAdd={!linked} canEditSections={!linked} heights={heightsB} onBlockedAction={blockedB} />
       </div>
 
       {/* Section editor */}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew}
         editIndex={(editPanel === "A" ? secA : secB).findIndex(s => s.id === editId) + 1}
         onSave={handleSaveEdit} onClose={() => { setEditId(null); setEditPanel(null); }}
-        onDelete={((editPanel === "A" ? secA : secB).length > 1 && !linked) ? handleDeleteFromEditor : null} />}
+        onDelete={((editPanel === "A" ? secA : secB).length > 1 && (editPanel === "A" || !linked)) ? handleDeleteFromEditor : null} />}
+
+      {/* Landscape prompt */}
+      {showLandscape && <LandscapePrompt onDismiss={dismissLandscape} onDontShowAgain={dontShowLandscape} />}
+
+      {/* Toast */}
+      <DualToast message={toast} />
 
       <style>{`
-        .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .dt-grad { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
       `}</style>
     </div>
   );
