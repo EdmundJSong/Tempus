@@ -212,6 +212,16 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [vidPlaying, isYT]);
 
+  // Auto-stop at END marker
+  useEffect(() => {
+    if (endPt == null || !syncActiveRef.current || !vidPlaying) return;
+    if (currentTime >= endPt) {
+      try { if (playerRef.current?.pauseVideo) playerRef.current.pauseVideo(); } catch {}
+      met.stop(); setSyncActive(false); syncActiveRef.current = false;
+      setSyncEnded(true);
+    }
+  }, [currentTime, endPt, vidPlaying, met]);
+
   const seekTo = useCallback(t => { try { if (playerRef.current?.seekTo) { playerRef.current.seekTo(t, true); setCurrentTime(t); } else if (playerRef.current?.setCurrentTime) { playerRef.current.setCurrentTime(t); setCurrentTime(t); } } catch {} }, []);
 
   const getElapsedToBar = useCallback((tlArr, barIdx) => {
@@ -483,14 +493,14 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
 
       {!hasSync && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube, Vimeo, and SoundCloud.</div></div>}
       </div>
-      {showVidSave && <SaveM sections={sections} onClose={() => { setShowVidSave(false); initSnap.current = { sections: JSON.stringify(sections), startPt, endPt }; if (showClosePrompt) { setShowClosePrompt(false); onClose(); } }} onSaved={() => {}} videoUrl={videoUrl} videoSync={{ start: startPt, end: endPt }} loadedProfileId={loadedProfileId} />}
+      {showVidSave && <SaveM sections={sections} onClose={() => { setShowVidSave(false); }} onSaved={() => { initSnap.current = { sections: JSON.stringify(sections), startPt, endPt }; if (showClosePrompt) { setShowClosePrompt(false); onClose(); } }} videoUrl={videoUrl} videoSync={{ start: startPt, end: endPt }} loadedProfileId={loadedProfileId} />}
       {showClosePrompt && !showVidSave && <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowClosePrompt(false)}>
         <div className="modal-content" style={{ width: "100%", maxWidth: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, padding: "24px 20px", textAlign: "center" }} onClick={e => e.stopPropagation()}>
           <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>Unsaved Changes</div>
           <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20, fontFamily: "'Outfit',sans-serif" }}>You have unsaved changes in this session.</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <button onClick={() => { setShowClosePrompt(false); setShowVidSave(true); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Save Changes</button>
-            <button onClick={() => { setShowClosePrompt(false); onClose(); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.danger}55`, background: "transparent", color: C.danger, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Discard</button>
+            <button onClick={() => { setShowClosePrompt(false); if (onUpdateSections) { try { onUpdateSections(JSON.parse(initSnap.current.sections)); } catch {} } onClose(); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.danger}55`, background: "transparent", color: C.danger, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Discard</button>
             <button onClick={() => setShowClosePrompt(false)} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Cancel</button>
           </div>
         </div>
