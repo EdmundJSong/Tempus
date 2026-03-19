@@ -3,42 +3,47 @@ import { C, BU, pG, sG, pM, mkM, mkT, mkBeatMap } from "./utils";
 import { useTapTempo } from "./metronome";
 
 // ============ ICONS ============
-const Icon = ({ d, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 24 24" }) => (
+const Icon = ({ d, children, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 24 24" }) => (
   <svg width={size} height={size} viewBox={viewBox} fill={fill} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    {Array.isArray(d) ? d.map((p, i) => React.isValidElement(p) ? React.cloneElement(p, { key: i }) : <path key={i} d={p} vectorEffect="non-scaling-stroke" />)
-      : React.isValidElement(d) ? d : <path d={d} vectorEffect="non-scaling-stroke" />}
+    {d && <path d={d} vectorEffect="non-scaling-stroke" />}
+    {children}
   </svg>
 );
 
 export const SyncIcon = ({ size = 18 }) => (
-  <Icon size={size} d={["M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71", "M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"]} />
+  <Icon size={size} d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71 M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
 );
+
 export const I = {
   play: s => <Icon size={s || 18} d="M5 3l14 9-14 9V3z" fill="none" strokeWidth={1.5} />,
-  pause: s => <Icon size={s || 18} d={[<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />, <rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor" stroke="none" />]} />,
+  pause: s => <Icon size={s || 18} fill="currentColor" stroke="none"><rect x="6" y="4" width="4" height="16" rx="1" /><rect x="14" y="4" width="4" height="16" rx="1" /></Icon>,
   chevL: s => <Icon size={s || 18} d="M15 18l-6-6 6-6" />,
   chevR: s => <Icon size={s || 18} d="M9 18l6-6-6-6" />,
-  plus: s => <Icon size={s || 20} d={["M12 5v14", "M5 12h14"]} />,
-  trash: s => <Icon size={s || 16} d={["M3 6h18", "M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2", "M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"]} />,
-  copy: s => <Icon size={s || 16} d={["M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2", "M12 8h6a2 2 0 012 2v8a2 2 0 01-2 2h-6a2 2 0 01-2-2v-8a2 2 0 012-2z"]} />,
-  arrowUp: s => <Icon size={s || 16} d="M12 19V5M5 12l7-7 7 7" />,
-  arrowDown: s => <Icon size={s || 16} d="M12 5v14M5 12l7 7 7-7" />,
-  x: s => <Icon size={s || 18} d={["M18 6L6 18", "M6 6l12 12"]} />,
-  volOn: s => <Icon size={s || 18} d={["M11 5L6 9H2v6h4l5 4V5z", "M19.07 4.93a10 10 0 010 14.14", "M15.54 8.46a5 5 0 010 7.07"]} />,
-  volOff: s => <Icon size={s || 18} d={["M11 5L6 9H2v6h4l5 4V5z", "M23 9l-6 6", "M17 9l6 6"]} />,
-  clock: s => <Icon size={s || 18} d={[<circle cx="12" cy="12" r="10" />, <path d="M12 6v6l4 2" />]} />,
-  music: s => <Icon size={s || 14} d={["M9 18V5l12-2v13", "M9 18a3 3 0 11-6 0 3 3 0 016 0z", "M21 16a3 3 0 11-6 0 3 3 0 016 0z"]} />,
-  gear: s => <Icon size={s || 18} d={[<circle cx="12" cy="12" r="3" />, <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />]} />,
+  plus: s => <Icon size={s || 20} d="M12 5v14 M5 12h14" />,
+  trash: s => <Icon size={s || 16} d="M3 6h18 M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2 M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />,
+  copy: s => <Icon size={s || 16} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2 M12 8h6a2 2 0 012 2v8a2 2 0 01-2 2h-6a2 2 0 01-2-2v-8a2 2 0 012-2z" />,
+  arrowUp: s => <Icon size={s || 16} d="M12 19V5 M5 12l7-7 7 7" />,
+  arrowDown: s => <Icon size={s || 16} d="M12 5v14 M5 12l7 7 7-7" />,
+  x: s => <Icon size={s || 18} d="M18 6L6 18 M6 6l12 12" />,
+  volOn: s => <Icon size={s || 18} d="M11 5L6 9H2v6h4l5 4V5z M19.07 4.93a10 10 0 010 14.14 M15.54 8.46a5 5 0 010 7.07" />,
+  volOff: s => <Icon size={s || 18} d="M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6" />,
+  clock: s => <Icon size={s || 18} d="M12 6v6l4 2"><circle cx="12" cy="12" r="10" /></Icon>,
+  music: s => <Icon size={s || 14} d="M9 18V5l12-2v13 M9 18a3 3 0 11-6 0 3 3 0 016 0z M21 16a3 3 0 11-6 0 3 3 0 016 0z" />,
+  gear: s => <Icon size={s || 18} d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"><circle cx="12" cy="12" r="3" /></Icon>,
   arrow: s => <Icon size={s || 14} d="M5 12h14m-7-7l7 7-7 7" />,
-  restart: s => <Icon size={s || 18} d={["M1 4v6h6", "M3.51 15a9 9 0 102.13-9.36L1 10"]} />,
-  save: s => <Icon size={s || 18} d={["M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z", "M17 21v-8H7v8", "M7 3v5h8"]} />,
+  restart: s => <Icon size={s || 18} d="M1 4v6h6 M3.51 15a9 9 0 102.13-9.36L1 10" />,
+  save: s => <Icon size={s || 18} d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z M17 21v-8H7v8 M7 3v5h8" />,
   folder: s => <Icon size={s || 18} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />,
-  search: s => <Icon size={s || 18} d={["M11 17a6 6 0 100-12 6 6 0 000 12z", "M21 21l-4.35-4.35"]} />,
-  rec: s => <Icon size={s || 18} d={[<circle cx="12" cy="12" r="10" />, <circle cx="12" cy="12" r="4" fill="currentColor" stroke="none" />]} />,
-  target: s => <Icon size={s || 18} d={["M12 22a10 10 0 100-20 10 10 0 000 20z", "M12 18a6 6 0 100-12 6 6 0 000 12z", "M12 14a2 2 0 100-4 2 2 0 000 4z"]} />,
-  loop: s => <Icon size={s || 16} d={["M17 1l4 4-4 4", "M3 11V9a4 4 0 014-4h14", "M7 23l-4-4 4-4", "M21 13v2a4 4 0 01-4 4H3"]} />,
+  search: s => <Icon size={s || 18} d="M11 17a6 6 0 100-12 6 6 0 000 12z M21 21l-4.35-4.35" />,
+  rec: s => <Icon size={s || 18} fill="currentColor" stroke="none"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth={1.5} /><circle cx="12" cy="12" r="4" /></Icon>,
+  target: s => <Icon size={s || 18} d="M12 22a10 10 0 100-20 10 10 0 000 20z M12 18a6 6 0 100-12 6 6 0 000 12z M12 14a2 2 0 100-4 2 2 0 000 4z" />,
+  loop: s => <Icon size={s || 16} d="M17 1l4 4-4 4 M3 11V9a4 4 0 014-4h14 M7 23l-4-4 4-4 M21 13v2a4 4 0 01-4 4H3" />,
   sync: s => <SyncIcon size={s || 18} />,
-  fileNew: s => <Icon size={s || 18} d={["M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z", "M14 2v6h6", "M12 18v-6", "M9 15h6"]} />,
+  fileNew: s => <Icon size={s || 18} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M12 18v-6 M9 15h6" />,
+  swap: s => <Icon size={s || 16} d="M8 7L4 11l4 4 M4 11h11 M16 17l4-4-4-4 M20 13H9" />,
+  unlink: s => <Icon size={s || 18} d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71 M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71 M8 8l8 8" />,
+  desktop: s => <Icon size={s || 24} d="M20 17H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2z M12 17v4 M8 21h8" />,
+  fermata: s => <Icon size={s || 18}><path d="M4 14 Q12 2 20 14" vectorEffect="non-scaling-stroke" /><circle cx="12" cy="14" r="2" fill="currentColor" stroke="none" /></Icon>
 };
 
 // ============ SVG NOTE ============
@@ -164,7 +169,7 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
                 <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 56, marginBottom: 6 }}>
                   <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{idx + 1}</div>
                   <NI value={b.tempo} onChange={v => updBeat(idx, "tempo", v)} min={10} max={400} step={1} style={{ width: 52, height: 36, fontSize: 14 }} />
-                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} data-tip="Fermata" style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14 }}>𝄐</button>
+                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} data-tip="Fermata" style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14, display: "flex", alignItems: "center" }}>{I.fermata(18)}</button>
                   {b.fermata && <>
                     <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                       <NI value={b.fermataHold} onChange={v => updBeat(idx, "fermataHold", v)} min={0} max={16} step={0.5} style={{ width: 40, height: 24, fontSize: 11 }} />
