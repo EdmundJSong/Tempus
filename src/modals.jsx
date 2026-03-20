@@ -8,24 +8,108 @@ import { t, ACTIVE_LANGS, LANG_LABELS, getLang } from "./i18n";
 // All setting explanations should use data-tip or data-tip-b tooltip attributes only.
 // Keep the settings UI clean and minimal — no prose descriptions.
 export function SetP({ settings: s, onChange, onClose, isLinked, onOpenDevices, linkColor }) {
-  const u = (k, v) => onChange({ ...s, [k]: v }); const LC = linkColor || "#ec4899"; return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px" }} onClick={e => e.stopPropagation()}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{t("settings")}</div><button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button></div>
-    <SR l={t("sr_mode")}>{[["basic", t("mode_simple")], ["default", t("mode_standard")], ["advanced", t("mode_pro")]].map(([v, label]) => <button key={v} onClick={() => u("appMode", v)} style={oB(s.appMode === v)}>{label}</button>)}</SR>
-    <SR l={t("sr_click")}>{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} data-tip={v === "accented" ? t("tip_accented") : t("tip_flat")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>)}</SR><SR l={t("sr_sound")}>{(() => { const all = ["sine", "noise", "wood", "rim", "clave", "cowbell"]; const labels = { sine: t("sound_sine"), noise: t("sound_noise"), wood: t("sound_wood_full"), rim: t("sound_rim_full"), clave: t("sound_clave"), cowbell: t("sound_cowbell_full") }; const opts = s.appMode === "advanced" ? all : all.slice(0, 2); const idx = Math.max(0, opts.indexOf(s.clickSound)); const prev = () => u("clickSound", opts[(idx - 1 + opts.length) % opts.length]); const next = () => u("clickSound", opts[(idx + 1) % opts.length]); const tsBtn = { minWidth: 44, minHeight: 44, background: "none", border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }; return <div style={{ display: "flex", alignItems: "center", flex: 1 }}><button onClick={prev} style={tsBtn}>{I.chevL(16)}</button><div style={{ flex: 1, textAlign: "center", fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace", userSelect: "none", minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}>{labels[opts[idx]] || opts[idx]}</div><button onClick={next} style={tsBtn}>{I.chevR(16)}</button></div>; })()}</SR><SR l={t("sr_beats")}>{[false, true].map(v => <button key={String(v)} onClick={() => u("downbeatOnly", v)} style={oB(s.downbeatOnly === v)}>{v ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>)}</SR><SR l={t("sr_visual")}>{[["dots", "●", t("vis_pulse")], ["dots+flash", "● ◻", t("vis_full")], ["flash", "◻", t("vis_flash")]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</SR><SR l={t("sr_count_in")}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "○" : v}</button>)}</SR>
-    {s.appMode === "advanced" && <SR l={t("sr_silent_cycle")}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[0, 4, 8, 12, 16].map(v => <button key={v} onClick={() => u("silentInterval", v)} data-tip={v === 0 ? t("tip_always_audible") : `${v}${t("tip_silent_on")} ${v}${t("tip_silent_off")}`} style={{ ...oB(s.silentInterval === v), fontSize: 11 }}>{v === 0 ? "○" : `${v}s`}</button>)}</div></SR>}
-    {s.appMode === "advanced" && <SR l={t("sr_dual_tempo")}><button onClick={() => u("dualTempo", !s.dualTempo)} data-tip={t("tip_dual")} style={oB(!!s.dualTempo)}>{s.dualTempo ? "●" : "○"}</button></SR>}
-    <div style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("tempo_progress")}</span><button onClick={() => u("showTempoHistory", !s.showTempoHistory)} data-tip={t("tip_tempo_progress")} style={{ padding: "5px 14px", borderRadius: 6, border: `1px solid ${s.showTempoHistory ? C.practice : C.border}`, background: s.showTempoHistory ? C.practice + "22" : "transparent", color: s.showTempoHistory ? C.practice : C.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{s.showTempoHistory ? t("on") : t("off")}</button></div>
-    {s.appMode === "advanced" && <div style={{ marginBottom: 16, display: "flex", alignItems: "center", justifyContent: "space-between" }}><span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("offline_mode")}</span><button onClick={() => u("offlineMode", !s.offlineMode)} data-tip={t("tip_offline")} style={{ padding: "5px 14px", borderRadius: 6, border: `1px solid ${s.offlineMode ? C.danger : C.border}`, background: s.offlineMode ? C.danger + "22" : "transparent", color: s.offlineMode ? C.danger : C.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{s.offlineMode ? t("on") : t("off")}</button></div>}
-    <div style={{ marginTop: 16, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
+  const u = (k, v) => onChange({ ...s, [k]: v });
+  const LC = linkColor || "#ec4899";
+  const [open, setOpen] = useState(null);
+  const tog = id => setOpen(prev => prev === id ? null : id);
+  const isAdv = s.appMode === "advanced";
+
+  // --- value previews ---
+  const modeLabel = { basic: t("mode_simple"), default: t("mode_standard"), advanced: t("mode_pro") }[s.appMode] || t("mode_standard");
+  const clickPv = s.accented ? "● · · ·" : "· · · ·";
+  const soundLabels = { sine: t("sound_sine"), noise: t("sound_noise"), wood: t("sound_wood_full"), rim: t("sound_rim_full"), clave: t("sound_clave"), cowbell: t("sound_cowbell_full") };
+  const soundPv = soundLabels[s.clickSound] || s.clickSound;
+  const beatsPv = s.downbeatOnly ? "● ○ ○ ○" : "● ● ● ●";
+  const visPv = { dots: "●", "dots+flash": "● ◻", flash: "◻" }[s.visualMode] || "●";
+  const ciPv = s.countIn === 0 ? "○" : String(s.countIn);
+  const silPv = s.silentInterval === 0 ? "○" : `${s.silentInterval}s`;
+  const dualPv = s.dualTempo ? "●" : "○";
+  const tpPv = s.showTempoHistory ? t("on") : t("off");
+  const offPv = s.offlineMode ? t("on") : t("off");
+
+  // --- collapsible row ---
+  const aRow = (id, label, preview, children, condition = true) => {
+    if (!condition) return null;
+    const isOpen = open === id;
+    return (<div style={{ borderBottom: `1px solid ${C.border}22` }}>
+      <button onClick={() => tog(id)} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 2px", background: "none", border: "none", cursor: "pointer", color: C.text }}>
+        <span style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 8, color: C.textMuted + "88", transition: "transform 0.15s", transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", display: "inline-block" }}>▶</span>
+          {label}
+        </span>
+        {!isOpen && <span style={{ fontSize: 11, color: C.text, fontFamily: "'DM Mono',monospace", opacity: 0.7 }}>{preview}</span>}
+      </button>
+      {isOpen && <div style={{ padding: "4px 2px 12px" }}>{children}</div>}
+    </div>);
+  };
+
+  // --- sound carousel (extracted for clarity) ---
+  const soundOpts = isAdv ? ["sine", "noise", "wood", "rim", "clave", "cowbell"] : ["sine", "noise"];
+  const soundIdx = Math.max(0, soundOpts.indexOf(s.clickSound));
+  const prevSound = () => u("clickSound", soundOpts[(soundIdx - 1 + soundOpts.length) % soundOpts.length]);
+  const nextSound = () => u("clickSound", soundOpts[(soundIdx + 1) % soundOpts.length]);
+  const tsBtn = { minWidth: 44, minHeight: 44, background: "none", border: `1px solid ${C.border}`, color: C.textMuted, cursor: "pointer", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 };
+
+  return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}><div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}><div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{t("settings")}</div><button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button></div>
+
+    {aRow("mode", t("sr_mode"), modeLabel,
+      <div style={{ display: "flex", gap: 8 }}>{[["basic", t("mode_simple")], ["default", t("mode_standard")], ["advanced", t("mode_pro")]].map(([v, label]) => <button key={v} onClick={() => u("appMode", v)} style={oB(s.appMode === v)}>{label}</button>)}</div>
+    )}
+
+    {aRow("click", t("sr_click"), clickPv,
+      <div style={{ display: "flex", gap: 8 }}>{["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} data-tip={v === "accented" ? t("tip_accented") : t("tip_flat")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>)}</div>
+    )}
+
+    {aRow("sound", t("sr_sound"), soundPv,
+      <div style={{ display: "flex", alignItems: "center" }}><button onClick={prevSound} style={tsBtn}>{I.chevL(16)}</button><div style={{ flex: 1, textAlign: "center", fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace", userSelect: "none", minHeight: 44, display: "flex", alignItems: "center", justifyContent: "center" }}>{soundLabels[soundOpts[soundIdx]] || soundOpts[soundIdx]}</div><button onClick={nextSound} style={tsBtn}>{I.chevR(16)}</button></div>
+    )}
+
+    {aRow("beats", t("sr_beats"), beatsPv,
+      <div style={{ display: "flex", gap: 8 }}>{[false, true].map(v => <button key={String(v)} onClick={() => u("downbeatOnly", v)} style={oB(s.downbeatOnly === v)}>{v ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>)}</div>
+    )}
+
+    {aRow("visual", t("sr_visual"), visPv,
+      <div style={{ display: "flex", gap: 8 }}>{[["dots", "●", t("vis_pulse")], ["dots+flash", "● ◻", t("vis_full")], ["flash", "◻", t("vis_flash")]].map(([v, l, tip]) => <button key={v} onClick={() => u("visualMode", v)} data-tip={tip} style={{ ...oB(s.visualMode === v), fontSize: 11 }}>{l}</button>)}</div>
+    )}
+
+    {aRow("countIn", t("sr_count_in"), ciPv,
+      <div style={{ display: "flex", gap: 8 }}>{[0, 1, 2].map(v => <button key={v} onClick={() => u("countIn", v)} style={oB(s.countIn === v)}>{v === 0 ? "○" : v}</button>)}</div>
+    )}
+
+    {aRow("silent", t("sr_silent_cycle"), silPv,
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[0, 4, 8, 12, 16].map(v => <button key={v} onClick={() => u("silentInterval", v)} data-tip={v === 0 ? t("tip_always_audible") : `${v}${t("tip_silent_on")} ${v}${t("tip_silent_off")}`} style={{ ...oB(s.silentInterval === v), fontSize: 11 }}>{v === 0 ? "○" : `${v}s`}</button>)}</div>,
+    isAdv)}
+
+    {aRow("dual", t("sr_dual_tempo"), dualPv,
+      <button onClick={() => u("dualTempo", !s.dualTempo)} data-tip={t("tip_dual")} style={oB(!!s.dualTempo)}>{s.dualTempo ? "●" : "○"}</button>,
+    isAdv)}
+
+    {aRow("tempo", t("tempo_progress"), tpPv,
+      <button onClick={() => u("showTempoHistory", !s.showTempoHistory)} data-tip={t("tip_tempo_progress")} style={{ padding: "5px 14px", borderRadius: 6, border: `1px solid ${s.showTempoHistory ? C.practice : C.border}`, background: s.showTempoHistory ? C.practice + "22" : "transparent", color: s.showTempoHistory ? C.practice : C.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{s.showTempoHistory ? t("on") : t("off")}</button>,
+    s.appMode !== "basic")}
+
+    {aRow("offline", t("offline_mode"), offPv,
+      <button onClick={() => u("offlineMode", !s.offlineMode)} data-tip={t("tip_offline")} style={{ padding: "5px 14px", borderRadius: 6, border: `1px solid ${s.offlineMode ? C.danger : C.border}`, background: s.offlineMode ? C.danger + "22" : "transparent", color: s.offlineMode ? C.danger : C.textMuted, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{s.offlineMode ? t("on") : t("off")}</button>,
+    isAdv)}
+
+    {/* Language pills — intentionally outside the accordion.
+        Unlike other settings rows, Language has no label and no collapsible wrapper.
+        This non-uniformity is deliberate: the pills are compact enough to always show,
+        they serve as a quick-access control, and collapsing them behind a label
+        would hide the very UI needed to read that label in a foreign script. */}
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", padding: "12px 0 8px", borderTop: `1px solid ${C.border}22` }}>{ACTIVE_LANGS.map(l => <button key={l} onClick={() => u("lang", l)} style={{ ...oB((s.lang || "en") === l), minWidth: 44, fontSize: 13 }}>{LANG_LABELS[l]}</button>)}</div>
+
+    <div style={{ paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>{t("device_id")} {getDeviceId()}</div>
-        {s.appMode === "advanced" && onOpenDevices && <button onClick={() => { onClose(); setTimeout(onOpenDevices, 150); }} style={{ background: isLinked ? LC + "18" : "none", border: `1px solid ${isLinked ? LC : C.border}`, borderRadius: 8, color: isLinked ? LC : C.textMuted, padding: "4px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s", boxShadow: isLinked ? `0 0 8px ${LC}33` : "none" }}>
+        {isAdv && onOpenDevices && <button onClick={() => { onClose(); setTimeout(onOpenDevices, 150); }} style={{ background: isLinked ? LC + "18" : "none", border: `1px solid ${isLinked ? LC : C.border}`, borderRadius: 8, color: isLinked ? LC : C.textMuted, padding: "4px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s", boxShadow: isLinked ? `0 0 8px ${LC}33` : "none" }}>
           <div style={{ width: 6, height: 6, borderRadius: "50%", background: isLinked ? LC : C.textMuted, boxShadow: isLinked ? `0 0 4px ${LC}` : "none", transition: "all 0.2s" }} />
           {I.desktop(14)}
         </button>}
       </div>
       <div style={{ fontSize: 9, color: C.textMuted + "55", fontFamily: "'Outfit',sans-serif", marginTop: 4 }}>{t("data_local")}</div>
     </div>
-    <SR l={t("sr_lang")}><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{ACTIVE_LANGS.map(l => <button key={l} onClick={() => u("lang", l)} style={{ ...oB((s.lang || "en") === l), minWidth: 44, fontSize: 13 }}>{LANG_LABELS[l]}</button>)}</div></SR>
     </div></div>);
 }
 
