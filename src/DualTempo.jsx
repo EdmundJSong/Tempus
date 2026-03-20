@@ -349,7 +349,7 @@ function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundTogg
           background: "none", border: `1px solid ${C.border}`, borderRadius: 5,
           padding: "2px 5px", cursor: "pointer", color: C.textMuted,
           fontSize: 9, fontFamily: "'DM Mono',monospace", flexShrink: 0
-        }}>{soundSettings.pitched ? "♪" : "◌"}</button>
+        }}>{({ sine: "♪", noise: "◌", wood: "W", rim: "R", clave: "C", cowbell: "🔔" })[soundSettings.clickSound] || "♪"}</button>
         {!linked && (
           <button onClick={() => isP ? onStop() : onPlay(0)} disabled={!totalBars} style={{
             width: 28, height: 28, borderRadius: "50%", border: "none",
@@ -499,14 +499,14 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
   const [psA, setPsA] = useState(null);
   const [isPA, setIsPA] = useState(false);
   const metA = useMetronome(ctxRef.current);
-  const [soundA, setSoundA] = useState({ pitched: true, accented: true });
+  const [soundA, setSoundA] = useState({ clickSound: "sine", accented: true });
 
   const cloneForB = useCallback(secs => secs.map(s => ({ ...s, id: "b_" + String(s.id).replace(/^b_/, "") })), []);
   const [secB, setSecB] = useState(() => cloneForB(initialSections));
   const [psB, setPsB] = useState(null);
   const [isPB, setIsPB] = useState(false);
   const metB = useMetronome(ctxRef.current);
-  const [soundB, setSoundB] = useState({ pitched: false, accented: true });
+  const [soundB, setSoundB] = useState({ clickSound: "noise", accented: true });
 
   const [linked, setLinked] = useState(false);
   const [editPanel, setEditPanel] = useState(null);
@@ -778,7 +778,7 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
 
       <div style={{ flex: 1, display: "flex", flexDirection: "row", gap: 0, padding: "0 6px 8px", minHeight: 0, overflow: "hidden" }}>
         <Panel label="A" color={colorA} sections={secA} tl={tlA} ps={psA} isP={isPA}
-          soundSettings={soundA} onSoundToggle={() => setSoundA(p => ({ ...p, pitched: !p.pitched }))}
+          soundSettings={soundA} onSoundToggle={() => setSoundA(p => { const all = ["sine", "noise", "wood", "rim", "clave", "cowbell"]; const idx = Math.max(0, all.indexOf(p.clickSound)); return { ...p, clickSound: all[(idx + 1) % all.length] }; })}
           onPlay={handlePlayA} onStop={handleStopA} onStartHere={startHereA}
           onAddSec={addSecA} onEditSec={editSecA} onDeleteSec={deleteSecA} onMoveSec={moveSecA}
           canAdd={canEdit} canEdit={canEdit} linked={linked} heights={heightsA} drag={dragA}
@@ -789,7 +789,7 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
           colorA={colorA} colorB={colorB} linkedCountInPs={linkedCountInPs} />
 
         <Panel label="B" color={colorB} sections={secB} tl={tlB} ps={psB} isP={isPB}
-          soundSettings={soundB} onSoundToggle={() => setSoundB(p => ({ ...p, pitched: !p.pitched }))}
+          soundSettings={soundB} onSoundToggle={() => setSoundB(p => { const all = ["sine", "noise", "wood", "rim", "clave", "cowbell"]; const idx = Math.max(0, all.indexOf(p.clickSound)); return { ...p, clickSound: all[(idx + 1) % all.length] }; })}
           onPlay={handlePlayB} onStop={handleStopB} onStartHere={startHereB}
           onAddSec={addSecB} onEditSec={editSecB} onDeleteSec={deleteSecB} onMoveSec={moveSecB}
           canAdd={canEdit} canEdit={canEdit} linked={linked} heights={heightsB} drag={dragB}
