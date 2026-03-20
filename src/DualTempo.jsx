@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useMetronome, useTapTempo } from "./metronome";
 import { C, mkM, mkT, buildTL, pG, pM, _getLS, _setLS, gCD } from "./utils";
 import { I, SecEd, NoteSVG } from "./components";
+import { t } from "./i18n";
 
 // ============ LANDSCAPE PROMPT ============
 const LS_KEY = "tempus_dual_landscape_dismissed";
@@ -25,23 +26,23 @@ function LandscapePrompt({ onDismiss, onDontShowAgain }) {
           {I.desktop(48)}
         </div>
         <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>
-          Best on a larger screen
+          {t("dual_best_screen")}
         </div>
         <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted, marginBottom: 20, lineHeight: 1.5 }}>
-          Two side-by-side panels need room. Use portrait on mobile.
+          {t("dual_need_room")}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <button onClick={onDismiss} style={{
             width: "100%", padding: 11, borderRadius: 8, border: "none",
             background: C.downbeat, color: "#000", fontSize: 13, fontWeight: 600,
             cursor: "pointer", fontFamily: "'Outfit',sans-serif"
-          }}>Got it</button>
+          }}>{t("dual_got_it")}</button>
           <button onClick={onDontShowAgain} style={{
             width: "100%", padding: 9, borderRadius: 8,
             border: `1px solid ${C.border}`, background: "transparent",
             color: C.textMuted, fontSize: 11, cursor: "pointer",
             fontFamily: "'Outfit',sans-serif"
-          }}>Don't show this again</button>
+          }}>{t("dual_dont_show")}</button>
         </div>
       </div>
     </div>
@@ -285,7 +286,7 @@ function BeatDisplay({ ps, color, linkedCountIn }) {
     <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 11 }}>—</div>
   );
   if (ps.ended) return (
-    <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'Bebas Neue',sans-serif", fontSize: 14, letterSpacing: 1 }}>END</div>
+    <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'Bebas Neue',sans-serif", fontSize: 14, letterSpacing: 1 }}>{t("end_label")}</div>
   );
   if (ps.countIn) return (
     <div style={{ textAlign: "center", padding: "8px 4px" }}>
@@ -343,7 +344,7 @@ function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundTogg
           fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, color, letterSpacing: 1, flexShrink: 0
         }}>{label}</div>
         <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {sections.length} sec · {totalBars}b
+          {sections.length} {t("sec_unit")} · {totalBars}{t("bars_unit")}
         </span>
         <button onClick={onSoundToggle} style={{
           background: "none", border: `1px solid ${C.border}`, borderRadius: 5,
@@ -766,7 +767,7 @@ export default function DualTempo({ sections: initialSections, settings, onExit 
     <div style={{ position: "fixed", inset: 0, zIndex: 90, background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", display: "flex", flexDirection: "column", overflow: "hidden" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px 4px", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="dt-grad" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 2 }}>DUAL TEMPO</span>
+          <span className="dt-grad" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 2 }}>{t("dual_title")}</span>
           <span style={{
             padding: "2px 5px", borderRadius: 4, fontSize: 8, fontFamily: "'DM Mono',monospace",
             background: linked ? colorA + "22" : C.surface, color: linked ? colorA : C.textMuted,
