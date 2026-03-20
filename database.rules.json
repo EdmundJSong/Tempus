@@ -2,24 +2,17 @@
   "rules": {
     "link_codes": {
       "$code": {
-        // Anyone can read a code (for polling)
         ".read": true,
-        // Create: must have hostDeviceId, joinedDeviceId null, valid expiry
         ".write": true,
         ".validate": "newData.hasChildren(['hostDeviceId', 'createdAt', 'expiresAt'])",
         "joinedDeviceId": {
-          // Once set to a non-null string, cannot be changed
-          // (prevents a second joiner from overwriting)
           ".validate": "!data.exists() || data.val() == null || data.val() == newData.val()"
         },
         "clusterId": {
-          // Only writable once (host writes after cluster creation)
           ".validate": "newData.isString() && (!data.exists() || data.val() == null)"
         }
       }
     },
-
-    // Deny all other paths
     "$other": {
       ".read": false,
       ".write": false
