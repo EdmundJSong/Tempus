@@ -26,7 +26,7 @@ export default function Tempus() {
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
   const [showDual, setShowDual] = useState(false);
-  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false }; });
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const p = JSON.parse(saved); if (p.pitched !== undefined && !p.clickSound) { p.clickSound = p.pitched ? "sine" : "noise"; delete p.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, ...p }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
@@ -35,7 +35,7 @@ export default function Tempus() {
   const [pracSections, setPracSections] = useState(null);
   const [pracStep, setPracStep] = useState(0);
   const met = useMetronome();
-  const fto = useRef(null);
+  const flashFn = useRef(null);
   const splitPoints = useRef([]);
 
   const [pracPending, setPracPending] = useState(false);
@@ -96,23 +96,23 @@ export default function Tempus() {
   const totalBars = tl.length;
 
   useEffect(() => { met.updS({ muted }); }, [muted, met]);
-  useEffect(() => { met.updS({ accented: settings.accented, pitched: settings.pitched, downbeatOnly: settings.downbeatOnly, silentInterval: settings.silentInterval }); }, [settings.accented, settings.pitched, settings.downbeatOnly, settings.silentInterval]);
+  useEffect(() => { met.updS({ accented: settings.accented, clickSound: settings.clickSound, downbeatOnly: settings.downbeatOnly, silentInterval: settings.silentInterval }); }, [settings.accented, settings.clickSound, settings.downbeatOnly, settings.silentInterval]);
   useEffect(() => { if (isP) met.hotSwapTL(tl); }, [tl, isP, met]);
 
   useEffect(() => {
     met.setCb(evt => {
-      if (evt.type === "beat") { const bar = tl[evt.barIdx]; setPs({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: true, countIn: false, isTimed: false, fermata: false, pctLabel: pracSections ? `${pracStep}%` : null }); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
-      else if (evt.type === "countIn") { setPs(p => ({ ...p || {}, countIn: true, flash: true, isTimed: false, beatIndex: evt.beatInBar - 1, beatType: evt.beatInBar === 1 ? 0 : 2, tsNum: evt.totalBeats, tsDen: 0, allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2) })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
-      else if (evt.type === "timedStart") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, flash: true, beatType: 0, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.dur, tsNum: 0, tsDen: 0 })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
-      else if (evt.type === "timedTick") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.rem, flash: p?.flash || false, tsNum: 0, tsDen: 0, beatType: 0, totalMarkers: p?.totalMarkers || 0, markerIdx: p?.markerIdx || 0 })); }
-      else if (evt.type === "timedMarker") { setPs(p => ({ ...p || {}, flash: true, beatType: 0, totalMarkers: evt.tm, markerIdx: evt.mi })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      if (evt.type === "beat") { const bar = tl[evt.barIdx]; setPs({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: false, countIn: false, isTimed: false, fermata: false, pctLabel: pracSections ? `${pracStep}%` : null }); flashFn.current?.(evt.bt); }
+      else if (evt.type === "countIn") { const cbt = evt.beatInBar === 1 ? 0 : 2; setPs(p => ({ ...p || {}, countIn: true, flash: false, isTimed: false, beatIndex: evt.beatInBar - 1, beatType: cbt, tsNum: evt.totalBeats, tsDen: 0, allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2) })); flashFn.current?.(cbt); }
+      else if (evt.type === "timedStart") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, flash: false, beatType: 0, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.dur, tsNum: 0, tsDen: 0 })); flashFn.current?.(0); }
+      else if (evt.type === "timedTick") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.rem, flash: false, tsNum: 0, tsDen: 0, beatType: 0, totalMarkers: p?.totalMarkers || 0, markerIdx: p?.markerIdx || 0 })); }
+      else if (evt.type === "timedMarker") { setPs(p => ({ ...p || {}, flash: false, beatType: 0, totalMarkers: evt.tm, markerIdx: evt.mi })); flashFn.current?.(0); }
       else if (evt.type === "fermataHold") { setPs(p => ({ ...p || {}, fermata: true, fermataRem: evt.rem, fermataDur: evt.dur })); }
       else if (evt.type === "ended") { setPs(p => ({ ...p || {}, ended: true, flash: false, countIn: false, fermata: false })); setIsP(false); }
     });
   }, [met, tl, pracSections, pracStep]);
 
   const prePlayTempos = useRef(null);
-  const go = useCallback((fi = 0, countInOverride, syncDelayMs) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const ci = countInOverride !== undefined ? countInOverride : settings.countIn; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, ci, { accented: settings.accented, pitched: settings.pitched, muted, ...(syncDelayMs != null ? { syncDelayMs } : {}) }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
+  const go = useCallback((fi = 0, countInOverride, syncDelayMs) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const ci = countInOverride !== undefined ? countInOverride : settings.countIn; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, ci, { accented: settings.accented, clickSound: settings.clickSound, muted, ...(syncDelayMs != null ? { syncDelayMs } : {}) }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
   const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
   useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
   const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => prev.map((s, i) => ({ ...s, tempo: i < saved.length ? (saved[i] ?? s.tempo) : s.tempo }))); } } catch {} prePlayTempos.current = null; }, [met]);
@@ -154,7 +154,7 @@ export default function Tempus() {
         } else {
           if (isP) { met.stop(); setIsP(false); }
           else if (ps && (ps.ended || ps.countIn)) { met.tap(); go(0); }
-          else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }
+          else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, clickSound: settings.clickSound, muted }); } }
           else { met.tap(); go(0); }
         }
       }
@@ -347,7 +347,7 @@ export default function Tempus() {
         </div>
       </div>}
 
-      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
+      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} flashFnRef={flashFn} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, clickSound: settings.clickSound, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
       {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} isLinked={link.isLinked} onOpenDevices={() => link.setShowDeviceModal(true)} linkColor={link.LINK_COLOR} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} onVideoUrl={setVideoUrl} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
