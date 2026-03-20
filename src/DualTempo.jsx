@@ -1,106 +1,56 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useMetronome, useTapTempo } from "./metronome";
-import { C, mkM, mkT, buildTL, pG, pM, _getLS, _setLS, gCD } from "./utils";
-import { I, SecEd, NoteSVG } from "./components";
+import { useSync, SyncLobby, SyncStatusBar, SyncToast, useDeviceLink, DeviceLinkModal } from "./SyncMode";
+import { useMetronome } from "./metronome";
+import { useTapTempo } from "./metronome";
+import { C, _getLS, _setLS, mkM, buildTL, scaleSections, gCD, fbSyncDebounced } from "./utils";
+import { I, SecCard, SecEd } from "./components";
+import PlayView from "./PlayView";
+import VideoView from "./VideoView";
+import { SetP, SaveM, LibP, PracSetup } from "./modals";
+import DualTempo from "./DualTempo";
 
-// ============ LANDSCAPE PROMPT ============
-const LS_KEY = "tempus_dual_landscape_dismissed";
+// ============ MAIN ============
+export default function Tempus() {
+  const [sections, setSections] = useState(() => { try { const saved = _getLS("tempus_sections"); if (saved) { const parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length > 0) return parsed; } } catch {} return [mkM()]; });
+  useEffect(() => { _setLS("tempus_sections", JSON.stringify(sections)); fbSyncDebounced(sections); }, [sections]);
+  const [editId, setEditId] = useState(null);
+  const [editIsNew, setEditIsNew] = useState(false);
+  const [showSet, setShowSet] = useState(false);
+  const [showSave, setShowSave] = useState(false);
+  const [showLib, setShowLib] = useState(false);
+  const [videoUrl, setVideoUrl] = useState(() => _getLS("tempus_videoUrl") || null);
+  const [videoSync, setVideoSync] = useState(() => { try { const s = _getLS("tempus_videoSync"); return s ? JSON.parse(s) : null; } catch { return null; } });
+  const [showVideo, setShowVideo] = useState(false);
+  const [loadedProfileId, setLoadedProfileId] = useState(null);
+  useEffect(() => { if (videoUrl) _setLS("tempus_videoUrl", videoUrl); else { try { localStorage.removeItem("tempus_videoUrl"); } catch {} } }, [videoUrl]);
+  useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
+  const [showPrac, setShowPrac] = useState(false);
+  const [showDual, setShowDual] = useState(false);
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, ...JSON.parse(saved) }; } catch {} return { accented: true, pitched: true, visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false }; });
+  useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
+  const [muted, setMuted] = useState(false);
+  const [ps, setPs] = useState(null);
+  const [isP, setIsP] = useState(false);
+  const [mode, setMode] = useState("normal");
+  const [pracSections, setPracSections] = useState(null);
+  const [pracStep, setPracStep] = useState(0);
+  const met = useMetronome();
+  const fto = useRef(null);
+  const splitPoints = useRef([]);
 
-function LandscapePrompt({ onDismiss, onDontShowAgain }) {
-  // Show on small screens (phones) regardless of orientation
-  const isLargeScreen = typeof window !== "undefined" && Math.min(window.innerWidth, window.innerHeight) > 600;
-  if (isLargeScreen) return null;
-  return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.75)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)"
-    }} onClick={onDismiss}>
-      <div style={{
-        background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16,
-        padding: "28px 24px", maxWidth: 300, textAlign: "center",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.5)"
-      }} onClick={e => e.stopPropagation()}>
-        <div style={{ marginBottom: 16, lineHeight: 1, display: "flex", justifyContent: "center", color: C.textMuted }}>
-          {I.desktop(48)}
-        </div>
-        <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>
-          Best on a larger screen
-        </div>
-        <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 12, color: C.textMuted, marginBottom: 20, lineHeight: 1.5 }}>
-          Two side-by-side panels need room. Use portrait on mobile.
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <button onClick={onDismiss} style={{
-            width: "100%", padding: 11, borderRadius: 8, border: "none",
-            background: C.downbeat, color: "#000", fontSize: 13, fontWeight: 600,
-            cursor: "pointer", fontFamily: "'Outfit',sans-serif"
-          }}>Got it</button>
-          <button onClick={onDontShowAgain} style={{
-            width: "100%", padding: 9, borderRadius: 8,
-            border: `1px solid ${C.border}`, background: "transparent",
-            color: C.textMuted, fontSize: 11, cursor: "pointer",
-            fontFamily: "'Outfit',sans-serif"
-          }}>Don't show this again</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+  const [pracPending, setPracPending] = useState(false);
 
-// ============ TOAST ============
-function DualToast({ message }) {
-  if (!message) return null;
-  return (
-    <div style={{
-      position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", zIndex: 150,
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10,
-      padding: "10px 18px", boxShadow: "0 8px 30px rgba(0,0,0,0.5)",
-      fontSize: 12, color: C.text, fontFamily: "'Outfit',sans-serif",
-      animation: "dualToastUp 0.25s ease-out", whiteSpace: "nowrap"
-    }}>
-      {message}
-      <style>{`
-        @keyframes dualToastUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
-      `}</style>
-    </div>
-  );
-}
-
-// ============ SECTION DURATION CALC ============
-function getSectionDuration(sec) {
-  if (sec.type === "timed") return sec.duration || 10;
-  const cpb = sec.tsNum || 4;
-  const bars = sec.loop ? 8 : (sec.bars || 1);
-  const cd = gCD(sec.tempo || 120, sec.beatUnit || "q", sec.dotted || false, sec.tsDen || 4);
-  return bars * cpb * cd;
-}
-
-// ============ PROPORTIONAL HEIGHTS ============
-function useProportionalHeights(secA, secB) {
-  return useMemo(() => {
-    const allSections = [...secA, ...secB];
-    if (!allSections.length) return { heightsA: [], heightsB: [] };
-    const durA = secA.map(getSectionDuration);
-    const durB = secB.map(getSectionDuration);
-    const maxDur = Math.max(...durA, ...durB, 1);
-    const MIN_H = 40, MAX_H = 110, SCALE_BASE = 55;
-    const toH = d => Math.max(MIN_H, Math.min(MAX_H, MIN_H + (d / maxDur) * SCALE_BASE));
-    return { heightsA: durA.map(toH), heightsB: durB.map(toH) };
-  }, [secA, secB]);
-}
-
-// ============ PANEL DRAG HOOK ============
-function usePanelDrag(sections, setSections, canEdit) {
+  const [undoToast, setUndoToast] = useState(null);
+  const undoTimer = useRef(null);
+  useEffect(() => () => { if (undoTimer.current) clearTimeout(undoTimer.current); }, []);
   const [dragIdx, setDragIdx] = useState(null);
   const [dropIdx, setDropIdx] = useState(null);
+  // Touch drag reorder
   const [tDrag, setTDrag] = useState(null);
   const [tDropIdx, setTDropIdx] = useState(null);
   const cardRefs = useRef([]);
   const tDragTimer = useRef(null);
-
   const onGripTouchStart = useCallback((idx, e) => {
-    if (!canEdit) return;
     const touch = e.touches[0];
     const startY = touch.clientY;
     tDragTimer.current = setTimeout(() => {
@@ -109,8 +59,7 @@ function usePanelDrag(sections, setSections, canEdit) {
       setTDrag({ idx, startY, offsetY: 0, positions });
       setTDropIdx(idx);
     }, 300);
-  }, [canEdit]);
-
+  }, []);
   useEffect(() => {
     if (!tDrag) return;
     const onMove = e => {
@@ -139,682 +88,280 @@ function usePanelDrag(sections, setSections, canEdit) {
     document.addEventListener("touchend", onEnd);
     document.addEventListener("touchcancel", onEnd);
     return () => { document.removeEventListener("touchmove", onMove); document.removeEventListener("touchend", onEnd); document.removeEventListener("touchcancel", onEnd); };
-  }, [tDrag, tDropIdx, sections.length, setSections]);
-
+  }, [tDrag, tDropIdx, sections.length]);
   const cancelTouchDrag = useCallback(() => { if (tDragTimer.current) { clearTimeout(tDragTimer.current); tDragTimer.current = null; } }, []);
 
-  const handleDragStart = useCallback((e, idx) => { if (!canEdit) return; setDragIdx(idx); e.dataTransfer.effectAllowed = "move"; }, [canEdit]);
-  const handleDragEnter = useCallback((e, idx) => { setDropIdx(idx); e.preventDefault(); }, []);
-  const handleDragOver = useCallback(e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }, []);
-  const handleDragEnd = useCallback(() => { setDragIdx(null); setDropIdx(null); }, []);
-  const handleDrop = useCallback((e, idx) => {
-    e.preventDefault(); if (dragIdx === null || dragIdx === idx) { setDragIdx(null); setDropIdx(null); return; }
-    setSections(p => { const c = [...p]; const [m] = c.splice(dragIdx, 1); c.splice(idx, 0, m); return c; });
-    setDragIdx(null); setDropIdx(null);
-  }, [dragIdx, setSections]);
-
-  return { dragIdx, dropIdx, tDrag, tDropIdx, cardRefs, onGripTouchStart, cancelTouchDrag, handleDragStart, handleDragEnter, handleDragOver, handleDragEnd, handleDrop };
-}
-
-// ============ MINI SECTION CARD (main-page style) ============
-const MiniSec = React.forwardRef(function MiniSec({ section: s, index: i, total, onClick, onDelete, onStartHere, onMove,
-  canDelete, canEdit, isCurrent, linked, heightPx,
-  onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx,
-  onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx }, ref) {
-  const isT = s.type === "timed";
-  const [confirmDel, setConfirmDel] = useState(false);
-  const confirmTimer = useRef(null);
-
-  useEffect(() => () => { if (confirmTimer.current) clearTimeout(confirmTimer.current); }, []);
-  useEffect(() => { setConfirmDel(false); }, [linked]);
-
-  const handleDelete = useCallback(e => {
-    e.stopPropagation();
-    if (!canDelete) return;
-    if (!confirmDel) {
-      setConfirmDel(true);
-      if (confirmTimer.current) clearTimeout(confirmTimer.current);
-      confirmTimer.current = setTimeout(() => setConfirmDel(false), 2000);
-    } else {
-      setConfirmDel(false);
-      if (confirmTimer.current) clearTimeout(confirmTimer.current);
-      onDelete();
-    }
-  }, [canDelete, confirmDel, onDelete]);
-
-  const isDragging = tDrag?.idx === i;
-  const isDropTarget = tDropIdx === i && tDrag && tDrag.idx !== i;
-  const isDesktopDrag = dragIdx === i;
-  const isDesktopDrop = dropIdx === i && dragIdx !== null && dragIdx !== i;
-
-  return (
-    <div ref={ref}
-      draggable={canEdit}
-      onDragStart={canEdit ? e => onDragStart(e, i) : undefined}
-      onDragEnter={canEdit ? e => onDragEnter(e, i) : undefined}
-      onDragOver={canEdit ? onDragOver : undefined}
-      onDragEnd={canEdit ? onDragEnd : undefined}
-      onDrop={canEdit ? e => onDrop(e, i) : undefined}
-      onClick={canEdit ? onClick : undefined}
-      style={{
-        background: isCurrent ? C.downbeat + "12" : C.surface,
-        borderRadius: 10, padding: "6px 8px",
-        border: `1px solid ${isCurrent ? C.downbeat + "55" : (isDropTarget || isDesktopDrop) ? C.downbeat + "88" : C.border}`,
-        cursor: canEdit ? "pointer" : "default",
-        display: "flex", alignItems: "center", gap: 5, overflow: "hidden",
-        transition: "all 0.15s", opacity: (isDragging || isDesktopDrag) ? 0.4 : (!canEdit && !linked ? 0.5 : 1),
-        minHeight: Math.max(40, heightPx || 40), height: Math.max(40, heightPx || 40), flexShrink: 0,
-        transform: isDragging ? `translateY(${tDrag.offsetY}px)` : undefined,
-        zIndex: isDragging ? 10 : undefined,
-        borderTop: (isDropTarget || isDesktopDrop) ? `2px solid ${C.downbeat}` : undefined
-      }}>
-      {/* Left: grip / reorder arrows + index */}
-      <div
-        onTouchStart={canEdit ? e => onGripTouchStart(i, e) : undefined}
-        onTouchEnd={canEdit ? cancelTouchDrag : undefined}
-        onTouchCancel={canEdit ? cancelTouchDrag : undefined}
-        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0, flexShrink: 0, minWidth: 14, touchAction: "none" }}>
-        {canEdit && i > 0 ? (
-          <button onClick={e => { e.stopPropagation(); onMove(-1); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, lineHeight: 1, display: "flex" }}>{I.arrowUp(10)}</button>
-        ) : <span style={{ width: 14, height: 14 }}></span>}
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted, lineHeight: 1 }}>{i + 1}</span>
-        {canEdit && i < total - 1 ? (
-          <button onClick={e => { e.stopPropagation(); onMove(1); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 2, lineHeight: 1, display: "flex" }}>{I.arrowDown(10)}</button>
-        ) : <span style={{ width: 14, height: 14 }}></span>}
-      </div>
-
-      {isT ? (
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 4, minWidth: 0, overflow: "hidden" }}>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.text, fontWeight: 700 }}>{s.duration}s</span>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted }}>timed</span>
-        </div>
-      ) : (
-        <>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, minWidth: 20 }}>
-            <div style={{
-              fontFamily: "'DM Mono',monospace", fontWeight: 700, color: C.text, lineHeight: 1,
-              textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center"
-            }}>
-              <span style={{ fontSize: 14 }}>{s.tsNum}</span>
-              <div style={{ height: 1, width: "100%", background: C.textMuted + "88", margin: "1px 0" }} />
-              <span style={{ fontSize: 14 }}>{s.tsDen}</span>
-            </div>
-            {s.grouping && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 6, color: C.textMuted + "88", marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", maxWidth: 30 }}>{Array.isArray(s.grouping) ? s.grouping.join("+") : s.grouping}</span>}
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 2, flex: 1, minWidth: 0, overflow: "hidden" }}>
-            <NoteSVG type={s.beatUnit} dotted={s.dotted} size={12} />
-            <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>=</span>
-            <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 17, color: C.text, letterSpacing: 0.5 }}>{s.tempo}</span>
-          </div>
-        </>
-      )}
-
-      <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-        {!isT && (
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: s.loop ? C.downbeat : C.textMuted, whiteSpace: "nowrap" }}>
-            {s.loop ? "∞" : `${s.bars}b`}
-          </span>
-        )}
-        <button onClick={e => { e.stopPropagation(); onStartHere(); }} style={{
-          background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 1, display: "flex"
-        }}>{I.play(10)}</button>
-      </div>
-
-      {canDelete && (
-        <button onClick={handleDelete} style={{
-          background: confirmDel ? C.danger + "22" : "none",
-          border: confirmDel ? `1px solid ${C.danger}` : "none",
-          borderRadius: 4, color: confirmDel ? C.danger : C.danger + "66",
-          cursor: "pointer", padding: confirmDel ? "1px 4px" : 1,
-          display: "flex", alignItems: "center", gap: 2, flexShrink: 0,
-          fontSize: 8, fontFamily: "'DM Mono',monospace", transition: "all 0.15s"
-        }}>
-          {confirmDel ? "Del?" : I.trash(9)}
-        </button>
-      )}
-    </div>
-  );
-});
-
-// ============ BEAT DISPLAY ============
-function BeatDisplay({ ps, color, linkedCountIn }) {
-  if (linkedCountIn && ps?.countIn) return (
-    <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 11 }}>Counting...</div>
-  );
-  if (!ps) return (
-    <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 11 }}>Ready</div>
-  );
-  if (ps.ended) return (
-    <div style={{ textAlign: "center", padding: "10px 4px", color: C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12 }}>Ended</div>
-  );
-  if (ps.countIn) return (
-    <div style={{ textAlign: "center", padding: "8px 4px" }}>
-      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 16, color: C.textMuted, opacity: ps.flash ? 1 : 0.5, transition: "opacity 0.05s" }}>Count-in</span>
-    </div>
-  );
-  if (ps.isTimed) return (
-    <div style={{ textAlign: "center", padding: "6px 4px" }}>
-      <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 22, color, opacity: ps.flash ? 1 : 0.6, transition: "opacity 0.05s" }}>{ps.remaining != null ? ps.remaining.toFixed(1) + "s" : "—"}</span>
-    </div>
-  );
-  const dots = ps.allBeatTypes || [];
-  return (
-    <div style={{ textAlign: "center", padding: "6px 4px" }}>
-      <div style={{ display: "flex", justifyContent: "center", gap: 4, marginBottom: 4, flexWrap: "wrap" }}>
-        {dots.map((bt, idx) => {
-          const active = idx === ps.beatIndex;
-          const dotColor = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.textMuted;
-          return <div key={idx} style={{
-            width: active ? 12 : 6, height: active ? 12 : 6, borderRadius: "50%",
-            background: active ? dotColor : dotColor + "44",
-            boxShadow: active && ps.flash ? `0 0 10px ${dotColor}` : "none",
-            transition: "all 0.05s", alignSelf: "center"
-          }} />;
-        })}
-      </div>
-      <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, color, opacity: ps.flash ? 1 : 0.7, transition: "opacity 0.05s", letterSpacing: 1 }}>{ps.tempo}</div>
-      <div style={{ display: "flex", justifyContent: "center", gap: 6 }}>
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>bar {ps.absoluteBar}</span>
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted }}>{ps.tsNum}/{ps.tsDen}</span>
-      </div>
-    </div>
-  );
-}
-
-// ============ PANEL ============
-function Panel({ label, color, sections, tl, ps, isP, soundSettings, onSoundToggle,
-  onPlay, onStop, onStartHere, onAddSec, onEditSec, onDeleteSec, onMoveSec,
-  canAdd, canEdit, linked, heights, drag, linkedCountIn }) {
+  const activeSections = pracSections || sections;
+  const tl = useMemo(() => buildTL(activeSections), [activeSections]);
   const totalBars = tl.length;
-  const currentSi = ps?.sectionIndex ?? -1;
-  return (
-    <div style={{
-      flex: 1, minWidth: 0, display: "flex", flexDirection: "column",
-      background: C.surface + "44", borderRadius: 10, border: `1px solid ${color}33`,
-      overflow: "hidden"
-    }}>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 4, padding: "6px 8px",
-        borderBottom: `1px solid ${C.border}`, background: color + "08", flexShrink: 0
-      }}>
-        <div style={{
-          width: 22, height: 22, borderRadius: 5, background: color + "22",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: "'Bebas Neue',sans-serif", fontSize: 13, color, letterSpacing: 1, flexShrink: 0
-        }}>{label}</div>
-        <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 9, color: C.textMuted, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {sections.length}s · {totalBars}b
-        </span>
-        <button onClick={onSoundToggle} style={{
-          background: "none", border: `1px solid ${C.border}`, borderRadius: 5,
-          padding: "2px 5px", cursor: "pointer", color: C.textMuted,
-          fontSize: 9, fontFamily: "'DM Mono',monospace", flexShrink: 0
-        }}>{soundSettings.pitched ? "♪" : "◌"}</button>
-        {!linked && (
-          <button onClick={() => isP ? onStop() : onPlay(0)} disabled={!totalBars} style={{
-            width: 28, height: 28, borderRadius: "50%", border: "none",
-            background: isP ? C.danger : color, color: isP ? "#fff" : "#000",
-            cursor: totalBars ? "pointer" : "default", display: "flex",
-            alignItems: "center", justifyContent: "center", flexShrink: 0,
-            opacity: totalBars ? 1 : 0.3,
-            boxShadow: isP ? `0 0 8px ${C.danger}44` : `0 0 8px ${color}33`,
-            transition: "all 0.2s"
-          }}>{isP ? I.pause(12) : I.play(12)}</button>
-        )}
-      </div>
 
-      <div style={{ flexShrink: 0 }}>
-        <BeatDisplay ps={ps} color={color} linkedCountIn={linkedCountIn} />
-      </div>
-
-      <div style={{ flex: 1, overflowY: "auto", padding: "4px 6px 6px", display: "flex", flexDirection: "column", gap: 4, minHeight: 0 }}>
-        {sections.map((sec, i) => (
-          <MiniSec key={sec.id} ref={el => drag.cardRefs.current[i] = el}
-            section={sec} index={i} total={sections.length}
-            onClick={() => onEditSec(sec.id)}
-            onDelete={() => onDeleteSec(sec.id)}
-            onStartHere={() => onStartHere(i)}
-            onMove={d => onMoveSec(i, d)}
-            canDelete={sections.length > 1 && canEdit}
-            canEdit={canEdit}
-            isCurrent={currentSi === i}
-            linked={linked}
-            heightPx={heights[i] || 44}
-            onDragStart={drag.handleDragStart} onDragEnter={drag.handleDragEnter}
-            onDragOver={drag.handleDragOver} onDragEnd={drag.handleDragEnd}
-            onDrop={drag.handleDrop} dragIdx={drag.dragIdx} dropIdx={drag.dropIdx}
-            onGripTouchStart={drag.onGripTouchStart} cancelTouchDrag={drag.cancelTouchDrag}
-            tDrag={drag.tDrag} tDropIdx={drag.tDropIdx} />
-        ))}
-        {canAdd && <button onClick={onAddSec} style={{
-          width: "100%", padding: 10, borderRadius: 10, border: `1px dashed ${C.border}`,
-          background: "transparent", color: C.textMuted, cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, flexShrink: 0
-        }}>{I.plus(16)}</button>}
-      </div>
-    </div>
-  );
-}
-
-// ============ CENTER CONTROLS ============
-function CenterControls({ linked, toggleLink, swapPanels, isPA, isPB, linkedPlay, linkedStop,
-  colorA, colorB, linkedCountInPs }) {
-  const showCountIn = linked && linkedCountInPs?.countIn;
-  const isPlaying = isPA || isPB;
-  // Visibility rules:
-  // Link toggle + Swap: only when NOT playing
-  // Central play: only when linked
-  const showLink = !isPlaying;
-  const showSwap = !isPlaying;
-  return (
-    <div style={{
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      padding: "0 4px", flexShrink: 0, width: 48
-    }}>
-      {/* Slot 1: Swap — hidden during playback */}
-      <div style={{ height: 30, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-        {showSwap ? (
-          <button onClick={swapPanels} title="Swap A ↔ B" style={{
-            background: "none", border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 6px",
-            color: C.textMuted, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s"
-          }}>{I.swap(14)}</button>
-        ) : <div style={{ width: 36, height: 30 }} />}
-      </div>
-
-      {/* Slot 2: Link/Unlink — hidden during playback */}
-      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-        {showLink ? (
-          <button onClick={toggleLink} style={{
-            background: linked ? colorA + "15" : C.surface, border: `1px solid ${linked ? colorA : C.border}`,
-            borderRadius: 8, cursor: "pointer", width: 36, height: 36,
-            color: linked ? colorA : C.textMuted, display: "flex",
-            alignItems: "center", justifyContent: "center", transition: "all 0.2s"
-          }}>
-            {linked ? I.sync(14) : I.unlink(14)}
-          </button>
-        ) : <div style={{ width: 36, height: 36 }} />}
-      </div>
-
-      {/* Style for pulsing center button */}
-      <style>{`
-        @keyframes dtPulseCenter { 0% { box-shadow: 0 0 0 0px var(--dt-pulse-c, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
-      `}</style>
-      
-      {/* Slot 3: Central play — only when linked */}
-      <div style={{ height: 36, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: showCountIn ? 8 : 0 }}>
-        {linked ? (
-          <button onClick={() => { if (isPlaying) linkedStop(); else linkedPlay(0); }} style={{
-            width: 36, height: 36, borderRadius: "50%", border: "none",
-            background: isPlaying ? C.danger : `linear-gradient(135deg, ${colorA}, ${colorB})`,
-            color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            boxShadow: `0 0 12px ${isPlaying ? C.danger + "44" : colorA + "33"}`,
-            transition: "all 0.2s",
-            "--dt-pulse-c": isPlaying ? C.danger + "88" : colorA + "88",
-            animation: (isPlaying || showCountIn) ? "dtPulseCenter 1.5s infinite" : "none"
-          }}>{isPlaying ? I.pause(14) : I.play(14)}</button>
-        ) : (
-          <div style={{ width: 36, height: 36 }} />
-        )}
-      </div>
-
-      {/* Slot 4: merged count-in indicator */}
-      {showCountIn && (
-        <div style={{
-          display: "flex", flexDirection: "column", alignItems: "center", gap: 2
-        }}>
-          <div style={{
-            fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, color: C.text,
-            opacity: linkedCountInPs.flash ? 1 : 0.5, transition: "opacity 0.05s",
-            textShadow: linkedCountInPs.flash ? `0 0 12px ${colorA}` : "none"
-          }}>{(linkedCountInPs.beatIndex ?? 0) + 1}</div>
-          <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 8, color: C.textMuted }}>count-in</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============ MAIN DUAL TEMPO ============
-export default function DualTempo({ sections: initialSections, settings, onExit }) {
-  const [showLandscape, setShowLandscape] = useState(() => {
-    try { return _getLS(LS_KEY) !== "1"; } catch { return true; }
-  });
-  const dismissLandscape = useCallback(() => setShowLandscape(false), []);
-  const dontShowLandscape = useCallback(() => { _setLS(LS_KEY, "1"); setShowLandscape(false); }, []);
-
-  const [toast, setToast] = useState(null);
-  const toastTimer = useRef(null);
-  const showToast = useCallback(msg => {
-    setToast(msg);
-    if (toastTimer.current) clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 2200);
-  }, []);
-
-  const ctxRef = useRef(null);
-  if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-  useEffect(() => () => { if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null; } }, []);
-
-  const [secA, setSecA] = useState(() => initialSections.map(s => ({ ...s })));
-  const [psA, setPsA] = useState(null);
-  const [isPA, setIsPA] = useState(false);
-  const metA = useMetronome(ctxRef.current);
-  const [soundA, setSoundA] = useState({ pitched: true, accented: true });
-
-  const cloneForB = useCallback(secs => secs.map(s => ({ ...s, id: "b_" + String(s.id).replace(/^b_/, "") })), []);
-  const [secB, setSecB] = useState(() => cloneForB(initialSections));
-  const [psB, setPsB] = useState(null);
-  const [isPB, setIsPB] = useState(false);
-  const metB = useMetronome(ctxRef.current);
-  const [soundB, setSoundB] = useState({ pitched: false, accented: true });
-
-  const [linked, setLinked] = useState(false);
-  const [editPanel, setEditPanel] = useState(null);
-  const [editId, setEditId] = useState(null);
-  const [editIsNew, setEditIsNew] = useState(false);
-
-  const tlA = useMemo(() => buildTL(secA), [secA]);
-  const tlB = useMemo(() => buildTL(secB), [secB]);
-
-  const { heightsA, heightsB } = useProportionalHeights(secA, secB);
-
-  const canEdit = !linked;
-  const dragA = usePanelDrag(secA, setSecA, canEdit);
-  const dragB = usePanelDrag(secB, setSecB, canEdit);
-
-  useEffect(() => { metA.updS({ ...soundA, muted: false }); }, [soundA, metA]);
-  useEffect(() => { metB.updS({ ...soundB, muted: false }); }, [soundB, metB]);
-
-  useEffect(() => { if (isPA) metA.hotSwapTL(tlA); }, [tlA, isPA, metA]);
-  useEffect(() => { if (isPB) metB.hotSwapTL(tlB); }, [tlB, isPB, metB]);
-
-  const ftoA = useRef(null);
-  useEffect(() => {
-    metA.setCb(evt => {
-      if (evt.type === "beat") {
-        const bar = tlA[evt.barIdx];
-        setPsA({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: true, countIn: false, isTimed: false, ended: false });
-        if (ftoA.current) clearTimeout(ftoA.current);
-        ftoA.current = setTimeout(() => setPsA(p => p ? { ...p, flash: false } : p), 80);
-      } else if (evt.type === "countIn") {
-        setPsA(p => ({ ...p || {}, countIn: true, flash: true, isTimed: false, ended: false, beatIndex: evt.beatInBar - 1, beatType: evt.beatInBar === 1 ? 0 : 2, tsNum: evt.totalBeats, tsDen: 0, allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2) }));
-        if (ftoA.current) clearTimeout(ftoA.current);
-        ftoA.current = setTimeout(() => setPsA(p => p ? { ...p, flash: false } : p), 80);
-      } else if (evt.type === "timedStart" || evt.type === "timedTick") {
-        setPsA(p => ({ ...p || {}, isTimed: true, countIn: false, ended: false, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.rem ?? evt.dur, flash: evt.type === "timedStart" }));
-        if (evt.type === "timedStart") { if (ftoA.current) clearTimeout(ftoA.current); ftoA.current = setTimeout(() => setPsA(p => p ? { ...p, flash: false } : p), 80); }
-      } else if (evt.type === "fermataHold") {
-        setPsA(p => ({ ...p || {}, fermata: true, fermataRem: evt.rem }));
-      } else if (evt.type === "ended") {
-        setPsA(p => ({ ...p || {}, ended: true, flash: false })); setIsPA(false);
-      }
-    });
-  }, [metA, tlA]);
-
-  const ftoB = useRef(null);
-  useEffect(() => {
-    metB.setCb(evt => {
-      if (evt.type === "beat") {
-        const bar = tlB[evt.barIdx];
-        setPsB({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: true, countIn: false, isTimed: false, ended: false });
-        if (ftoB.current) clearTimeout(ftoB.current);
-        ftoB.current = setTimeout(() => setPsB(p => p ? { ...p, flash: false } : p), 80);
-      } else if (evt.type === "countIn") {
-        setPsB(p => ({ ...p || {}, countIn: true, flash: true, isTimed: false, ended: false, beatIndex: evt.beatInBar - 1, beatType: evt.beatInBar === 1 ? 0 : 2, tsNum: evt.totalBeats, tsDen: 0, allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2) }));
-        if (ftoB.current) clearTimeout(ftoB.current);
-        ftoB.current = setTimeout(() => setPsB(p => p ? { ...p, flash: false } : p), 80);
-      } else if (evt.type === "timedStart" || evt.type === "timedTick") {
-        setPsB(p => ({ ...p || {}, isTimed: true, countIn: false, ended: false, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.rem ?? evt.dur, flash: evt.type === "timedStart" }));
-        if (evt.type === "timedStart") { if (ftoB.current) clearTimeout(ftoB.current); ftoB.current = setTimeout(() => setPsB(p => p ? { ...p, flash: false } : p), 80); }
-      } else if (evt.type === "fermataHold") {
-        setPsB(p => ({ ...p || {}, fermata: true, fermataRem: evt.rem }));
-      } else if (evt.type === "ended") {
-        setPsB(p => ({ ...p || {}, ended: true, flash: false })); setIsPB(false);
-      }
-    });
-  }, [metB, tlB]);
-
-  const ci = settings.countIn || 0;
-
-  const goA = useCallback((fi = 0, syncDelayMs, ciOverride) => {
-    if (!tlA.length) return;
-    const i = Math.max(0, Math.min(fi, tlA.length - 1)), b = tlA[i];
-    setPsA({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, ended: false });
-    setIsPA(true);
-    metA.start(tlA, i, ciOverride != null ? ciOverride : ci, { ...soundA, muted: false, ...(syncDelayMs != null ? { syncDelayMs } : {}) });
-  }, [tlA, ci, metA, soundA]);
-
-  const goB = useCallback((fi = 0, syncDelayMs, ciOverride) => {
-    if (!tlB.length) return;
-    const i = Math.max(0, Math.min(fi, tlB.length - 1)), b = tlB[i];
-    setPsB({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, ended: false });
-    setIsPB(true);
-    metB.start(tlB, i, ciOverride != null ? ciOverride : ci, { ...soundB, muted: false, ...(syncDelayMs != null ? { syncDelayMs } : {}) });
-  }, [tlB, ci, metB, soundB]);
-
-  const stopA = useCallback(() => { metA.stop(); setIsPA(false); }, [metA]);
-  const stopB = useCallback(() => { metB.stop(); setIsPB(false); }, [metB]);
-
-  const linkedPlay = useCallback((fi = 0) => {
-    const delay = 150;
-    metA.tap();
-    const cpbA = secA[0]?.tsNum || 4;
-    const cpbB = secB[0]?.tsNum || 4;
-    const maxCpb = Math.max(cpbA, cpbB);
-    const ciBarsA = ci > 0 ? Math.ceil((maxCpb * ci) / cpbA) : 0;
-    const ciBarsB = ci > 0 ? Math.ceil((maxCpb * ci) / cpbB) : 0;
-    goA(fi, delay, ciBarsA);
-    goB(fi, delay, ciBarsB);
-  }, [goA, goB, metA, ci, secA, secB]);
-
-  const linkedStop = useCallback(() => { stopA(); stopB(); }, [stopA, stopB]);
-
-  const handlePlayA = useCallback((fi = 0) => {
-    metA.tap();
-    if (linked) linkedPlay(fi); else goA(fi);
-  }, [linked, linkedPlay, goA, metA]);
-
-  const handlePlayB = useCallback((fi = 0) => {
-    metB.tap();
-    if (linked) linkedPlay(fi); else goB(fi);
-  }, [linked, linkedPlay, goB, metB]);
-
-  const handleStopA = useCallback(() => {
-    if (linked) linkedStop(); else stopA();
-  }, [linked, linkedStop, stopA]);
-
-  const handleStopB = useCallback(() => {
-    if (linked) linkedStop(); else stopB();
-  }, [linked, linkedStop, stopB]);
-
-  const startHereA = useCallback(secIdx => {
-    const fi = tlA.findIndex(b => b.si === secIdx);
-    if (fi >= 0) handlePlayA(fi);
-  }, [tlA, handlePlayA]);
-
-  const startHereB = useCallback(secIdx => {
-    const fi = tlB.findIndex(b => b.si === secIdx);
-    if (fi >= 0) handlePlayB(fi);
-  }, [tlB, handlePlayB]);
-
-  const addSecA = useCallback(() => {
-    if (linked) { showToast("Unlink to edit sections"); return; }
-    const ns = mkM();
-    if (secA.length > 0) { const l = secA[secA.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } }
-    setSecA(p => [...p, ns]); setEditPanel("A"); setEditIsNew(true); setEditId(ns.id);
-  }, [secA, linked, showToast]);
-
-  const addSecB = useCallback(() => {
-    if (linked) { showToast("Unlink to edit sections"); return; }
-    const ns = mkM();
-    if (secB.length > 0) { const l = secB[secB.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } }
-    setSecB(p => [...p, ns]); setEditPanel("B"); setEditIsNew(true); setEditId(ns.id);
-  }, [secB, linked, showToast]);
-
-  const deleteSecA = useCallback(id => {
-    if (linked) { showToast("Unlink to edit sections"); return; }
-    if (secA.length <= 1) return; setSecA(p => p.filter(s => s.id !== id));
-  }, [secA, linked, showToast]);
-
-  const deleteSecB = useCallback(id => {
-    if (linked) { showToast("Unlink to edit sections"); return; }
-    if (secB.length <= 1) return; setSecB(p => p.filter(s => s.id !== id));
-  }, [secB, linked, showToast]);
-
-  const moveSecA = useCallback((i, d) => {
-    if (linked) return;
-    setSecA(p => {
-      const n = [...p]; const j = i + d;
-      if (j < 0 || j >= n.length) return p;
-      [n[i], n[j]] = [n[j], n[i]]; return n;
-    });
-  }, [linked]);
-
-  const moveSecB = useCallback((i, d) => {
-    if (linked) return;
-    setSecB(p => {
-      const n = [...p]; const j = i + d;
-      if (j < 0 || j >= n.length) return p;
-      [n[i], n[j]] = [n[j], n[i]]; return n;
-    });
-  }, [linked]);
-
-  const editSecA = useCallback(id => {
-    if (linked) { showToast("Unlink to edit sections"); return; }
-    setEditPanel("A"); setEditIsNew(false); setEditId(id);
-  }, [linked, showToast]);
-
-  const editSecB = useCallback(id => {
-    if (linked) { showToast("Unlink to edit sections"); return; }
-    setEditPanel("B"); setEditIsNew(false); setEditId(id);
-  }, [linked, showToast]);
-
-  const editSec = editPanel === "A" ? secA.find(s => s.id === editId) : editPanel === "B" ? secB.find(s => s.id === editId) : null;
-
-  const handleSaveEdit = useCallback((u, isDup = false) => {
-    const setter = editPanel === "A" ? setSecA : setSecB;
-    if (isDup) {
-      setter(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; });
-    } else {
-      setter(p => p.map(s => s.id === u.id ? u : s));
-    }
-  }, [editPanel, editId]);
-
-  const handleDeleteFromEditor = useCallback(id => {
-    if (editPanel === "A") deleteSecA(id); else deleteSecB(id);
-  }, [editPanel, deleteSecA, deleteSecB]);
-
-  const swapPanels = useCallback(() => {
-    if (isPA || isPB) { showToast("Stop playback before swapping"); return; }
-    const tmpA = secA.map(s => ({ ...s }));
-    const tmpB = secB.map(s => ({ ...s }));
-    setSecA(tmpB.map(s => ({ ...s, id: String(s.id).replace(/^b_/, "") || (Date.now() + Math.random()) })));
-    setSecB(tmpA.map(s => ({ ...s, id: "b_" + String(s.id).replace(/^b_/, "") })));
-    const sA = { ...soundA }, sB = { ...soundB };
-    setSoundA(sB);
-    setSoundB(sA);
-    setPsA(null); setPsB(null);
-    showToast("Panels swapped");
-  }, [secA, secB, soundA, soundB, isPA, isPB, showToast]);
-
-  const toggleLink = useCallback(() => {
-    stopA(); stopB(); setPsA(null); setPsB(null);
-    setEditId(null); setEditPanel(null);
-    setLinked(l => {
-      if (!l) showToast("Linked — sections locked for playback");
-      else showToast("Unlinked — editing enabled");
-      return !l;
-    });
-  }, [stopA, stopB, showToast]);
-
-  // Merged count-in state for central display
-  const linkedCountInPs = linked && psA?.countIn ? psA : null;
+  useEffect(() => { met.updS({ muted }); }, [muted, met]);
+  useEffect(() => { met.updS({ accented: settings.accented, pitched: settings.pitched, downbeatOnly: settings.downbeatOnly, silentInterval: settings.silentInterval }); }, [settings.accented, settings.pitched, settings.downbeatOnly, settings.silentInterval]);
+  useEffect(() => { if (isP) met.hotSwapTL(tl); }, [tl, isP, met]);
 
   useEffect(() => {
-    const hk = e => {
+    met.setCb(evt => {
+      if (evt.type === "beat") { const bar = tl[evt.barIdx]; setPs({ absoluteBar: evt.ab, beatIndex: evt.beatIdx, beatType: evt.bt, tsNum: evt.tsN, tsDen: evt.tsD, tempo: evt.tempo, sectionIndex: evt.si, allBeatTypes: bar?.bts || [], flash: true, countIn: false, isTimed: false, fermata: false, pctLabel: pracSections ? `${pracStep}%` : null }); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "countIn") { setPs(p => ({ ...p || {}, countIn: true, flash: true, isTimed: false, beatIndex: evt.beatInBar - 1, beatType: evt.beatInBar === 1 ? 0 : 2, tsNum: evt.totalBeats, tsDen: 0, allBeatTypes: Array(evt.totalBeats).fill(2).map((_, i) => i === 0 ? 0 : 2) })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "timedStart") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, flash: true, beatType: 0, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.dur, tsNum: 0, tsDen: 0 })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "timedTick") { setPs(p => ({ ...p || {}, isTimed: true, countIn: false, absoluteBar: evt.ab, sectionIndex: evt.si, remaining: evt.rem, flash: p?.flash || false, tsNum: 0, tsDen: 0, beatType: 0, totalMarkers: p?.totalMarkers || 0, markerIdx: p?.markerIdx || 0 })); }
+      else if (evt.type === "timedMarker") { setPs(p => ({ ...p || {}, flash: true, beatType: 0, totalMarkers: evt.tm, markerIdx: evt.mi })); if (fto.current) clearTimeout(fto.current); fto.current = setTimeout(() => setPs(p => p ? { ...p, flash: false } : p), 80); }
+      else if (evt.type === "fermataHold") { setPs(p => ({ ...p || {}, fermata: true, fermataRem: evt.rem, fermataDur: evt.dur })); }
+      else if (evt.type === "ended") { setPs(p => ({ ...p || {}, ended: true, flash: false, countIn: false, fermata: false })); setIsP(false); }
+    });
+  }, [met, tl, pracSections, pracStep]);
+
+  const prePlayTempos = useRef(null);
+  const go = useCallback((fi = 0, countInOverride, syncDelayMs) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const ci = countInOverride !== undefined ? countInOverride : settings.countIn; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, ci, { accented: settings.accented, pitched: settings.pitched, muted, ...(syncDelayMs != null ? { syncDelayMs } : {}) }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
+  const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
+  useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
+  const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => prev.map((s, i) => ({ ...s, tempo: i < saved.length ? (saved[i] ?? s.tempo) : s.tempo }))); } } catch {} prePlayTempos.current = null; }, [met]);
+
+  // ============ SYNC MODE ============
+  const syncPause = useCallback(() => { met.stop(); setIsP(false); }, [met]);
+  const sync = useSync({ sections, settings, met, go, exitPlay, pause: syncPause });
+  const handleSyncLoadSections = useCallback((s) => { if (Array.isArray(s) && s.length > 0) setSections(s); }, []);
+
+  // ============ DEVICE LINKING ============
+  const link = useDeviceLink({ syncInRoom: sync.isInRoom });
+
+  const lastSyncSectionsJson = useRef(null);
+  useEffect(() => {
+    if (!sync.isInRoom || sync.isHost) { lastSyncSectionsJson.current = null; return; }
+    if (!sync.syncState?.isAdmitted || !sync.syncState?.sections?.length) return;
+    const j = JSON.stringify(sync.syncState.sections);
+    if (j === lastSyncSectionsJson.current) return;
+    lastSyncSectionsJson.current = j;
+    setSections(sync.syncState.sections);
+  }, [sync.syncState?.sections, sync.isHost, sync.isInRoom, sync.syncState?.isAdmitted]);
+  const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
+  const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
+
+  const [confirmClear, setConfirmClear] = useState(false);
+  const confirmTimer = useRef(null);
+  useEffect(() => {
+    const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      if (editId) return;
+      if (showDual) return; // DualTempo handles its own keys
+      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear || sync.showLobby || link.showDeviceModal;
       if (e.code === "Space") {
+        if (anyModalOpen || sync.isMemberLocked) return;
+        if (sync.isInRoom && !sync.syncReady) return;
         e.preventDefault();
-        if (isPA || isPB) { if (linked) linkedStop(); else { stopA(); stopB(); } }
-        else { if (linked) linkedPlay(0); else { goA(0); goB(0); } }
-      } else if (e.code === "Escape") {
-        if (editId) { setEditId(null); setEditPanel(null); }
-        else onExit();
+        if (sync.isInRoom && sync.isHost) {
+          if (isP) { sync.doPause(); }
+          else { met.tap(); sync.doStart(); }
+        } else {
+          if (isP) { met.stop(); setIsP(false); }
+          else if (ps && (ps.ended || ps.countIn)) { met.tap(); go(0); }
+          else if (ps) { met.tap(); const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, 0, { accented: settings.accented, pitched: settings.pitched, muted }); } }
+          else { met.tap(); go(0); }
+        }
       }
+      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setConfirmClear(false); sync.setShowLobby(false); }
+      else if (isP && !sync.isMemberLocked && e.code === "ArrowLeft") jumpSec(-1);
+      else if (isP && !sync.isMemberLocked && e.code === "ArrowRight") jumpSec(1);
     };
-    window.addEventListener("keydown", hk);
-    return () => window.removeEventListener("keydown", hk);
-  }, [isPA, isPB, linked, linkedStop, linkedPlay, stopA, stopB, goA, goB, editId, onExit]);
+    window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
+  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, showDual, confirmClear, sync.showLobby, sync.isMemberLocked]);
 
-  const colorA = C.downbeat;
-  const colorB = C.accent;
+  const lastSplitTime = useRef(0);
+  const lastSplitBar = useRef(0);
+
+  const handleSplit = useCallback(barNum => {
+    if (mode !== "record") return;
+    const now = Date.now();
+    if (now - lastSplitTime.current < 800 || barNum === lastSplitBar.current) return;
+    lastSplitTime.current = now;
+    lastSplitBar.current = barNum;
+    splitPoints.current.push(barNum);
+    setSections(prev => {
+      if (prev.length > 50) return prev;
+      const tempTl = buildTL(prev);
+      const barInfo = tempTl.find(b => b.ab === barNum);
+      if (!barInfo) return prev;
+      const secIdx = barInfo.si;
+      const sec = prev[secIdx];
+      if (!sec || sec.type === "timed") return prev;
+      const barInSec = barInfo.bin;
+      if (barInSec <= 1 || barInSec >= sec.bars) return prev;
+      const elapsed1 = barInSec - 1, elapsed2 = sec.bars - (barInSec - 1);
+      const s1 = { ...sec, id: Date.now() + Math.random(), bars: elapsed1, capturedDuration: elapsed1 * gCD(sec.tempo, sec.beatUnit, sec.dotted, sec.tsDen) * sec.tsNum };
+      const s2 = { ...sec, id: Date.now() + Math.random() + 1, bars: elapsed2, capturedDuration: elapsed2 * gCD(sec.tempo, sec.beatUnit, sec.dotted, sec.tsDen) * sec.tsNum };
+      return [...prev.slice(0, secIdx), s1, s2, ...prev.slice(secIdx + 1)];
+    });
+  }, [mode]);
+
+  const startPractice = useCallback((_, profileOpts) => {
+    if (!profileOpts) return;
+    const { startPct, targetPct, pctInc, pctReps } = profileOpts;
+    let allSecs = [];
+    for (let p = startPct; p <= targetPct; p += pctInc) {
+      for (let r = 0; r < pctReps; r++) {
+        allSecs = allSecs.concat(scaleSections(sections, Math.min(p, targetPct)));
+      }
+    }
+    setPracSections(allSecs); setPracStep(startPct); setMode("practice");
+    setPracPending(true);
+  }, [sections]);
+
+  const addSec = () => { const ns = mkM(); if (sections.length > 0) { const l = sections[sections.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } } setSections(p => [...p, ns]); setEditIsNew(true); setEditId(ns.id); };
+  const moveSecTimer = useRef(null);
+  const moveSec = (i, d) => { if (moveSecTimer.current) return; moveSecTimer.current = setTimeout(() => { moveSecTimer.current = null; }, 150); setSections(p => { const a = [...p]; if (i + d >= 0 && i + d < a.length) [a[i], a[i + d]] = [a[i + d], a[i]]; return a; }); };
+  const editSec = sections.find(s => s.id === editId);
+
+  const handleClear = () => {
+    if (sections.length <= 1 && sections[0]?.tempo === 120 && sections[0]?.tsNum === 4) return;
+    if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
+    setConfirmClear(false);
+    const backup = [...sections];
+    const backupMeta = { videoUrl, videoSync, loadedProfileId };
+    setSections([mkM()]); setEditId(null); setVideoUrl(null); setVideoSync(null); setLoadedProfileId(null);
+    setUndoToast({ section: backup, index: -1, meta: backupMeta });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
+  };
+
+  const handleDelete = id => {
+    if (sections.length <= 1) return;
+    const idx = sections.findIndex(s => s.id === id);
+    if (idx === -1) return;
+    const sec = sections[idx];
+    setSections(p => p.filter(s => s.id !== id));
+    setUndoToast({ section: sec, index: idx });
+    if (undoTimer.current) clearTimeout(undoTimer.current);
+    undoTimer.current = setTimeout(() => setUndoToast(null), 8000);
+  };
+  const handleUndo = () => {
+    if (!undoToast) return;
+    if (undoToast.index === -1 && Array.isArray(undoToast.section)) {
+      setSections(undoToast.section);
+      if (undoToast.meta) { setVideoUrl(undoToast.meta.videoUrl); setVideoSync(undoToast.meta.videoSync); setLoadedProfileId(undoToast.meta.loadedProfileId); }
+    } else {
+      setSections(p => { const c = [...p]; c.splice(undoToast.index, 0, undoToast.section); return c; });
+    }
+    setUndoToast(null); if (undoTimer.current) clearTimeout(undoTimer.current);
+  };
+
+  const handleDragStart = (e, idx) => { setDragIdx(idx); e.dataTransfer.effectAllowed = "move"; };
+  const handleDragEnter = (e, idx) => { setDropIdx(idx); e.preventDefault(); };
+  const handleDragOver = e => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; };
+  const handleDragEnd = () => { setDragIdx(null); setDropIdx(null); };
+  const handleDrop = (e, idx) => {
+    e.preventDefault(); if (dragIdx === null || dragIdx === idx) { handleDragEnd(); return; }
+    setSections(p => { const c = [...p]; const [m] = c.splice(dragIdx, 1); c.splice(idx, 0, m); return c; });
+    handleDragEnd();
+  };
+
+  const { tap: handleLiveTapTempo, tapBpm: liveTapBpm, tapFlash: liveTapFlash } = useTapTempo(useCallback(bpm => {
+    if (!ps) return;
+    const si = ps.sectionIndex;
+    setSections(prev => prev.map((s, i) => i === si && s.type === "metered" ? { ...s, tempo: bpm } : s));
+  }, [ps]));
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 90, background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px 4px", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="dt-grad" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 18, letterSpacing: 2 }}>DUAL TEMPO</span>
-          <span style={{
-            padding: "2px 5px", borderRadius: 4, fontSize: 8, fontFamily: "'DM Mono',monospace",
-            background: linked ? colorA + "22" : C.surface, color: linked ? colorA : C.textMuted,
-            border: `1px solid ${linked ? colorA + "44" : C.border}`
-          }}>{linked ? "LOCKED" : "EDITING"}</span>
-        </div>
-        <button className="close-btn" onClick={onExit} style={{ width: 36, height: 36 }}>{I.x(18)}</button>
-      </div>
-
-      <div style={{ flex: 1, display: "flex", flexDirection: "row", gap: 0, padding: "0 6px 8px", minHeight: 0, overflow: "hidden" }}>
-        <Panel label="A" color={colorA} sections={secA} tl={tlA} ps={psA} isP={isPA}
-          soundSettings={soundA} onSoundToggle={() => setSoundA(p => ({ ...p, pitched: !p.pitched }))}
-          onPlay={handlePlayA} onStop={handleStopA} onStartHere={startHereA}
-          onAddSec={addSecA} onEditSec={editSecA} onDeleteSec={deleteSecA} onMoveSec={moveSecA}
-          canAdd={canEdit} canEdit={canEdit} linked={linked} heights={heightsA} drag={dragA}
-          linkedCountIn={!!linkedCountInPs} />
-
-        <CenterControls linked={linked} toggleLink={toggleLink} swapPanels={swapPanels}
-          isPA={isPA} isPB={isPB} linkedPlay={linkedPlay} linkedStop={linkedStop}
-          colorA={colorA} colorB={colorB} linkedCountInPs={linkedCountInPs} />
-
-        <Panel label="B" color={colorB} sections={secB} tl={tlB} ps={psB} isP={isPB}
-          soundSettings={soundB} onSoundToggle={() => setSoundB(p => ({ ...p, pitched: !p.pitched }))}
-          onPlay={handlePlayB} onStop={handleStopB} onStartHere={startHereB}
-          onAddSec={addSecB} onEditSec={editSecB} onDeleteSec={deleteSecB} onMoveSec={moveSecB}
-          canAdd={canEdit} canEdit={canEdit} linked={linked} heights={heightsB} drag={dragB}
-          linkedCountIn={!!linkedCountInPs} />
-      </div>
-
-      {editSec && (
-        <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", alignItems: "stretch", justifyContent: "stretch" }}>
-          {/* Colour glow border for active panel */}
-          <div style={{
-            position: "absolute", inset: 0,
-            boxShadow: `inset 0 0 0 2px ${editPanel === "A" ? colorA : colorB}44, inset 0 0 40px ${editPanel === "A" ? colorA : colorB}15`,
-            pointerEvents: "none", zIndex: 101, borderRadius: 0
-          }} />
-          {/* A/B badge */}
-          <div style={{
-            position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 102,
-            background: (editPanel === "A" ? colorA : colorB) + "22",
-            border: `1px solid ${editPanel === "A" ? colorA : colorB}66`,
-            borderRadius: 6, padding: "2px 10px",
-            fontFamily: "'Bebas Neue',sans-serif", fontSize: 12, letterSpacing: 1,
-            color: editPanel === "A" ? colorA : colorB, pointerEvents: "none"
-          }}>Editing {editPanel}</div>
-          <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew}
-            editIndex={(editPanel === "A" ? secA : secB).findIndex(s => s.id === editId) + 1}
-            onSave={handleSaveEdit} onClose={() => { setEditId(null); setEditPanel(null); }}
-            onDelete={((editPanel === "A" ? secA : secB).length > 1) ? handleDeleteFromEditor : null} />
-        </div>
-      )}
-
-      {showLandscape && <LandscapePrompt onDismiss={dismissLandscape} onDontShowAgain={dontShowLandscape} />}
-
-      <DualToast message={toast} />
-
+    <div className={sync.syncGlowPulse ? "sync-glow-pulse" : ""} style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : link.isLinked ? `inset 0 0 0 2px ${link.LINK_COLOR}44, inset 0 0 20px ${link.LINK_COLOR}11` : undefined, transition: sync.syncGlowPulse ? undefined : "box-shadow 0.4s ease" }}>
+      <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${sync.isInRoom ? sync.SYNC_COLOR + '15' : mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
+      <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet" />
       <style>{`
-        .dt-grad { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        *{box-sizing:border-box;margin:0;padding:0} html{touch-action:manipulation;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
+        input,textarea{-webkit-user-select:auto;user-select:auto}
+        input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0} input[type=number]{-moz-appearance:textfield}
+        ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:2px}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+        @keyframes ripple { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(2); opacity: 0; } }
+        .sec-card { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s ease, background 0.15s; position: relative; overflow: hidden; }
+        .sec-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 100%); opacity: 0; transition: opacity 0.3s; }
+        .sec-card:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 16px 40px rgba(0,0,0,0.6); border-color: ${C.textMuted}55; background: ${C.surfaceHover} !important; }
+        .sec-card:hover::before { opacity: 1; }
+        .sec-card:active { transform: translateY(0) scale(0.98); }
+        .glass-pill { background: rgba(20, 20, 28, 0.85); border-radius: 40px; border: 1px solid rgba(255,255,255,0.12); padding: 8px 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
+        .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
+        .pump { transform: scale(1.05); }
+        .btn-ripple { position: relative; }
+        .btn-ripple::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; z-index: -1; animation: ripple 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
+        [data-tip], [data-tip-b] { position: relative; }
+        [data-tip]::after, [data-tip-b]::after { position: absolute; left: 50%; transform: translateX(-50%); background: ${C.surface}; color: ${C.text}; font-size: 11px; font-family: 'Outfit',sans-serif; padding: 4px 8px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.1s; border: 1px solid ${C.border}; z-index: 999; }
+        [data-tip]::after { content: attr(data-tip); bottom: calc(100% + 6px); }
+        [data-tip-b]::after { content: attr(data-tip-b); top: calc(100% + 8px); }
+        [data-tip]:hover::after, [data-tip-b]:hover::after { opacity: 1; }
+        @media (pointer: coarse) { [data-tip]::after, [data-tip-b]::after { display: none; } }
+        button { cursor: pointer; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease; }
+        button:hover:not(:disabled) { opacity: 0.9; }
+        button:active:not(:disabled) { opacity: 0.7; transform: scale(0.95); }
+        .close-btn { background: none; border: none; color: ${C.textMuted}; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
+        .close-btn:hover { background: ${C.surfaceHover}; color: ${C.text}; }
+        .transport-btn:hover:not(:disabled) { transform: translateY(-4px) scale(1.08) !important; box-shadow: 0 16px 40px rgba(0,0,0,0.7) !important; filter: brightness(1.1); }
+        .transport-btn:active:not(:disabled) { transform: scale(0.9) !important; filter: brightness(0.9); }
+        @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+        .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.7) !important; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+        .modal-content { animation: modalSlideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(19, 19, 26, 0.85) !important; border: 1px solid rgba(255,255,255,0.1) !important; border-top: 1px solid rgba(255,255,255,0.2) !important; box-shadow: 0 -20px 50px rgba(139, 124, 246, 0.1), 0 -10px 40px rgba(0,0,0,0.7); backdrop-filter: blur(30px); -webkit-backdrop-filter: blur(30px); }
+        .grad-text { background: linear-gradient(135deg, #ffffff 0%, #848492 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.2)); }
+        @keyframes toastUp { from { transform: translate(-50%, 100%); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+        .toast { animation: toastUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes syncPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+        .sync-pulse { animation: syncPulse 1.5s ease-in-out infinite; }
+        @keyframes syncGlowBright { 0% { box-shadow: inset 0 0 0 3px rgba(6,182,212,0.4), inset 0 0 30px rgba(6,182,212,0.13); } 50% { box-shadow: inset 0 0 0 4px rgba(6,182,212,0.9), inset 0 0 60px rgba(6,182,212,0.35); } 100% { box-shadow: inset 0 0 0 3px rgba(6,182,212,0.4), inset 0 0 30px rgba(6,182,212,0.13); } }
+        .sync-glow-pulse { animation: syncGlowBright 1.2s ease-in-out; }
       `}</style>
+
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
+        <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? "?" : "New"} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{I.fileNew(18)}{confirmClear && <span style={{ fontSize: 13, fontWeight: 700 }}>?</span>}</button>}
+          {videoUrl && !sync.isMemberLocked && <button onClick={() => setShowVideo(true)} data-tip-b="Video" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
+          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
+          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b="Sync" style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
+          {settings.appMode === "advanced" && settings.dualTempo && !sync.isMemberLocked && <button onClick={() => setShowDual(true)} data-tip-b="Dual" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>A|B</button>}
+          <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
+        </div>
+      </div>
+
+      <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", gap: 6, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>
+        <span>§{sections.length}</span><span style={{ opacity: 0.4 }}>·</span><span>{totalBars}b</span>
+        {totalBars > 0 && <><span style={{ opacity: 0.4 }}>·</span><span>{(() => { const t = Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur); const m = Math.floor(t / 60); const s = t % 60; return `${m}:${s < 10 ? "0" : ""}${s}`; })()}</span></>}
+      </div>
+
+      {sync.isInRoom && <SyncStatusBar sync={sync} onOpenLobby={() => sync.setShowLobby(true)} />}
+
+      <div style={{ padding: "8px 16px 120px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
+        {sections.map((sec, i) => { const locked = sync.isMemberLocked; const noop = () => {}; return <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={locked ? noop : () => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={locked ? noop : () => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={locked ? noop : (d => moveSec(i, d))} onDelete={locked ? null : (sections.length > 1 ? handleDelete : null)} onDragStart={locked ? noop : handleDragStart} onDragEnter={locked ? noop : handleDragEnter} onDragOver={locked ? noop : handleDragOver} onDragEnd={locked ? noop : handleDragEnd} onDrop={locked ? noop : handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={locked ? noop : onGripTouchStart} cancelTouchDrag={locked ? noop : cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} />; })}
+        {sections.length === 1 && sections[0].type === "metered" && sections[0].tsNum === 4 && sections[0].tsDen === 4 && sections[0].tempo === 120 && sections[0].bars === 8 && !sync.isMemberLocked && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0 4px", animation: "pulse 2s infinite" }}>
+            <span style={{ fontSize: 14, color: C.textMuted, transform: "rotate(-90deg)", display: "inline-block" }}>{I.chevR(14)}</span>
+            <span style={{ fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif" }}>tap to edit</span>
+          </div>
+        )}
+        {!sync.isMemberLocked && <button onClick={addSec} style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(20)}</button>}
+      </div>
+
+      {/* Bottom buttons */}
+      {!sync.isMemberLocked && <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
+        <div className="glass-pill" style={{ display: "flex", gap: 20, alignItems: "center", pointerEvents: "auto", padding: "10px 24px" }}>
+          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
+          <button className="btn-ripple transport-btn" onClick={() => { if (sync.isInRoom && sync.isHost) { met.tap(); sync.doStart(); } else { met.tap(); setMode("normal"); go(0); } }} disabled={!sections.length || (sync.isInRoom && !sync.syncReady)} data-tip={sync.isInRoom ? (sync.syncReady ? "Sync Start" : "Connecting...") : "Play"} style={{ width: 64, height: 64, borderRadius: "50%", background: sync.isInRoom ? sync.SYNC_COLOR : C.downbeat, border: "none", color: "#000", cursor: (sync.isInRoom && !sync.syncReady) ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: (sync.isInRoom && !sync.syncReady) ? 0.4 : 1, boxShadow: `0 0 24px ${sync.isInRoom ? sync.SYNC_GLOW : C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, opacity 0.3s" }}>{(sync.isInRoom && !sync.syncReady) ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#000" }}>...</span> : I.play(28)}</button>
+          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip="Practice Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
+        </div>
+      </div>}
+
+      {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
+      {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
+      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} isLinked={link.isLinked} onOpenDevices={() => link.setShowDeviceModal(true)} linkColor={link.LINK_COLOR} />}
+      {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} onVideoUrl={setVideoUrl} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
+      {showLib && <LibP onLoad={(s, v, vs, pid) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); setLoadedProfileId(pid || null); }} onClose={() => setShowLib(false)} />}
+      {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
+      {sync.showLobby && <SyncLobby sync={sync} onLoadSections={handleSyncLoadSections} link={link} />}
+      <SyncToast message={sync.toast} />
+      {link.showDeviceModal && <DeviceLinkModal link={link} onClose={() => link.setShowDeviceModal(false)} />}
+      {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} onEditSection={id => { setEditIsNew(false); setEditId(id); }} onAddSection={addSec} onDeleteSection={handleDelete} onMoveSection={moveSec} loadedProfileId={loadedProfileId} />}
+      {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
+        <span style={{ fontSize: 13, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{undoToast.index === -1 ? I.fileNew(14) : I.trash(14)}</span>
+        <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)}</button>
+      </div>}
+      {showDual && <DualTempo sections={sections} settings={settings} onExit={() => setShowDual(false)} />}
     </div>
   );
 }
