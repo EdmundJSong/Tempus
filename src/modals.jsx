@@ -58,12 +58,12 @@ export function SetP({ settings: s, onChange, onClose, isLinked, onOpenDevices, 
     )}
 
     {iRow(t("sr_click"),
-      ["accented", "flat"].map(v => <button key={v} onClick={() => u("accented", v === "accented")} data-tip={v === "accented" ? t("tip_accented") : t("tip_flat")} style={oB(s.accented === (v === "accented"))}>{v === "accented" ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>)
+      <button onClick={() => u("accented", !s.accented)} style={oB(true)}>{s.accented ? <span style={{ letterSpacing: 2 }}>● <span style={{ fontSize: 8 }}>· · ·</span></span> : <span style={{ letterSpacing: 2, fontSize: 8 }}>· · · ·</span>}</button>
     )}
 
     {soundOpts.length <= 2
       ? iRow(t("sr_sound"),
-          soundOpts.map(v => <button key={v} onClick={() => u("clickSound", v)} style={{ ...oB(s.clickSound === v), fontSize: 11 }}>{soundLabels[v] || v}</button>)
+          <button onClick={() => { const i = soundOpts.indexOf(s.clickSound); u("clickSound", soundOpts[(i + 1) % soundOpts.length]); }} style={{ ...oB(true), fontSize: 11 }}>{soundLabels[s.clickSound] || s.clickSound}</button>
         )
       : aRow("sound", t("sr_sound"), soundPv,
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{soundOpts.map(v => <button key={v} onClick={() => u("clickSound", v)} style={{ ...oB(s.clickSound === v), fontSize: 11 }}>{soundLabels[v] || v}</button>)}</div>
@@ -71,7 +71,7 @@ export function SetP({ settings: s, onChange, onClose, isLinked, onOpenDevices, 
     }
 
     {iRow(t("sr_beats"),
-      [false, true].map(v => <button key={String(v)} onClick={() => u("downbeatOnly", v)} style={oB(s.downbeatOnly === v)}>{v ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>)
+      <button onClick={() => u("downbeatOnly", !s.downbeatOnly)} style={oB(true)}>{s.downbeatOnly ? <span style={{ letterSpacing: 3 }}>● ○ ○ ○</span> : <span style={{ letterSpacing: 3 }}>● ● ● ●</span>}</button>
     )}
 
     {aRow("visual", t("sr_visual"), visPv,
