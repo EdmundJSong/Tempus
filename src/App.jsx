@@ -2,12 +2,24 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useSync, SyncLobby, SyncStatusBar, SyncToast, useDeviceLink, DeviceLinkModal } from "./SyncMode";
 import { useMetronome } from "./metronome";
 import { useTapTempo } from "./metronome";
-import { C, _getLS, _setLS, mkM, buildTL, scaleSections, gCD, fbSyncDebounced } from "./utils";
+import { C, _getLS, _setLS, mkM, buildTL, scaleSections, gCD, fbSyncDebounced, getTempoHistory, saveTempoHistory } from "./utils";
 import { I, SecCard, SecEd } from "./components";
 import PlayView from "./PlayView";
 import VideoView from "./VideoView";
 import { SetP, SaveM, LibP, PracSetup } from "./modals";
 import DualTempo from "./DualTempo";
+import { t, setLang } from "./i18n";
+
+// ============ OFFLINE PROMPT ============
+function OfflinePrompt({ message, onClose }) {
+  return (<div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={onClose}>
+    <div className="modal-content" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, padding: "28px 24px", maxWidth: 300, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+      <div style={{ marginBottom: 12 }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={C.textMuted} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l22 22" /><path d="M16.72 11.06A10.94 10.94 0 0119 12.55" /><path d="M5 12.55a10.94 10.94 0 015.17-2.39" /><path d="M10.71 5.05A16 16 0 0122.56 9" /><path d="M1.42 9a15.91 15.91 0 014.7-2.88" /><path d="M8.53 16.11a6 6 0 016.95 0" /><line x1="12" y1="20" x2="12.01" y2="20" /></svg></div>
+      <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 16 }}>{message}</div>
+      <button onClick={onClose} style={{ padding: "8px 24px", borderRadius: 8, border: "none", background: C.surface, color: C.text, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>OK</button>
+    </div>
+  </div>);
+}
 
 // ============ MAIN ============
 export default function Tempus() {
@@ -26,8 +38,19 @@ export default function Tempus() {
   useEffect(() => { if (videoSync) _setLS("tempus_videoSync", JSON.stringify(videoSync)); else { try { localStorage.removeItem("tempus_videoSync"); } catch {} } }, [videoSync]);
   const [showPrac, setShowPrac] = useState(false);
   const [showDual, setShowDual] = useState(false);
-  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const p = JSON.parse(saved); if (p.pitched !== undefined && !p.clickSound) { p.clickSound = p.pitched ? "sine" : "noise"; delete p.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, ...p }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false }; });
+  const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const p = JSON.parse(saved); if (p.pitched !== undefined && !p.clickSound) { p.clickSound = p.pitched ? "sine" : "noise"; delete p.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, showTempoHistory: false, offlineMode: false, lang: "en", ...p }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, showTempoHistory: false, offlineMode: false, lang: "en" }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
+  useEffect(() => { setLang(settings.lang || "en"); }, [settings.lang]);
+  const [offlinePrompt, setOfflinePrompt] = useState(null);
+  // SW register/unregister based on offlineMode setting
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    if (settings.offlineMode) {
+      navigator.serviceWorker.register("/sw.js").catch(() => {});
+    } else {
+      navigator.serviceWorker.getRegistrations().then(regs => { regs.forEach(r => r.unregister()); });
+    }
+  }, [settings.offlineMode]);
   const [muted, setMuted] = useState(false);
   const [ps, setPs] = useState(null);
   const [isP, setIsP] = useState(false);
@@ -37,6 +60,9 @@ export default function Tempus() {
   const met = useMetronome();
   const flashFn = useRef(null);
   const splitPoints = useRef([]);
+  const pracConfig = useRef(null);
+  const [thVer, setThVer] = useState(0);
+  const tempoHistory = useMemo(() => getTempoHistory(loadedProfileId), [loadedProfileId, thVer]);
 
   const [pracPending, setPracPending] = useState(false);
 
@@ -115,7 +141,32 @@ export default function Tempus() {
   const go = useCallback((fi = 0, countInOverride, syncDelayMs) => { if (!tl.length) return; if (!prePlayTempos.current) prePlayTempos.current = sections.map(s => s.tempo); const ci = countInOverride !== undefined ? countInOverride : settings.countIn; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); setIsP(true); met.start(tl, i, ci, { accented: settings.accented, clickSound: settings.clickSound, muted, ...(syncDelayMs != null ? { syncDelayMs } : {}) }); }, [tl, settings, met, muted, pracSections, pracStep, sections]);
   const moveTo = useCallback((fi = 0) => { if (!tl.length) return; const i = Math.max(0, Math.min(fi, tl.length - 1)), b = tl[i]; met.stop(); setIsP(false); setPs({ absoluteBar: b.ab, beatIndex: 0, beatType: 0, tsNum: b.tsN, tsDen: b.tsD, tempo: b.tempo, sectionIndex: b.si, allBeatTypes: b.bts, flash: false, countIn: false, isTimed: b.isT, remaining: b.isT ? b.tDur : undefined, pctLabel: pracSections ? `${pracStep}%` : null }); }, [tl, met, pracSections, pracStep]);
   useEffect(() => { if (pracPending && pracSections) { setPracPending(false); go(0); } }, [pracPending, pracSections, go]);
-  const exitPlay = useCallback(() => { met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => prev.map((s, i) => ({ ...s, tempo: i < saved.length ? (saved[i] ?? s.tempo) : s.tempo }))); } } catch {} prePlayTempos.current = null; }, [met]);
+  const exitPlay = useCallback(() => {
+    // Save tempo history on practice exit
+    if (mode === "practice" && loadedProfileId && pracConfig.current && ps) {
+      try {
+        const cfg = pracConfig.current;
+        const stepSize = cfg.sectionCount * cfg.pctReps;
+        const stepBlock = stepSize > 0 ? Math.floor(ps.sectionIndex / stepSize) : 0;
+        const reachedPct = Math.min(cfg.targetPct, cfg.startPct + stepBlock * cfg.pctInc);
+        const completed = ps.ended || reachedPct >= cfg.targetPct;
+        const existing = getTempoHistory(loadedProfileId);
+        const updated = sections.map((s, i) => {
+          if (s.type !== "metered") return null;
+          const lastTempo = Math.round(s.tempo * reachedPct / 100);
+          const prev = existing.find(h => h.sectionIndex === i);
+          const bestTempo = completed ? Math.max(lastTempo, prev?.bestTempo || 0) : (prev?.bestTempo || null);
+          return { sectionIndex: i, lastTempo, bestTempo, timestamp: new Date().toISOString() };
+        }).filter(Boolean);
+        // Merge: keep non-metered entries from existing, overwrite metered ones
+        const merged = [...updated];
+        existing.forEach(h => { if (!merged.find(m => m.sectionIndex === h.sectionIndex)) merged.push(h); });
+        saveTempoHistory(loadedProfileId, merged);
+        setThVer(v => v + 1);
+      } catch {}
+    }
+    pracConfig.current = null;
+    met.stop(); setIsP(false); setPs(null); setMode("normal"); setPracSections(null); try { if (prePlayTempos.current && prePlayTempos.current.length > 0) { const saved = prePlayTempos.current; setSections(prev => prev.map((s, i) => ({ ...s, tempo: i < saved.length ? (saved[i] ?? s.tempo) : s.tempo }))); } } catch {} prePlayTempos.current = null; }, [met, mode, loadedProfileId, ps, sections]);
 
   // ============ SYNC MODE ============
   const syncPause = useCallback(() => { met.stop(); setIsP(false); }, [met]);
@@ -195,6 +246,7 @@ export default function Tempus() {
   const startPractice = useCallback((_, profileOpts) => {
     if (!profileOpts) return;
     const { startPct, targetPct, pctInc, pctReps } = profileOpts;
+    pracConfig.current = { startPct, targetPct, pctInc, pctReps, sectionCount: sections.length };
     let allSecs = [];
     for (let p = startPct; p <= targetPct; p += pctInc) {
       for (let r = 0; r < pctReps; r++) {
@@ -310,29 +362,29 @@ export default function Tempus() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
         <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? "?" : "New"} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{I.fileNew(18)}{confirmClear && <span style={{ fontSize: 13, fontWeight: 700 }}>?</span>}</button>}
-          {videoUrl && !sync.isMemberLocked && <button onClick={() => setShowVideo(true)} data-tip-b="Video" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
-          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
-          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
-          {settings.appMode !== "basic" && <button onClick={() => sync.setShowLobby(true)} data-tip-b="Sync" style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
-          {settings.appMode === "advanced" && settings.dualTempo && !sync.isMemberLocked && <button onClick={() => setShowDual(true)} data-tip-b="Dual" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>A|B</button>}
-          <button onClick={() => setShowSet(true)} data-tip-b="Settings" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
+          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? "?" : t("new_label")} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{I.fileNew(18)}{confirmClear && <span style={{ fontSize: 13, fontWeight: 700 }}>?</span>}</button>}
+          {videoUrl && !sync.isMemberLocked && <button onClick={() => { if (!navigator.onLine) { setOfflinePrompt(t("offline_video")); return; } setShowVideo(true); }} data-tip-b={t("video")} style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
+          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b={t("library")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
+          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b={t("save")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
+          {settings.appMode !== "basic" && <button onClick={() => { if (!navigator.onLine && !sync.isInRoom) { setOfflinePrompt(t("offline_sync")); return; } sync.setShowLobby(true); }} data-tip-b={t("sync")} style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
+          {settings.appMode === "advanced" && settings.dualTempo && !sync.isMemberLocked && <button onClick={() => setShowDual(true)} data-tip-b={t("dual")} style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>A|B</button>}
+          <button onClick={() => setShowSet(true)} data-tip-b={t("settings")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
         </div>
       </div>
 
       <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", gap: 6, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>
         <span>§{sections.length}</span><span style={{ opacity: 0.4 }}>·</span><span>{totalBars}b</span>
-        {totalBars > 0 && <><span style={{ opacity: 0.4 }}>·</span><span>{(() => { const t = Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur); const m = Math.floor(t / 60); const s = t % 60; return `${m}:${s < 10 ? "0" : ""}${s}`; })()}</span></>}
+        {totalBars > 0 && <><span style={{ opacity: 0.4 }}>·</span><span>{(() => { const dur = Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur); const m = Math.floor(dur / 60); const s = dur % 60; return `${m}:${s < 10 ? "0" : ""}${s}`; })()}</span></>}
       </div>
 
       {sync.isInRoom && <SyncStatusBar sync={sync} onOpenLobby={() => sync.setShowLobby(true)} />}
 
       <div style={{ padding: "8px 16px 120px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
-        {sections.map((sec, i) => { const locked = sync.isMemberLocked; const noop = () => {}; return <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={locked ? noop : () => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={locked ? noop : () => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={locked ? noop : (d => moveSec(i, d))} onDelete={locked ? null : (sections.length > 1 ? handleDelete : null)} onDragStart={locked ? noop : handleDragStart} onDragEnter={locked ? noop : handleDragEnter} onDragOver={locked ? noop : handleDragOver} onDragEnd={locked ? noop : handleDragEnd} onDrop={locked ? noop : handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={locked ? noop : onGripTouchStart} cancelTouchDrag={locked ? noop : cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} />; })}
+        {sections.map((sec, i) => { const locked = sync.isMemberLocked; const noop = () => {}; return <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={locked ? noop : () => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={locked ? noop : () => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={locked ? noop : (d => moveSec(i, d))} onDelete={locked ? null : (sections.length > 1 ? handleDelete : null)} onDragStart={locked ? noop : handleDragStart} onDragEnter={locked ? noop : handleDragEnter} onDragOver={locked ? noop : handleDragOver} onDragEnd={locked ? noop : handleDragEnd} onDrop={locked ? noop : handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={locked ? noop : onGripTouchStart} cancelTouchDrag={locked ? noop : cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} tempoHistory={settings.showTempoHistory && loadedProfileId ? tempoHistory.find(h => h.sectionIndex === i) : null} />; })}
         {sections.length === 1 && sections[0].type === "metered" && sections[0].tsNum === 4 && sections[0].tsDen === 4 && sections[0].tempo === 120 && sections[0].bars === 8 && !sync.isMemberLocked && (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0 4px", animation: "pulse 2s infinite" }}>
             <span style={{ fontSize: 14, color: C.textMuted, transform: "rotate(-90deg)", display: "inline-block" }}>{I.chevR(14)}</span>
-            <span style={{ fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif" }}>tap to edit</span>
+            <span style={{ fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif" }}>{t("tap_to_edit")}</span>
           </div>
         )}
         {!sync.isMemberLocked && <button onClick={addSec} style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(20)}</button>}
@@ -341,18 +393,18 @@ export default function Tempus() {
       {/* Bottom buttons */}
       {!sync.isMemberLocked && <div style={{ position: "fixed", bottom: 24, left: 0, right: 0, display: "flex", justifyContent: "center", zIndex: 10, pointerEvents: "none" }}>
         <div className="glass-pill" style={{ display: "flex", gap: 20, alignItems: "center", pointerEvents: "auto", padding: "10px 24px" }}>
-          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip="Record" style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
-          <button className="btn-ripple transport-btn" onClick={() => { if (sync.isInRoom && sync.isHost) { met.tap(); sync.doStart(); } else { met.tap(); setMode("normal"); go(0); } }} disabled={!sections.length || (sync.isInRoom && !sync.syncReady)} data-tip={sync.isInRoom ? (sync.syncReady ? "Sync Start" : "Connecting...") : "Play"} style={{ width: 64, height: 64, borderRadius: "50%", background: sync.isInRoom ? sync.SYNC_COLOR : C.downbeat, border: "none", color: "#000", cursor: (sync.isInRoom && !sync.syncReady) ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: (sync.isInRoom && !sync.syncReady) ? 0.4 : 1, boxShadow: `0 0 24px ${sync.isInRoom ? sync.SYNC_GLOW : C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, opacity 0.3s" }}>{(sync.isInRoom && !sync.syncReady) ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#000" }}>...</span> : I.play(28)}</button>
-          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip="Practice Mode" style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
+          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => { met.tap(); setMode("record"); splitPoints.current = []; go(0); }} disabled={!sections.length} data-tip={t("record")} style={{ width: 44, height: 44, borderRadius: "50%", background: C.record, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowRecord}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.rec(18)}</button>}
+          <button className="btn-ripple transport-btn" onClick={() => { if (sync.isInRoom && sync.isHost) { met.tap(); sync.doStart(); } else { met.tap(); setMode("normal"); go(0); } }} disabled={!sections.length || (sync.isInRoom && !sync.syncReady)} data-tip={sync.isInRoom ? (sync.syncReady ? t("sync_start") : t("connecting")) : t("play")} style={{ width: 64, height: 64, borderRadius: "50%", background: sync.isInRoom ? sync.SYNC_COLOR : C.downbeat, border: "none", color: "#000", cursor: (sync.isInRoom && !sync.syncReady) ? "wait" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", opacity: (sync.isInRoom && !sync.syncReady) ? 0.4 : 1, boxShadow: `0 0 24px ${sync.isInRoom ? sync.SYNC_GLOW : C.glowDownbeat}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s, opacity 0.3s" }}>{(sync.isInRoom && !sync.syncReady) ? <span style={{ fontSize: 10, fontFamily: "'DM Mono',monospace", color: "#000" }}>...</span> : I.play(28)}</button>
+          {settings.appMode !== "basic" && !sync.isInRoom && <button className="transport-btn" onClick={() => setShowPrac(true)} data-tip={t("practice_mode")} style={{ width: 44, height: 44, borderRadius: "50%", background: C.practice, border: "none", color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 16px ${C.glowPractice}`, transition: "transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s" }}>{I.target(18)}</button>}
         </div>
       </div>}
 
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} flashFnRef={flashFn} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, clickSound: settings.clickSound, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
-      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} isLinked={link.isLinked} onOpenDevices={() => link.setShowDeviceModal(true)} linkColor={link.LINK_COLOR} />}
+      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} isLinked={link.isLinked} onOpenDevices={() => { if (!navigator.onLine) { setOfflinePrompt(t("offline_link")); return; } link.setShowDeviceModal(true); }} linkColor={link.LINK_COLOR} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} onVideoUrl={setVideoUrl} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
       {showLib && <LibP onLoad={(s, v, vs, pid) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); setLoadedProfileId(pid || null); }} onClose={() => setShowLib(false)} />}
-      {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
+      {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} tempoHistory={loadedProfileId ? tempoHistory : null} />}
       {sync.showLobby && <SyncLobby sync={sync} onLoadSections={handleSyncLoadSections} link={link} />}
       <SyncToast message={sync.toast} />
       {link.showDeviceModal && <DeviceLinkModal link={link} onClose={() => link.setShowDeviceModal(false)} />}
@@ -362,6 +414,7 @@ export default function Tempus() {
         <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)}</button>
       </div>}
       {showDual && <DualTempo sections={sections} settings={settings} onExit={() => setShowDual(false)} />}
+      {offlinePrompt && <OfflinePrompt message={offlinePrompt} onClose={() => setOfflinePrompt(null)} />}
     </div>
   );
 }
