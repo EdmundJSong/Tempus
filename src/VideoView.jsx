@@ -4,6 +4,7 @@ import { I, nI } from "./components";
 import { tS } from "./PlayView";
 import { useTapTempo } from "./metronome";
 import { SaveM } from "./modals";
+import { t } from "./i18n";
 
 // ============ HELPERS ============
 export function fmtTime(s) { if (s == null) return "--:--.-"; const m = Math.floor(s / 60), sec = s % 60; return `${m}:${sec < 10 ? "0" : ""}${sec.toFixed(1)}`; }
@@ -343,7 +344,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 16px", flexShrink: 0 }}>
         <div style={{ fontSize: 11, color: C.textMuted }}>{fmtTime(currentTime)} / {fmtTime(duration)}</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>Sync</button>}
+          {(startPt != null || endPt != null) && <button onClick={handleSave} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.downbeat}55`, background: C.downbeat + "15", color: C.downbeat, fontSize: 10, cursor: "pointer" }}>{t("vid_sync_btn")}</button>}
           <button onClick={() => setShowVidSave(true)} style={{ padding: "3px 8px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(14)}</button>
           <button className="close-btn" onClick={handleClose}>{I.x(18)}</button>
         </div>
@@ -356,7 +357,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
             : isVimeo ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : isSC ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : embedUrl ? <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{isSafeUrl(videoUrl) ? <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>Open in browser</a> : <span style={{ color: C.danger, fontSize: 11 }}>Invalid URL Format</span>}</div>}
+              : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{isSafeUrl(videoUrl) ? <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>{t("vid_open_browser")}</a> : <span style={{ color: C.danger, fontSize: 11 }}>{t("vid_invalid_url")}</span>}</div>}
         </div>
       </div>
 
@@ -364,8 +365,8 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
       {hasSync && <div style={{ display: "flex", gap: 6, padding: "0 12px", marginBottom: 6, flexShrink: 0 }}>
         <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${startPt != null ? C.practice + "44" : C.border}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: startPt != null ? 4 : 0 }}>
-            <span style={{ fontSize: 9, color: C.practice, fontWeight: 600 }}>START</span>
-            <button onClick={setStart} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.practice}44`, background: "transparent", color: C.practice, fontSize: 9, cursor: "pointer" }}>Set</button>
+            <span style={{ fontSize: 9, color: C.practice, fontWeight: 600 }}>{t("vid_start")}</span>
+            <button onClick={setStart} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.practice}44`, background: "transparent", color: C.practice, fontSize: 9, cursor: "pointer" }}>{t("vid_set")}</button>
           </div>
           {startPt != null && <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
             <button onClick={() => nudge("start", -NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>←</button>
@@ -375,8 +376,8 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
         </div>
         <div style={{ flex: 1, background: C.surface, borderRadius: 8, padding: "6px 8px", border: `1px solid ${endPt != null ? C.record + "44" : C.border}` }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: endPt != null ? 4 : 0 }}>
-            <span style={{ fontSize: 9, color: C.record, fontWeight: 600 }}>END</span>
-            <button onClick={setEnd} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.record}44`, background: "transparent", color: C.record, fontSize: 9, cursor: "pointer" }}>Set</button>
+            <span style={{ fontSize: 9, color: C.record, fontWeight: 600 }}>{t("vid_end")}</span>
+            <button onClick={setEnd} style={{ padding: "2px 6px", borderRadius: 4, border: `1px solid ${C.record}44`, background: "transparent", color: C.record, fontSize: 9, cursor: "pointer" }}>{t("vid_set")}</button>
           </div>
           {endPt != null && <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
             <button onClick={() => nudge("end", -NUDGE)} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 4, color: C.textMuted, cursor: "pointer", padding: "1px 4px", fontSize: 10 }}>←</button>
@@ -389,7 +390,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
       {/* Middle: Sections or Metronome */}
       {syncCountIn && syncBar ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>Count-in</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 4 }}>{t("count_in")}</div>
           <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>{syncBar.beatsLeft || ""}</div>
           {syncBar.tsN > 0 && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
             {Array.from({ length: syncBar.tsN }).map((_, i) => {
@@ -411,7 +412,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
             <div style={{ fontSize: 64, fontWeight: 400, color: C.text, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2, minWidth: 70, textAlign: "center" }}>{syncBar.ab}</div>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
               <span style={{ fontSize: 24, color: C.downbeat, fontWeight: 700 }}>{syncBar.tempo}</span>
-              <span style={{ fontSize: 9, color: C.textMuted }}>BPM</span>
+              <span style={{ fontSize: 9, color: C.textMuted }}>{t("bpm")}</span>
             </div>
           </div>
           {syncBar.tsN > 0 && <div style={{ display: "flex", gap: 6, justifyContent: "center", marginTop: 10 }}>
@@ -420,13 +421,13 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
               return <div key={i} style={{ width: on ? 14 : 8, height: on ? 14 : 8, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.06s", border: on ? `2px solid ${c}` : "2px solid transparent" }} />;
             })}
           </div>}
-          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>Sec {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}</div>
+          <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6 }}>{t("sec_unit")} {syncBar.si + 1}/{sections.length} · {fmtTime(currentTime)}</div>
 
           {editMode && (
             <div style={{ width: "100%", maxWidth: 300, marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
               {curSec && curSec.type === "metered" && (
                 <div style={{ background: C.surface, borderRadius: 10, padding: 10, border: `1px solid ${C.accent}44` }}>
-                  <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>Section {syncBar.si + 1} Tempo</div>
+                  <div style={{ fontSize: 9, color: C.accent, fontWeight: 600, marginBottom: 6, textAlign: "center" }}>{t("vid_section_tempo")} {syncBar.si + 1} {t("vid_tempo")}</div>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                     <button onClick={() => adjustTempo(-5)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-5</button>
                     <button onClick={() => adjustTempo(-1)} style={{ ...tS, width: 34, height: 34, fontSize: 10 }}>-1</button>
@@ -439,11 +440,11 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
               <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                   {vidTapBpm && <span style={{ fontSize: 10, color: C.downbeat, fontFamily: "'DM Mono',monospace", fontWeight: 600 }}>{vidTapBpm}</span>}
-                  <button onClick={vidTap} style={{ background: vidTapFlash ? C.downbeat : C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: vidTapFlash ? "#000" : C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12, transition: "background 0.1s, color 0.1s" }}>TAP</button>
+                  <button onClick={vidTap} style={{ background: vidTapFlash ? C.downbeat : C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 14px", cursor: "pointer", color: vidTapFlash ? "#000" : C.textMuted, fontFamily: "'DM Mono',monospace", fontSize: 12, transition: "background 0.1s, color 0.1s" }}>{t("tap")}</button>
                 </div>
                 <div style={{ flex: 1, display: "flex", gap: 4, alignItems: "center" }}>
-                  <input value={goBar} onChange={e => setGoBar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleGoToBar(); }} placeholder="Bar #" inputMode="numeric" style={{ ...nI, flex: 1, textAlign: "center", padding: "0 8px", fontSize: 13, height: 38 }} />
-                  <button onClick={handleGoToBar} style={{ ...tS, width: 38, height: 38, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>Go</button>
+                  <input value={goBar} onChange={e => setGoBar(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleGoToBar(); }} placeholder={t("bar_hash")} inputMode="numeric" style={{ ...nI, flex: 1, textAlign: "center", padding: "0 8px", fontSize: 13, height: 38 }} />
+                  <button onClick={handleGoToBar} style={{ ...tS, width: 38, height: 38, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>{t("vid_go")}</button>
                 </div>
               </div>
             </div>
@@ -451,17 +452,17 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
         </div>
       ) : syncActive && !syncBar ? (
         <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ fontSize: 14, color: C.textMuted }}>Starting...</div>
+          <div style={{ fontSize: 14, color: C.textMuted }}>{t("vid_starting")}</div>
         </div>
       ) : syncEnded ? (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 16px" }}>
-          <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>END</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>Tap restart or go back to sections</div>
-          <button onClick={() => { setSyncBar(null); setSyncEnded(false); }} style={{ marginTop: 12, padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>Back to sections</button>
+          <div style={{ fontSize: 48, color: C.downbeat, fontFamily: "'Bebas Neue','DM Mono',monospace", letterSpacing: 2 }}>{t("end_label")}</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginTop: 8 }}>{t("vid_tap_restart")}</div>
+          <button onClick={() => { setSyncBar(null); setSyncEnded(false); }} style={{ marginTop: 12, padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 11, cursor: "pointer" }}>{t("vid_back_sections")}</button>
         </div>
       ) : (
         <div style={{ flex: 1, overflowY: "auto", padding: "4px 12px 16px", minHeight: 0 }}>
-          <div style={{ display: "flex", gap: 8, fontSize: 11, color: C.textMuted, marginBottom: 6 }}><span>{sections.length} sec</span></div>
+          <div style={{ display: "flex", gap: 8, fontSize: 11, color: C.textMuted, marginBottom: 6 }}><span>{sections.length} {t("sec_unit")}</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             {sections.map((sec, i) => {
               const isT = sec.type === "timed";
@@ -471,9 +472,9 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
                   <span style={{ fontSize: 9, color: C.textMuted }}>{i + 1}</span>
                   <button onClick={e => { e.stopPropagation(); onMoveSection && onMoveSection(i, 1); }} disabled={i === sections.length - 1} style={{ background: "none", border: "none", color: i === sections.length - 1 ? C.border : C.textMuted, cursor: i === sections.length - 1 ? "default" : "pointer", padding: 1, display: "flex", fontSize: 10 }}>▼</button>
                 </div>
-                {isT ? <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.duration}s free</div> : (<>
+                {isT ? <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.duration}s {t("vid_free")}</div> : (<>
                   <div style={{ fontSize: 13, fontWeight: 700, color: C.text, minWidth: 24, textAlign: "center", lineHeight: 1 }}><div>{sec.tsNum}</div><div style={{ height: 1, background: C.textMuted, margin: "1px 0" }} /><div>{sec.tsDen}</div></div>
-                  <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.tempo} BPM</div>
+                  <div style={{ flex: 1, fontSize: 12, color: C.text }}>{sec.tempo} {t("bpm")}</div>
                   <div style={{ fontSize: 11, color: sec.loop ? C.downbeat : C.textMuted }}>{sec.loop ? "∞" : `${sec.bars}b`}</div>
                 </>)}
                 {onDeleteSection && sections.length > 1 && <button onClick={e => { e.stopPropagation(); onDeleteSection(sec.id); }} style={{ background: "none", border: "none", color: C.danger + "77", cursor: "pointer", padding: 2, display: "flex" }}>{I.trash(12)}</button>}
@@ -488,20 +489,20 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
       <div style={{ display: "flex", gap: 10, justifyContent: "center", alignItems: "center", padding: "8px 0 20px", flexShrink: 0 }}>
         <button onClick={syncPlayFromStart} style={{ ...tS, width: 40, height: 40, flexShrink: 0 }}>{I.restart(18)}</button>
         <button onClick={syncToggle} style={{ width: 52, height: 52, borderRadius: "50%", background: C.accent, border: "none", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{syncActive ? I.pause(20) : I.play(20)}</button>
-        <button onClick={() => setVidCountIn(v => (v + 1) % 3)} style={{ padding: "4px 6px", borderRadius: 8, border: `1px solid ${vidCountIn > 0 ? C.accent + "55" : C.border}`, background: vidCountIn > 0 ? C.accent + "15" : "transparent", color: vidCountIn > 0 ? C.accent : C.textMuted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace", width: 48, textAlign: "center", flexShrink: 0 }}>{vidCountIn === 0 ? "Off" : vidCountIn === 1 ? "1 Bar" : "2 Bars"}</button>
+        <button onClick={() => setVidCountIn(v => (v + 1) % 3)} style={{ padding: "4px 6px", borderRadius: 8, border: `1px solid ${vidCountIn > 0 ? C.accent + "55" : C.border}`, background: vidCountIn > 0 ? C.accent + "15" : "transparent", color: vidCountIn > 0 ? C.accent : C.textMuted, fontSize: 9, cursor: "pointer", fontFamily: "'DM Mono',monospace", width: 48, textAlign: "center", flexShrink: 0 }}>{vidCountIn === 0 ? t("off") : vidCountIn === 1 ? t("vid_1bar") : t("vid_2bars")}</button>
       </div>
 
-      {!hasSync && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>Sync is available for YouTube, Vimeo, and SoundCloud.</div></div>}
+      {!hasSync && <div style={{ position: "absolute", top: "50%", left: 16, right: 16, textAlign: "center", transform: "translateY(-50%)" }}><div style={{ fontSize: 12, color: C.textMuted }}>{t("vid_sync_avail")}</div></div>}
       </div>
       {showVidSave && <SaveM sections={sections} onClose={() => { setShowVidSave(false); }} onSaved={() => { initSnap.current = { sections: JSON.stringify(sections), startPt, endPt }; if (showClosePrompt) { setShowClosePrompt(false); onClose(); } }} videoUrl={videoUrl} videoSync={{ start: startPt, end: endPt }} loadedProfileId={loadedProfileId} />}
       {showClosePrompt && !showVidSave && <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowClosePrompt(false)}>
         <div className="modal-content" style={{ width: "100%", maxWidth: 320, background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, padding: "24px 20px", textAlign: "center" }} onClick={e => e.stopPropagation()}>
-          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>Unsaved Changes</div>
-          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20, fontFamily: "'Outfit',sans-serif" }}>You have unsaved changes in this session.</div>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 15, color: C.text, fontWeight: 600, marginBottom: 6 }}>{t("vid_unsaved")}</div>
+          <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 20, fontFamily: "'Outfit',sans-serif" }}>{t("vid_unsaved_desc")}</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            <button onClick={() => { setShowClosePrompt(false); setShowVidSave(true); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Save Changes</button>
-            <button onClick={() => { setShowClosePrompt(false); if (onUpdateSections) { try { onUpdateSections(JSON.parse(initSnap.current.sections)); } catch {} } onClose(); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.danger}55`, background: "transparent", color: C.danger, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Discard</button>
-            <button onClick={() => setShowClosePrompt(false)} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>Cancel</button>
+            <button onClick={() => { setShowClosePrompt(false); setShowVidSave(true); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: "none", background: C.accent, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("vid_save_changes")}</button>
+            <button onClick={() => { setShowClosePrompt(false); if (onUpdateSections) { try { onUpdateSections(JSON.parse(initSnap.current.sections)); } catch {} } onClose(); }} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.danger}55`, background: "transparent", color: C.danger, fontSize: 13, fontWeight: 500, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("vid_discard")}</button>
+            <button onClick={() => setShowClosePrompt(false)} style={{ width: "100%", padding: 11, borderRadius: 8, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("cancel")}</button>
           </div>
         </div>
       </div>}
