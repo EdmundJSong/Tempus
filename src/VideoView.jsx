@@ -194,7 +194,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
         m.setCb(syncCbRef.current); m.tap();
         const bar = syncBarRef.current;
         const fromBar = bar ? t.findIndex(b => b.ab === bar.ab) : 0;
-        m.start(t, Math.max(0, fromBar >= 0 ? fromBar : 0), 0, { accented: st.accented, pitched: st.pitched, muted: mutedRef.current });
+        m.start(t, Math.max(0, fromBar >= 0 ? fromBar : 0), 0, { accented: st.accented, clickSound: st.clickSound, muted: mutedRef.current });
         setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
       } else if (isPause && syncActiveRef.current && !countingInRef.current) {
         m.stop(); setSyncActive(false); syncActiveRef.current = false;
@@ -253,7 +253,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
     setSyncCountIn(vidCountIn > 0);
     setTimeout(() => {
       if (vidCountIn === 0 && playerRef.current) playerRef.current.playVideo();
-      met.tap(); met.start(tl, 0, vidCountIn, { accented: settings.accented, pitched: settings.pitched, muted });
+      met.tap(); met.start(tl, 0, vidCountIn, { accented: settings.accented, clickSound: settings.clickSound, muted });
       setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
     }, 200);
   };
@@ -275,7 +275,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
       setSyncCountIn(useCI);
       setTimeout(() => {
         if (!useCI && playerRef.current) playerRef.current.playVideo();
-        met.tap(); met.start(tl, idx, vidCountIn, { accented: settings.accented, pitched: settings.pitched, muted });
+        met.tap(); met.start(tl, idx, vidCountIn, { accented: settings.accented, clickSound: settings.clickSound, muted });
         setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
       }, 150);
     }
