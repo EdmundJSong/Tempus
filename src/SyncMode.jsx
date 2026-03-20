@@ -9,6 +9,12 @@ const MAX_MEMBERS = 20;
 const HEARTBEAT_MS = 10000;
 const STALE_MS = 15000;
 
+// ============ DEVICE LINK CONSTANTS ============
+const LINK_COLOR = "#ec4899";
+const LINK_GLOW = "rgba(236, 72, 153, 0.4)";
+const LINK_CODE_TTL = 5 * 60 * 1000; // 5 minutes
+const RTDB_URL = "https://tempus-acc0e-default-rtdb.firebaseio.com";
+
 // ============ FIRESTORE HELPERS ============
 let _fsModule = null;
 async function getFS() {
@@ -507,22 +513,24 @@ export function SyncStatusBar({ sync, onOpenLobby }) {
       <span style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{memberCount}</span>
       <div style={{ flex: 1 }} />
 
-      {isHost && <button onClick={handleSyncReset} style={sb(confirmReset ? "#000" : SYNC_COLOR, confirmReset ? SYNC_COLOR : SYNC_COLOR + "15", SYNC_COLOR + (confirmReset ? "" : "55"))}>{confirmReset ? "Confirm?" : "Sync Reset"}</button>}
-      {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>Stop</button>}
-      {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>Resume</button>}
-      {isHost && status === "paused" && <button onClick={doRestart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>Restart</button>}
-      {isHost && (pendingCount > 0 || memberCount > 1) && <button onClick={onOpenLobby} style={sb(SYNC_COLOR, "transparent", SYNC_COLOR + "55")}>{pendingCount > 0 ? `${pendingCount} pending` : "Manage"}</button>}
-      <button onClick={handleLeave} style={sb(confirmLeave ? C.danger : C.textMuted, confirmLeave ? C.danger + "15" : "transparent", confirmLeave ? C.danger + "55" : C.border)}>{confirmLeave ? "Leave?" : I.x(12)}</button>
+      {isHost && <button onClick={handleSyncReset} style={sb(confirmReset ? "#000" : SYNC_COLOR, confirmReset ? SYNC_COLOR : SYNC_COLOR + "15", SYNC_COLOR + (confirmReset ? "" : "55"))}>{confirmReset ? <>{I.restart(12)} <span style={{ fontWeight: 700 }}>?</span></> : I.restart(12)}</button>}
+      {isHost && status === "playing" && <button onClick={doStop} style={sb(C.danger, C.danger + "15", C.danger + "55")}>{I.x(12)}</button>}
+      {isHost && status === "paused" && <button onClick={() => doResume(syncState?.resumeFromBar || 1)} style={sb(SYNC_COLOR, SYNC_COLOR + "15", SYNC_COLOR + "55")}>{I.play(12)}</button>}
+      {isHost && status === "paused" && <button onClick={doRestart} style={sb("#000", SYNC_COLOR, SYNC_COLOR)}>{I.restart(12)}</button>}
+      {isHost && (pendingCount > 0 || memberCount > 1) && <button onClick={onOpenLobby} style={sb(SYNC_COLOR, "transparent", SYNC_COLOR + "55")}>{pendingCount > 0 ? `+${pendingCount}` : I.gear(12)}</button>}
+      <button onClick={handleLeave} style={sb(confirmLeave ? C.danger : C.textMuted, confirmLeave ? C.danger + "15" : "transparent", confirmLeave ? C.danger + "55" : C.border)}>{confirmLeave ? <>{I.x(12)}<span style={{ fontWeight: 700 }}>?</span></> : I.x(12)}</button>
     </div>
   );
 }
 
 // ============ SYNC LOBBY (setup + member management only) ============
-export function SyncLobby({ sync, onLoadSections }) {
+export function SyncLobby({ sync, onLoadSections, link }) {
   const { syncState, isHost, isInRoom, doCreateRoom, doJoinRoom, doLeaveRoom,
     doAdmit, doAdmitAll, doKick, doKickAll, setShowLobby, SYNC_COLOR } = sync;
+  const isDeviceLinked = link?.isLinked;
+  const unlinkForSync = link?.unlinkDeviceForSync;
 
-  const [view, setView] = useState(isInRoom ? "room" : "entry");
+  const [view, setView] = useState(isInRoom ? "room" : isDeviceLinked ? "unlink" : "entry");
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
   const [loading, setLoading] = useState(false);
@@ -601,7 +609,24 @@ export function SyncLobby({ sync, onLoadSections }) {
   const bo = (c = C.textMuted) => ({ width: "100%", padding: "10px", borderRadius: 8, border: `1px solid ${c}55`, background: "transparent", color: c, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif" });
   const closeBtn = { background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" };
 
-  // ENTRY
+  // UNLINK PROMPT (device is linked to a cluster — must unlink before syncing)
+  if (view === "unlink" && isDeviceLinked) return (
+    <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={{ textAlign: "center", padding: "16px 0" }}>
+        <div style={{ display: "flex", justifyContent: "center", marginBottom: 12, color: LINK_COLOR }}>{I.desktop(24)}</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 16 }}>
+          Device linking active. Unlink to use Sync Mode.
+        </div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <button onClick={async () => { if (unlinkForSync) await unlinkForSync(); setView("entry"); }} style={bp}>{I.unlink(16)}</button>
+        <button onClick={close} style={bo(C.textMuted)}>{I.x(14)}</button>
+      </div>
+    </div></div>
+  );
+
+  // ENTRY (Sync Lobby)
   if (view === "entry") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
       <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
@@ -644,7 +669,7 @@ export function SyncLobby({ sync, onLoadSections }) {
         <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>Room {syncState.code}</div>
         <div style={{ marginTop: 8 }}><div className="sync-pulse" style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, margin: "0 auto" }} /></div>
       </div>
-      <button onClick={handleLeave} style={bo(C.textMuted)}>Leave</button>
+      <button onClick={handleLeave} style={bo(C.textMuted)}>{I.x(14)}</button>
     </div></div>
   );
 
@@ -659,7 +684,7 @@ export function SyncLobby({ sync, onLoadSections }) {
           {Object.keys(members).map(id => <div key={id} style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR }} />)}
         </div>
       </div>
-      <button onClick={handleLeave} style={bo(C.textMuted)}>Leave Room</button>
+      <button onClick={handleLeave} style={bo(C.textMuted)}>{I.x(14)}</button>
     </div></div>
   );
 
@@ -678,14 +703,14 @@ export function SyncLobby({ sync, onLoadSections }) {
       {isHost && pendingList.length > 0 && <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <span>Pending ({pendingList.length})</span>
-          {pendingList.length > 1 && <button onClick={() => doAdmitAll()} style={{ background: "none", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "3px 8px", fontFamily: "'Outfit',sans-serif" }}>Admit All</button>}
+          {pendingList.length > 1 && <button onClick={() => doAdmitAll()} style={{ background: "none", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "3px 8px", fontFamily: "'Outfit',sans-serif" }}>✓ ×{pendingList.length}</button>}
         </div>
         {pendingList.map(([id, info]) => (
           <div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#f59e0b", flexShrink: 0 }} />
-            <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "Unknown"}</div>
-            <button onClick={() => doAdmit(id)} style={{ background: SYNC_COLOR + "22", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "4px 10px", fontFamily: "'Outfit',sans-serif" }}>Admit</button>
-            <button onClick={() => handleKick(id)} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'Outfit',sans-serif", opacity: 0.7 }}>Decline</button>
+            <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "—"}</div>
+            <button onClick={() => doAdmit(id)} style={{ background: SYNC_COLOR + "22", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 14, cursor: "pointer", padding: "4px 10px", display: "flex", alignItems: "center" }}>✓</button>
+            <button onClick={() => handleKick(id)} style={{ background: "none", border: `1px solid ${C.danger}44`, borderRadius: 6, color: C.danger, fontSize: 11, cursor: "pointer", padding: "4px 8px", display: "flex", alignItems: "center", opacity: 0.7 }}>{I.x(12)}</button>
           </div>
         ))}
       </div>}
@@ -695,22 +720,22 @@ export function SyncLobby({ sync, onLoadSections }) {
         <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Members</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, flexShrink: 0, boxShadow: `0 0 6px ${SYNC_COLOR}` }} />
-          <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || "Host"}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>HOST</span></div>
+          <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || "♛"}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>♛</span></div>
         </div>
         {memberList.map(([id, info]) => {
           const pres = presence[id];
           const stale = pres?.lastSeen ? (Date.now() - pres.lastSeen) > STALE_MS : false;
           return (<div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: stale ? C.textMuted : SYNC_COLOR, flexShrink: 0, boxShadow: stale ? "none" : `0 0 6px ${SYNC_COLOR}` }} />
-            <div style={{ flex: 1, fontSize: 13, color: stale ? C.textMuted : C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "Unknown"}</div>
-            {isHost && <button onClick={() => handleKick(id)} style={{ background: confirmKickId === id ? C.danger + "22" : "none", border: `1px solid ${confirmKickId === id ? C.danger : C.border}`, borderRadius: 6, color: confirmKickId === id ? C.danger : C.textMuted, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'DM Mono',monospace", transition: "all 0.15s" }}>{confirmKickId === id ? "Kick?" : I.x(12)}</button>}
+            <div style={{ flex: 1, fontSize: 13, color: stale ? C.textMuted : C.text, fontFamily: "'DM Mono',monospace" }}>{info.name || "—"}</div>
+            {isHost && <button onClick={() => handleKick(id)} style={{ background: confirmKickId === id ? C.danger + "22" : "none", border: `1px solid ${confirmKickId === id ? C.danger : C.border}`, borderRadius: 6, color: confirmKickId === id ? C.danger : C.textMuted, fontSize: 11, cursor: "pointer", padding: "4px 8px", fontFamily: "'DM Mono',monospace", transition: "all 0.15s" }}>{confirmKickId === id ? <>{I.x(12)}<span style={{ fontSize: 11, fontWeight: 700 }}>?</span></> : I.x(12)}</button>}
           </div>);
         })}
       </div>
 
-      {isHost && memberList.length > 0 && <button onClick={handleKickAll} style={{ ...bo(confirmKickAll ? C.danger : C.textMuted), borderColor: confirmKickAll ? C.danger + "88" : C.border, color: confirmKickAll ? C.danger : C.textMuted, fontSize: 12, marginBottom: 8 }}>{confirmKickAll ? "Tap again to remove everyone" : "Remove all members"}</button>}
-      {!isHost && syncState?.isAdmitted && <button onClick={handleLeave} style={bo(C.textMuted)}>Leave Room</button>}
-      <button onClick={close} style={{ ...bo(SYNC_COLOR), marginTop: 8 }}>Back to sections</button>
+      {isHost && memberList.length > 0 && <button onClick={handleKickAll} style={{ ...bo(confirmKickAll ? C.danger : C.textMuted), borderColor: confirmKickAll ? C.danger + "88" : C.border, color: confirmKickAll ? C.danger : C.textMuted, fontSize: 12, marginBottom: 8 }}>{confirmKickAll ? <>{I.x(12)} <span style={{ fontWeight: 700 }}>?</span></> : <>{I.x(12)} ×{memberList.length}</>}</button>}
+      {!isHost && syncState?.isAdmitted && <button onClick={handleLeave} style={bo(C.textMuted)}>{I.x(14)}</button>}
+      <button onClick={close} style={{ ...bo(SYNC_COLOR), marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{I.chevL(14)}</button>
     </div></div>
   );
 }
@@ -722,4 +747,460 @@ export function SyncToast({ message }) {
     <div style={{ width: 6, height: 6, borderRadius: "50%", background: SYNC_COLOR, flexShrink: 0 }} />
     <span style={{ fontSize: 13, color: C.text, fontFamily: "'Outfit',sans-serif" }}>{message}</span>
   </div>);
+}
+
+// ============ RTDB MODULE ============
+let _rtdbModule = null;
+async function getRTDB() {
+  if (!_rtdbModule) {
+    const app = (await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js"));
+    _rtdbModule = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js");
+    // Ensure the app has RTDB initialized
+    try {
+      const apps = app.getApps();
+      if (apps.length > 0) _rtdbModule._db = _rtdbModule.getDatabase(apps[0], RTDB_URL);
+      else {
+        const a = app.initializeApp({
+          apiKey: "AIzaSyA9LAg1iywIxG1KEbrwNQhrpfqELK3SOeY",
+          authDomain: "tempus-acc0e.firebaseapp.com",
+          projectId: "tempus-acc0e",
+          databaseURL: RTDB_URL,
+          storageBucket: "tempus-acc0e.firebasestorage.app",
+          messagingSenderId: "290765368525",
+          appId: "1:290765368525:web:cc481f657d9e7ae7e18d84"
+        });
+        _rtdbModule._db = _rtdbModule.getDatabase(a, RTDB_URL);
+      }
+    } catch {
+      // App already exists, just get the database
+      const apps = (await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js")).getApps();
+      if (apps.length > 0) _rtdbModule._db = _rtdbModule.getDatabase(apps[0], RTDB_URL);
+    }
+  }
+  return _rtdbModule;
+}
+
+// ============ LINK CODE HELPERS ============
+function genLinkCode() {
+  return String(Math.floor(100000 + Math.random() * 900000));
+}
+
+async function createLinkCode() {
+  const mod = await getRTDB();
+  const db = mod._db;
+  const deviceId = getDeviceId();
+  const code = genLinkCode();
+  const codeRef = mod.ref(db, `link_codes/${code}`);
+  await mod.set(codeRef, {
+    hostDeviceId: deviceId,
+    joinedDeviceId: null,
+    createdAt: Date.now(),
+    expiresAt: Date.now() + LINK_CODE_TTL
+  });
+  return code;
+}
+
+async function joinWithLinkCode(code) {
+  const mod = await getRTDB();
+  const db = mod._db;
+  const deviceId = getDeviceId();
+  const codeRef = mod.ref(db, `link_codes/${code}`);
+  // Use transaction to prevent race condition
+  const result = await mod.runTransaction(codeRef, (current) => {
+    if (!current) return undefined; // abort — code not found
+    if (current.joinedDeviceId) return undefined; // abort — already claimed
+    if (Date.now() > current.expiresAt) return undefined; // abort — expired
+    if (current.hostDeviceId === deviceId) return undefined; // abort — can't join own code
+    return { ...current, joinedDeviceId: deviceId };
+  });
+  if (!result.committed) throw new Error("Code invalid, expired, or already used");
+  return result.snapshot.val();
+}
+
+async function pollLinkCode(code) {
+  const mod = await getRTDB();
+  const db = mod._db;
+  const snap = await mod.get(mod.ref(db, `link_codes/${code}`));
+  return snap.val();
+}
+
+async function cleanupLinkCode(code) {
+  try {
+    const mod = await getRTDB();
+    const db = mod._db;
+    await mod.remove(mod.ref(db, `link_codes/${code}`));
+  } catch {}
+}
+
+// ============ CLUSTER HELPERS ============
+async function createCluster(deviceIdA, deviceIdB) {
+  const db = await fbInit(); if (!db) throw new Error("Firebase not available");
+  const fs = await getFS();
+  const clusterId = "cl_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 6);
+  const now = Date.now();
+  await fs.setDoc(fs.doc(db, "tempus_clusters", clusterId), {
+    deviceIds: [deviceIdA, deviceIdB],
+    devices: {
+      [deviceIdA]: { joinedAt: now, lastSeen: now, name: navigator.userAgent?.slice(0, 40) || "Device" },
+      [deviceIdB]: { joinedAt: now, lastSeen: now, name: "" }
+    },
+    profiles: [],
+    tempoLog: {},
+    createdAt: now,
+    lastUpdated: now
+  });
+  return clusterId;
+}
+
+async function completeLinkHandshake(code) {
+  const codeData = await pollLinkCode(code);
+  if (!codeData || !codeData.joinedDeviceId) return null;
+  const deviceId = getDeviceId();
+  const hostId = codeData.hostDeviceId;
+  const joinId = codeData.joinedDeviceId;
+  // Determine if this device is host or joiner
+  const isHost = deviceId === hostId;
+  const otherDeviceId = isHost ? joinId : hostId;
+  // Check if either device already has a cluster
+  const db = await fbInit(); if (!db) return null;
+  const fs = await getFS();
+  // Look for existing cluster containing this device
+  let existingClusterId = null;
+  try {
+    const snap = await fs.getDocs(fs.collection(db, "tempus_clusters"));
+    snap.forEach(doc => {
+      const d = doc.data();
+      if (d.deviceIds?.includes(deviceId)) existingClusterId = doc.id;
+    });
+  } catch {}
+  let clusterId;
+  if (existingClusterId) {
+    // Add the other device to existing cluster
+    const clRef = fs.doc(db, "tempus_clusters", existingClusterId);
+    const clSnap = await fs.getDoc(clRef);
+    if (clSnap.exists()) {
+      const data = clSnap.data();
+      if (!data.deviceIds.includes(otherDeviceId)) {
+        await fs.updateDoc(clRef, {
+          deviceIds: [...data.deviceIds, otherDeviceId],
+          [`devices.${otherDeviceId}`]: { joinedAt: Date.now(), lastSeen: Date.now(), name: "" },
+          lastUpdated: Date.now()
+        });
+      }
+    }
+    clusterId = existingClusterId;
+  } else {
+    // Create new cluster
+    clusterId = await createCluster(hostId, joinId);
+  }
+  // Store clusterId locally
+  try { localStorage.setItem("tempus_clusterId", clusterId); } catch {}
+  // Clean up the link code
+  await cleanupLinkCode(code);
+  return clusterId;
+}
+
+async function readCluster(clusterId) {
+  const db = await fbInit(); if (!db) return null;
+  const fs = await getFS();
+  try {
+    const snap = await fs.getDoc(fs.doc(db, "tempus_clusters", clusterId));
+    if (!snap.exists()) return null;
+    return { id: clusterId, ...snap.data() };
+  } catch { return null; }
+}
+
+async function updateClusterLastSeen(clusterId) {
+  const db = await fbInit(); if (!db) return;
+  const fs = await getFS();
+  const deviceId = getDeviceId();
+  try {
+    await fs.updateDoc(fs.doc(db, "tempus_clusters", clusterId), {
+      [`devices.${deviceId}.lastSeen`]: Date.now(),
+      [`devices.${deviceId}.name`]: navigator.userAgent?.slice(0, 40) || "Device",
+      lastUpdated: Date.now()
+    });
+  } catch {}
+}
+
+async function removeDeviceFromCluster(clusterId, deviceIdToRemove) {
+  const db = await fbInit(); if (!db) return;
+  const fs = await getFS();
+  try {
+    const snap = await fs.getDoc(fs.doc(db, "tempus_clusters", clusterId));
+    if (!snap.exists()) return;
+    const data = snap.data();
+    const remaining = (data.deviceIds || []).filter(id => id !== deviceIdToRemove);
+    if (remaining.length <= 1) {
+      // Dissolve cluster
+      await fs.deleteDoc(fs.doc(db, "tempus_clusters", clusterId));
+    } else {
+      await fs.updateDoc(fs.doc(db, "tempus_clusters", clusterId), {
+        deviceIds: remaining,
+        [`devices.${deviceIdToRemove}`]: fs.deleteField(),
+        lastUpdated: Date.now()
+      });
+    }
+  } catch {}
+}
+
+// ============ useDeviceLink HOOK ============
+export function useDeviceLink({ syncInRoom = false }) {
+  const [clusterId, setClusterId] = useState(() => {
+    try { return localStorage.getItem("tempus_clusterId") || null; } catch { return null; }
+  });
+  const [clusterData, setClusterData] = useState(null);
+  const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const unsubRef = useRef(null);
+  const heartbeatRef = useRef(null);
+  const deviceId = useMemo(() => getDeviceId(), []);
+  const isLinked = !!clusterId;
+
+  // Subscribe to cluster changes (auto-suspend during sync rooms)
+  useEffect(() => {
+    if (!clusterId || syncInRoom) {
+      if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+      return;
+    }
+    let active = true;
+    const subscribe = async () => {
+      const db = await fbInit(); if (!db || !active) return;
+      const fs = await getFS();
+      if (unsubRef.current) unsubRef.current();
+      unsubRef.current = fs.onSnapshot(fs.doc(db, "tempus_clusters", clusterId), (snap) => {
+        if (!snap.exists()) {
+          // Cluster dissolved
+          setClusterId(null); setClusterData(null);
+          try { localStorage.removeItem("tempus_clusterId"); } catch {}
+          return;
+        }
+        const data = { id: clusterId, ...snap.data() };
+        // If this device was removed from the cluster
+        if (!data.deviceIds?.includes(deviceId)) {
+          setClusterId(null); setClusterData(null);
+          try { localStorage.removeItem("tempus_clusterId"); } catch {}
+          return;
+        }
+        setClusterData(data);
+      });
+      // Heartbeat
+      if (heartbeatRef.current) clearInterval(heartbeatRef.current);
+      updateClusterLastSeen(clusterId);
+      heartbeatRef.current = setInterval(() => updateClusterLastSeen(clusterId), 60000);
+    };
+    subscribe();
+    return () => {
+      active = false;
+      if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+      if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+    };
+  }, [clusterId, syncInRoom, deviceId]);
+
+  const linkComplete = useCallback((newClusterId) => {
+    setClusterId(newClusterId);
+    try { localStorage.setItem("tempus_clusterId", newClusterId); } catch {}
+  }, []);
+
+  const unlinkDevice = useCallback(async () => {
+    if (!clusterId) return;
+    await removeDeviceFromCluster(clusterId, deviceId);
+    if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+    if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+    setClusterId(null); setClusterData(null);
+    try { localStorage.removeItem("tempus_clusterId"); } catch {}
+  }, [clusterId, deviceId]);
+
+  // For mutual exclusion: unlink before entering sync room
+  const unlinkDeviceForSync = useCallback(async () => {
+    if (!clusterId) return;
+    const data = await readCluster(clusterId);
+    const remaining = (data?.deviceIds || []).filter(id => id !== deviceId);
+    if (remaining.length <= 1) {
+      // Dissolve cluster entirely
+      await removeDeviceFromCluster(clusterId, deviceId);
+    } else {
+      await removeDeviceFromCluster(clusterId, deviceId);
+    }
+    if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
+    if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+    setClusterId(null); setClusterData(null);
+    try { localStorage.removeItem("tempus_clusterId"); } catch {}
+  }, [clusterId, deviceId]);
+
+  return {
+    isLinked, clusterId, clusterData, deviceId,
+    showDeviceModal, setShowDeviceModal,
+    linkComplete, unlinkDevice, unlinkDeviceForSync,
+    LINK_COLOR
+  };
+}
+
+// ============ DEVICE LINK MODAL ============
+export function DeviceLinkModal({ link, onClose }) {
+  const { isLinked, clusterId, clusterData, deviceId, linkComplete, unlinkDevice, LINK_COLOR: LC } = link;
+  const [view, setView] = useState(isLinked ? "devices" : "entry");
+  const [generatedCode, setGeneratedCode] = useState(null);
+  const [inputCode, setInputCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [confirmLeave, setConfirmLeave] = useState(false);
+  const pollRef = useRef(null);
+  const leaveTimer = useRef(null);
+
+  useEffect(() => { if (isLinked) setView("devices"); }, [isLinked]);
+  useEffect(() => () => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (leaveTimer.current) clearTimeout(leaveTimer.current);
+  }, []);
+
+  // Generate code and poll for joiner
+  const handleGenerate = async () => {
+    setLoading(true); setError(null);
+    try {
+      const code = await createLinkCode();
+      setGeneratedCode(code); setView("waiting");
+      // Poll for joiner every 2s
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(async () => {
+        try {
+          const data = await pollLinkCode(code);
+          if (!data) { clearInterval(pollRef.current); setError("Code expired"); setView("entry"); return; }
+          if (data.joinedDeviceId) {
+            clearInterval(pollRef.current); pollRef.current = null;
+            const cId = await completeLinkHandshake(code);
+            if (cId) { linkComplete(cId); setView("devices"); }
+            else { setError("Handshake failed"); setView("entry"); }
+          }
+        } catch {}
+      }, 2000);
+      // Auto-expire after TTL
+      setTimeout(() => {
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+        cleanupLinkCode(code);
+      }, LINK_CODE_TTL);
+    } catch (e) { setError(e.message || "Failed to generate code"); }
+    setLoading(false);
+  };
+
+  // Join with entered code
+  const handleJoin = async () => {
+    if (inputCode.length !== 6) { setError("Enter a 6-digit code"); return; }
+    setLoading(true); setError(null);
+    try {
+      await joinWithLinkCode(inputCode);
+      // Now complete handshake from joiner side
+      const cId = await completeLinkHandshake(inputCode);
+      if (cId) { linkComplete(cId); setView("devices"); }
+      else { setError("Handshake failed"); }
+    } catch (e) { setError(e.message || "Could not join"); }
+    setLoading(false);
+  };
+
+  const handleLeave = () => {
+    if (!confirmLeave) {
+      setConfirmLeave(true);
+      if (leaveTimer.current) clearTimeout(leaveTimer.current);
+      leaveTimer.current = setTimeout(() => setConfirmLeave(false), 3000);
+      return;
+    }
+    unlinkDevice();
+    setConfirmLeave(false);
+    setView("entry");
+    onClose();
+  };
+
+  const cancelGenerate = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (generatedCode) cleanupLinkCode(generatedCode);
+    setGeneratedCode(null); setView("entry");
+  };
+
+  const mBg = { position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" };
+  const mBox = { width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" };
+  const hdr = { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 18 };
+  const ttl = { fontFamily: "'Outfit',sans-serif", fontSize: 16, color: LC, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 };
+  const inp = { ...nI, width: "100%", textAlign: "left", padding: "0 12px", marginBottom: 10, fontSize: 15 };
+  const bp = { width: "100%", padding: "12px", borderRadius: 8, border: "none", background: LC, color: "#fff", fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" };
+  const bo = (c = C.textMuted) => ({ width: "100%", padding: "10px", borderRadius: 8, border: `1px solid ${c}55`, background: "transparent", color: c, fontSize: 13, cursor: "pointer", fontFamily: "'Outfit',sans-serif", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 });
+
+  // ENTRY
+  if (view === "entry") return (
+    <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
+      <div style={hdr}><div style={ttl}>{I.desktop(18)} My Devices</div><button className="close-btn" onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <button onClick={handleGenerate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "..." : I.plus(16)}</button>
+        <button onClick={() => setView("join")} style={bo(LC)}>{I.sync(14)}</button>
+      </div>
+      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>Link devices to sync profiles &amp; tempo history.</div>
+    </div></div>
+  );
+
+  // WAITING FOR JOINER
+  if (view === "waiting") return (
+    <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
+      <div style={hdr}><div style={ttl}>{I.desktop(18)} My Devices</div><button className="close-btn" onClick={cancelGenerate} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <div style={{ textAlign: "center", padding: "16px 0" }}>
+        <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 36, color: LC, letterSpacing: 8, fontWeight: 700, marginBottom: 12 }}>{generatedCode}</div>
+        <div style={{ marginBottom: 8 }}>
+          <button onClick={() => navigator.clipboard?.writeText(generatedCode || "")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: 6, display: "inline-flex" }}>{I.copy(14)}</button>
+        </div>
+        <div className="sync-pulse" style={{ width: 8, height: 8, borderRadius: "50%", background: LC, margin: "12px auto 0" }} />
+        <div style={{ fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", marginTop: 8 }}>5:00</div>
+      </div>
+      {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
+      <button onClick={cancelGenerate} style={bo(C.textMuted)}>{I.x(14)}</button>
+    </div></div>
+  );
+
+  // JOIN
+  if (view === "join") return (
+    <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
+      <div style={hdr}><div style={ttl}>{I.desktop(18)} My Devices</div><button className="close-btn" onClick={() => setView("entry")} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <input value={inputCode} onChange={e => setInputCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" autoFocus style={{ ...inp, letterSpacing: inputCode ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
+      {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
+      <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "..." : I.sync(16)}</button>
+    </div></div>
+  );
+
+  // DEVICE LIST
+  const devices = clusterData?.devices || {};
+  const deviceList = Object.entries(devices).sort(([a], [b]) => a === deviceId ? -1 : b === deviceId ? 1 : 0);
+  const now = Date.now();
+
+  return (
+    <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
+      <div style={hdr}><div style={ttl}>{I.desktop(18)} My Devices</div><button className="close-btn" onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+
+      <div style={{ marginBottom: 16 }}>
+        {deviceList.map(([id, info]) => {
+          const isSelf = id === deviceId;
+          const stale = info.lastSeen ? (now - info.lastSeen) > 120000 : true;
+          const shortId = id.length > 12 ? id.slice(0, 6) + "…" + id.slice(-4) : id;
+          return (
+            <div key={id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: isSelf ? LC : stale ? C.textMuted : LC, flexShrink: 0, boxShadow: (isSelf || !stale) ? `0 0 6px ${LC}` : "none" }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, color: isSelf ? LC : (stale ? C.textMuted : C.text), fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", gap: 6 }}>
+                  {shortId}
+                  {isSelf && <span style={{ fontSize: 9, color: LC, fontFamily: "'Outfit',sans-serif" }}>←</span>}
+                </div>
+                {info.lastSeen && <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>
+                  {isSelf ? "now" : stale ? `${Math.round((now - info.lastSeen) / 60000)}m` : "●"}
+                </div>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 10, color: C.textMuted + "55", fontFamily: "'DM Mono',monospace", marginBottom: 16, textAlign: "center" }}>{clusterData?.deviceIds?.length || 0} {I.desktop(10)}</div>
+
+      {deviceList.length >= 2 && (
+        <button onClick={handleLeave} style={{ ...bo(confirmLeave ? C.danger : C.textMuted), borderColor: confirmLeave ? C.danger + "88" : C.textMuted + "55", color: confirmLeave ? C.danger : C.textMuted }}>
+          {confirmLeave ? <>{I.unlink(14)}<span style={{ fontWeight: 700 }}>?</span></> : I.unlink(14)}
+        </button>
+      )}
+    </div></div>
+  );
 }
