@@ -9,14 +9,34 @@ export const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid 
 const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap" };
 
 // ============ PLAY VIEW ============
-export default function PlayView({ ps, sections, tl, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, tapBpm, tapFlash, settings, onSettings, syncLocked }) {
+export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, tapBpm, tapFlash, settings, onSettings, syncLocked }) {
   const SYNC_COLOR = "#06b6d4";
-  const { absoluteBar: ab, beatIndex: bei, beatType: bt, tsNum: tsN, tsDen: tsD, sectionIndex: si, flash, isTimed: isT, countIn: isCI, ended: isEnded } = ps;
-  const fc = bt === 0 ? C.downbeat : bt === 1 ? C.accent : C.text, fo = flash ? (bt === 0 ? 0.35 : bt === 1 ? 0.2 : 0.08) : 0;
+  const { absoluteBar: ab, beatIndex: bei, beatType: bt, tsNum: tsN, tsDen: tsD, sectionIndex: si, isTimed: isT, countIn: isCI, ended: isEnded } = ps;
   const [goBar, setGoBar] = useState("");
   const [splitMsg, setSplitMsg] = useState(null);
   const splitMsgTimer = useRef(null);
   const mountReady = useRef(false);
+  const overlayRef = useRef(null);
+  const numRef = useRef(null);
+  const flashTimer = useRef(null);
+  useEffect(() => {
+    if (!flashFnRef) return;
+    flashFnRef.current = (beatType) => {
+      if (overlayRef.current) {
+        const c = beatType === 0 ? C.downbeat : beatType === 1 ? C.accent : C.text;
+        const o = beatType === 0 ? 0.35 : beatType === 1 ? 0.2 : 0.08;
+        overlayRef.current.style.background = c;
+        overlayRef.current.style.opacity = o;
+      }
+      if (numRef.current && beatType === 0) numRef.current.classList.add("pump");
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => {
+        if (overlayRef.current) overlayRef.current.style.opacity = "0";
+        if (numRef.current) numRef.current.classList.remove("pump");
+      }, 80);
+    };
+    return () => { flashFnRef.current = null; if (flashTimer.current) clearTimeout(flashTimer.current); };
+  }, [flashFnRef]);
   useEffect(() => { const t = setTimeout(() => { mountReady.current = true; }, 600); return () => clearTimeout(t); }, []);
   const lastAction = useRef(0);
   const guardedAction = fn => () => { const now = Date.now(); if (!mountReady.current || now - lastAction.current < 250) return; lastAction.current = now; fn(); };
@@ -39,7 +59,7 @@ export default function PlayView({ ps, sections, tl, onPause, onResume, onRestar
 
   return (
     <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 4px ${borderColor}, inset 0 0 30px ${borderColor}44` : undefined }}>
-      {showF && flash && <div style={{ position: "absolute", inset: 0, background: fc, opacity: fo, transition: "opacity 0.05s", pointerEvents: "none" }} />}
+      {showF && <div ref={overlayRef} style={{ position: "absolute", inset: 0, opacity: 0, transition: "opacity 0.05s", pointerEvents: "none" }} />}
       {splitMsg && <div style={{ position: "absolute", inset: 0, background: C.record, opacity: 0.15, pointerEvents: "none", transition: "opacity 0.3s" }} />}
 
       {/* TOP BAR */}
@@ -62,7 +82,7 @@ export default function PlayView({ ps, sections, tl, onPause, onResume, onRestar
           <div style={{ fontSize: 20, color: C.textMuted, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, position: "relative", zIndex: 1, marginBottom: 8 }}>
             {isEnded ? "" : isCI ? <><span style={{ fontSize: 14 }}>Count-in</span><span style={{ fontSize: 14, color: C.downbeat, fontWeight: 600 }}>Bar {ab}</span></> : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} FREE</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
           </div>
-          <div className={`hdr-text ${ps.flash && ps.beatType === 0 ? 'pump' : ''}`} style={{ fontFamily: "'Bebas Neue','DM Mono',monospace", fontSize: isEnded ? 80 : 110, fontWeight: 400, color: isEnded ? C.downbeat : C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
+          <div ref={numRef} className="hdr-text" style={{ fontFamily: "'Bebas Neue','DM Mono',monospace", fontSize: isEnded ? 80 : 110, fontWeight: 400, color: isEnded ? C.downbeat : C.text, lineHeight: 1, position: "relative", zIndex: 1, letterSpacing: 2 }}>
             {isEnded ? "END" : isCI ? "—" : ps.fermata ? (<><span style={{ fontSize: 24, position: "absolute", top: -10 }}>𝄐</span>{ps.fermataRem != null ? ps.fermataRem.toFixed(1) : "—"}</>) : isT ? (ps.remaining != null ? ps.remaining.toFixed(1) : "—") : ab}
           </div>
         </div>
@@ -106,7 +126,7 @@ export default function PlayView({ ps, sections, tl, onPause, onResume, onRestar
         {/* Quick settings */}
         {settings && onSettings && <div style={{ display: "flex", gap: 6, justifyContent: "center", pointerEvents: "auto" }}>
           <button onClick={() => onSettings({ ...settings, accented: !settings.accented })} style={qS}>{settings.accented ? "Accent" : "Flat"}</button>
-          <button onClick={() => onSettings({ ...settings, pitched: !settings.pitched })} style={qS}>{settings.pitched ? "Pitch" : "Noise"}</button>
+          <button onClick={() => { const all = settings.appMode === "advanced" ? ["sine", "noise", "wood", "rim", "clave", "cowbell"] : ["sine", "noise"]; const idx = Math.max(0, all.indexOf(settings.clickSound)); onSettings({ ...settings, clickSound: all[(idx + 1) % all.length] }); }} style={qS}>{{ sine: "Sine", noise: "Noise", wood: "Wood", rim: "Rim", clave: "Clave", cowbell: "Cow" }[settings.clickSound] || "Sine"}</button>
           <button onClick={() => { const m = ["dots", "dots+flash", "flash"]; const i = (m.indexOf(settings.visualMode) + 1) % m.length; onSettings({ ...settings, visualMode: m[i] }); }} style={qS}><span style={{ opacity: settings.visualMode.includes("dots") ? 1 : 0.25 }}>●</span> <span style={{ opacity: settings.visualMode.includes("flash") ? 1 : 0.25 }}>◻</span></button>
           <button onClick={() => onSettings({ ...settings, countIn: (settings.countIn + 1) % 3 })} style={qS}>{settings.countIn === 0 ? "No Count-in" : `${settings.countIn} Count-in`}</button>
         </div>}
