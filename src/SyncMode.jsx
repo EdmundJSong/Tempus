@@ -753,31 +753,16 @@ export function SyncToast({ message }) {
 // ============ RTDB MODULE ============
 let _rtdbModule = null;
 async function getRTDB() {
-  if (!_rtdbModule) {
-    const app = (await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js"));
-    _rtdbModule = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js");
-    // Ensure the app has RTDB initialized
-    try {
-      const apps = app.getApps();
-      if (apps.length > 0) _rtdbModule._db = _rtdbModule.getDatabase(apps[0], RTDB_URL);
-      else {
-        const a = app.initializeApp({
-          apiKey: "AIzaSyA9LAg1iywIxG1KEbrwNQhrpfqELK3SOeY",
-          authDomain: "tempus-acc0e.firebaseapp.com",
-          projectId: "tempus-acc0e",
-          databaseURL: RTDB_URL,
-          storageBucket: "tempus-acc0e.firebasestorage.app",
-          messagingSenderId: "290765368525",
-          appId: "1:290765368525:web:cc481f657d9e7ae7e18d84"
-        });
-        _rtdbModule._db = _rtdbModule.getDatabase(a, RTDB_URL);
-      }
-    } catch {
-      // App already exists, just get the database
-      const apps = (await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js")).getApps();
-      if (apps.length > 0) _rtdbModule._db = _rtdbModule.getDatabase(apps[0], RTDB_URL);
-    }
-  }
+  if (_rtdbModule && _rtdbModule._db) return _rtdbModule;
+  // Reset on retry (previous init may have failed silently)
+  _rtdbModule = null;
+  await fbInit(); // ensure Firebase app exists
+  const { getApps } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js");
+  const mod = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js");
+  const apps = getApps();
+  if (apps.length === 0) throw new Error("Firebase app not initialized");
+  mod._db = mod.getDatabase(apps[0], RTDB_URL);
+  _rtdbModule = mod;
   return _rtdbModule;
 }
 
