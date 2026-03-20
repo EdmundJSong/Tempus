@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
-import { useSync, SyncLobby, SyncStatusBar, SyncToast } from "./SyncMode";
+import { useSync, SyncLobby, SyncStatusBar, SyncToast, useDeviceLink, DeviceLinkModal } from "./SyncMode";
 import { useMetronome } from "./metronome";
 import { useTapTempo } from "./metronome";
 import { C, _getLS, _setLS, mkM, buildTL, scaleSections, gCD, fbSyncDebounced } from "./utils";
@@ -95,7 +95,7 @@ export default function Tempus() {
   const tl = useMemo(() => buildTL(activeSections), [activeSections]);
   const totalBars = tl.length;
 
-  useEffect(() => { met.updS({ muted }); }, [muted]);
+  useEffect(() => { met.updS({ muted }); }, [muted, met]);
   useEffect(() => { met.updS({ accented: settings.accented, pitched: settings.pitched, downbeatOnly: settings.downbeatOnly, silentInterval: settings.silentInterval }); }, [settings.accented, settings.pitched, settings.downbeatOnly, settings.silentInterval]);
   useEffect(() => { if (isP) met.hotSwapTL(tl); }, [tl, isP, met]);
 
@@ -122,6 +122,9 @@ export default function Tempus() {
   const sync = useSync({ sections, settings, met, go, exitPlay, pause: syncPause });
   const handleSyncLoadSections = useCallback((s) => { if (Array.isArray(s) && s.length > 0) setSections(s); }, []);
 
+  // ============ DEVICE LINKING ============
+  const link = useDeviceLink({ syncInRoom: sync.isInRoom });
+
   const lastSyncSectionsJson = useRef(null);
   useEffect(() => {
     if (!sync.isInRoom || sync.isHost) { lastSyncSectionsJson.current = null; return; }
@@ -140,7 +143,7 @@ export default function Tempus() {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       if (showDual) return; // DualTempo handles its own keys
-      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear || sync.showLobby;
+      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear || sync.showLobby || link.showDeviceModal;
       if (e.code === "Space") {
         if (anyModalOpen || sync.isMemberLocked) return;
         if (sync.isInRoom && !sync.syncReady) return;
@@ -200,7 +203,7 @@ export default function Tempus() {
     }
     setPracSections(allSecs); setPracStep(startPct); setMode("practice");
     setPracPending(true);
-  }, [sections, go]);
+  }, [sections]);
 
   const addSec = () => { const ns = mkM(); if (sections.length > 0) { const l = sections[sections.length - 1]; if (l.type === "metered") { ns.tsNum = l.tsNum; ns.tsDen = l.tsDen; ns.beatUnit = l.beatUnit; ns.dotted = l.dotted; ns.tempo = l.tempo; ns.grouping = l.grouping; } } setSections(p => [...p, ns]); setEditIsNew(true); setEditId(ns.id); };
   const moveSecTimer = useRef(null);
@@ -257,7 +260,7 @@ export default function Tempus() {
   }, [ps]));
 
   return (
-    <div className={sync.syncGlowPulse ? "sync-glow-pulse" : ""} style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : undefined, transition: sync.syncGlowPulse ? undefined : "box-shadow 0.4s ease" }}>
+    <div className={sync.syncGlowPulse ? "sync-glow-pulse" : ""} style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit',sans-serif", touchAction: "manipulation", position: "relative", boxShadow: sync.isInRoom ? `inset 0 0 0 3px ${sync.SYNC_COLOR}66, inset 0 0 30px ${sync.SYNC_COLOR}22` : link.isLinked ? `inset 0 0 0 2px ${link.LINK_COLOR}44, inset 0 0 20px ${link.LINK_COLOR}11` : undefined, transition: sync.syncGlowPulse ? undefined : "box-shadow 0.4s ease" }}>
       <div className="ambient-bg" style={{ background: `radial-gradient(circle at 50% 10%, ${sync.isInRoom ? sync.SYNC_COLOR + '15' : mode === 'record' ? C.record + '15' : mode === 'practice' ? C.practice + '15' : C.downbeat + '15'}, transparent 60%)` }} />
       <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&family=DM+Mono:wght@400;500&family=Bebas+Neue&display=swap" rel="stylesheet" />
       <style>{`
@@ -266,13 +269,13 @@ export default function Tempus() {
         input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0} input[type=number]{-moz-appearance:textfield}
         ::-webkit-scrollbar{width:4px} ::-webkit-scrollbar-thumb{background:${C.border};border-radius:2px}
         @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
-        @keyframes ripple { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.6); opacity: 0; } }
-        .sec-card { transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease, background 0.15s; position: relative; overflow: hidden; }
-        .sec-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 100%); opacity: 0; transition: opacity 0.3s; }
-        .sec-card:hover { transform: translateY(-2px) scale(1.005); box-shadow: 0 12px 30px rgba(0,0,0,0.5); border-color: ${C.textMuted}66; background: ${C.surfaceHover} !important; }
+        @keyframes ripple { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(2); opacity: 0; } }
+        .sec-card { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s ease, background 0.15s; position: relative; overflow: hidden; }
+        .sec-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 100%); opacity: 0; transition: opacity 0.3s; }
+        .sec-card:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 16px 40px rgba(0,0,0,0.6); border-color: ${C.textMuted}55; background: ${C.surfaceHover} !important; }
         .sec-card:hover::before { opacity: 1; }
-        .sec-card:active { transform: translateY(0) scale(0.995); }
-        .glass-pill { background: rgba(20, 20, 28, 0.8); border-radius: 40px; border: 1px solid rgba(255,255,255,0.08); padding: 8px 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        .sec-card:active { transform: translateY(0) scale(0.98); }
+        .glass-pill { background: rgba(20, 20, 28, 0.85); border-radius: 40px; border: 1px solid rgba(255,255,255,0.12); padding: 8px 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
         .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
         .pump { transform: scale(1.05); }
@@ -284,13 +287,13 @@ export default function Tempus() {
         [data-tip-b]::after { content: attr(data-tip-b); top: calc(100% + 8px); }
         [data-tip]:hover::after, [data-tip-b]:hover::after { opacity: 1; }
         @media (pointer: coarse) { [data-tip]::after, [data-tip-b]::after { display: none; } }
-        button { cursor: pointer; transition: transform 0.1s ease, background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease; }
-        button:hover:not(:disabled) { opacity: 0.85; }
-        button:active:not(:disabled) { opacity: 0.7; transform: scale(0.98); }
+        button { cursor: pointer; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease; }
+        button:hover:not(:disabled) { opacity: 0.9; }
+        button:active:not(:disabled) { opacity: 0.7; transform: scale(0.95); }
         .close-btn { background: none; border: none; color: ${C.textMuted}; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
         .close-btn:hover { background: ${C.surfaceHover}; color: ${C.text}; }
-        .transport-btn:hover:not(:disabled) { transform: translateY(-3px) scale(1.08) !important; box-shadow: 0 12px 36px rgba(0,0,0,0.6) !important; filter: brightness(1.1); }
-        .transport-btn:active:not(:disabled) { transform: scale(0.92) !important; filter: brightness(0.9); }
+        .transport-btn:hover:not(:disabled) { transform: translateY(-4px) scale(1.08) !important; box-shadow: 0 16px 40px rgba(0,0,0,0.7) !important; filter: brightness(1.1); }
+        .transport-btn:active:not(:disabled) { transform: scale(0.9) !important; filter: brightness(0.9); }
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
         .modal-bg { animation: modalFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; background: rgba(0,0,0,0.7) !important; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
@@ -307,7 +310,7 @@ export default function Tempus() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
         <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? "Tap again" : "New"} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{confirmClear ? "Clear?" : I.fileNew(18)}</button>}
+          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? "?" : "New"} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{I.fileNew(18)}{confirmClear && <span style={{ fontSize: 13, fontWeight: 700 }}>?</span>}</button>}
           {videoUrl && !sync.isMemberLocked && <button onClick={() => setShowVideo(true)} data-tip-b="Video" style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b="Library" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b="Save" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
@@ -317,15 +320,21 @@ export default function Tempus() {
         </div>
       </div>
 
-      <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", gap: 16, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>
-        <span>{sections.length} section{sections.length !== 1 ? "s" : ""}</span><span>{totalBars} bar{totalBars !== 1 ? "s" : ""}</span>
-        {totalBars > 0 && <span>{Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur)}s</span>}
+      <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", gap: 6, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>
+        <span>§{sections.length}</span><span style={{ opacity: 0.4 }}>·</span><span>{totalBars}b</span>
+        {totalBars > 0 && <><span style={{ opacity: 0.4 }}>·</span><span>{(() => { const t = Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur); const m = Math.floor(t / 60); const s = t % 60; return `${m}:${s < 10 ? "0" : ""}${s}`; })()}</span></>}
       </div>
 
       {sync.isInRoom && <SyncStatusBar sync={sync} onOpenLobby={() => sync.setShowLobby(true)} />}
 
       <div style={{ padding: "8px 16px 120px", maxWidth: 480, margin: "0 auto", display: "flex", flexDirection: "column", gap: 6 }}>
         {sections.map((sec, i) => { const locked = sync.isMemberLocked; const noop = () => {}; return <SecCard key={sec.id} ref={el => cardRefs.current[i] = el} section={sec} index={i} total={sections.length} onClick={locked ? noop : () => { setEditIsNew(false); setEditId(sec.id); }} onStartHere={locked ? noop : () => { met.tap(); const idx = tl.findIndex(b => b.si === i); if (idx >= 0) { setMode("normal"); go(idx); } }} onMove={locked ? noop : (d => moveSec(i, d))} onDelete={locked ? null : (sections.length > 1 ? handleDelete : null)} onDragStart={locked ? noop : handleDragStart} onDragEnter={locked ? noop : handleDragEnter} onDragOver={locked ? noop : handleDragOver} onDragEnd={locked ? noop : handleDragEnd} onDrop={locked ? noop : handleDrop} dragIdx={dragIdx} dropIdx={dropIdx} onGripTouchStart={locked ? noop : onGripTouchStart} cancelTouchDrag={locked ? noop : cancelTouchDrag} tDrag={tDrag} tDropIdx={tDropIdx} />; })}
+        {sections.length === 1 && sections[0].type === "metered" && sections[0].tsNum === 4 && sections[0].tsDen === 4 && sections[0].tempo === 120 && sections[0].bars === 8 && !sync.isMemberLocked && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "12px 0 4px", animation: "pulse 2s infinite" }}>
+            <span style={{ fontSize: 14, color: C.textMuted, transform: "rotate(-90deg)", display: "inline-block" }}>{I.chevR(14)}</span>
+            <span style={{ fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif" }}>tap to edit</span>
+          </div>
+        )}
         {!sync.isMemberLocked && <button onClick={addSec} style={{ width: "100%", padding: 14, borderRadius: 10, border: `1px dashed ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>{I.plus(20)}</button>}
       </div>
 
@@ -340,16 +349,17 @@ export default function Tempus() {
 
       {ps && <PlayView ps={ps} sections={activeSections} tl={tl} onPause={() => { if (sync.isInRoom && sync.isHost) { sync.doPause(); } else { met.stop(); setIsP(false); } }} onResume={(barNum) => { if (sync.isInRoom && sync.isHost) { sync.doResume(barNum || 1); return; } met.tap(); if (!ps) return; if (ps.countIn || ps.ended) { go(0); return; } if (barNum) { const i = tl.findIndex(b => b.ab === barNum); if (i >= 0) { go(i); return; } } const i = tl.findIndex(b => b.ab === ps.absoluteBar); if (i >= 0) { setIsP(true); met.start(tl, i, settings.countIn, { accented: settings.accented, pitched: settings.pitched, muted }); } }} onRestart={() => { if (sync.isInRoom && sync.isHost) { sync.doRestart(); return; } met.tap(); go(0); }} onGoToBar={goToBar} onPrevSec={() => jumpSec(-1)} onNextSec={() => jumpSec(1)} vis={settings.visualMode} isP={isP} muted={muted} onMute={() => setMuted(m => !m)} onExit={() => { if (sync.isInRoom && sync.isHost) { sync.doStop(); } else { exitPlay(); } }} mode={sync.isInRoom ? "sync" : mode} onSplit={handleSplit} onTapTempo={sync.isInRoom ? null : handleLiveTapTempo} tapBpm={liveTapBpm} tapFlash={liveTapFlash} settings={settings} onSettings={setSettings} syncLocked={sync.isMemberLocked} />}
       {editSec && <SecEd section={editSec} appMode={settings.appMode} isNew={editIsNew} editIndex={sections.findIndex(s => s.id === editId) + 1} onSave={(u, isDup = false) => { if (isDup) { setSections(p => { const i = p.findIndex(s => s.id === editId); return [...p.slice(0, i + 1), u, ...p.slice(i + 1)]; }); } else { setSections(p => p.map(s => s.id === u.id ? u : s)); } }} onClose={() => setEditId(null)} onDelete={sections.length > 1 ? handleDelete : null} />}
-      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} />}
+      {showSet && <SetP settings={settings} onChange={setSettings} onClose={() => setShowSet(false)} isLinked={link.isLinked} onOpenDevices={() => link.setShowDeviceModal(true)} linkColor={link.LINK_COLOR} />}
       {showSave && <SaveM sections={sections} onClose={() => setShowSave(false)} onSaved={(newId) => { if (newId) setLoadedProfileId(newId); }} onVideoUrl={setVideoUrl} videoUrl={videoUrl} videoSync={videoSync} loadedProfileId={loadedProfileId} />}
       {showLib && <LibP onLoad={(s, v, vs, pid) => { setSections(s); setVideoUrl(v || null); setVideoSync(vs || null); setLoadedProfileId(pid || null); }} onClose={() => setShowLib(false)} />}
       {showPrac && <PracSetup sections={sections} onStart={startPractice} onClose={() => setShowPrac(false)} />}
-      {sync.showLobby && <SyncLobby sync={sync} onLoadSections={handleSyncLoadSections} />}
+      {sync.showLobby && <SyncLobby sync={sync} onLoadSections={handleSyncLoadSections} link={link} />}
       <SyncToast message={sync.toast} />
+      {link.showDeviceModal && <DeviceLinkModal link={link} onClose={() => link.setShowDeviceModal(false)} />}
       {showVideo && videoUrl && <VideoView videoUrl={videoUrl} sections={sections} tl={tl} onClose={() => setShowVideo(false)} onSyncPoints={pts => { setVideoSync(pts); setShowVideo(false); }} met={met} settings={settings} muted={muted} onUpdateSections={setSections} videoSync={videoSync} onEditSection={id => { setEditIsNew(false); setEditId(id); }} onAddSection={addSec} onDeleteSection={handleDelete} onMoveSection={moveSec} loadedProfileId={loadedProfileId} />}
       {undoToast && <div className="toast" style={{ position: "fixed", bottom: 90, left: "50%", zIndex: 60, background: C.surface, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 16, padding: "12px 20px", borderRadius: 12, boxShadow: "0 10px 40px rgba(0,0,0,0.5)" }}>
-        <span style={{ fontSize: 13, color: C.text }}>{undoToast.index === -1 ? "Sections cleared" : "Section deleted"}</span>
-        <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)} Undo</button>
+        <span style={{ fontSize: 13, color: C.text, display: "flex", alignItems: "center", gap: 6 }}>{undoToast.index === -1 ? I.fileNew(14) : I.trash(14)}</span>
+        <button onClick={handleUndo} style={{ background: "none", border: "none", color: C.accent, fontWeight: 600, fontSize: 13, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>{I.restart(14)}</button>
       </div>}
       {showDual && <DualTempo sections={sections} settings={settings} onExit={() => setShowDual(false)} />}
     </div>
