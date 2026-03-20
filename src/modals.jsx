@@ -1,7 +1,7 @@
 import React, { useState, useRef, useMemo } from "react";
 import { C, getDeviceId, ldP, svP } from "./utils";
 import { I, nI, oB, NI, Stp, Row, SR } from "./components";
-import { t, ACTIVE_LANGS, LANG_LABELS, getLang } from "./i18n";
+import { t, setLang, ACTIVE_LANGS, LANG_LABELS, getLang } from "./i18n";
 
 // ============ SETTINGS ============
 // AGENT NOTE: Do NOT add inline description text beneath settings rows.
@@ -77,7 +77,7 @@ export function SetP({ settings: s, onChange, onClose, isLinked, onOpenDevices, 
     {/* Language pills — always visible, not behind a cycling pill.
         Compact enough to show inline, and collapsing them would hide
         the very UI needed to read labels in a foreign script. */}
-    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", padding: "12px 0 8px", borderTop: `1px solid ${C.border}22` }}>{ACTIVE_LANGS.map(l => <button key={l} onClick={() => u("lang", l)} style={{ ...oB((s.lang || "en") === l), minWidth: 44, fontSize: 13 }}>{LANG_LABELS[l]}</button>)}</div>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "center", padding: "12px 0 8px", borderTop: `1px solid ${C.border}22` }}>{ACTIVE_LANGS.map(l => <button key={l} onClick={() => { setLang(l); u("lang", l); }} style={{ ...oB((s.lang || "en") === l), minWidth: 44, fontSize: 13 }}>{LANG_LABELS[l]}</button>)}</div>
 
     <div style={{ paddingTop: 8, borderTop: `1px solid ${C.border}` }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
