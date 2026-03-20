@@ -79,7 +79,7 @@ export function TapBtn({ onTap, size = "sm", flash = false }) {
 }
 
 // ============ BEAT UNIT PICKER ============
-export function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip="Beat Unit" style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
+export function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip={t("beat_unit")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
 
 // ============ SECTION EDITOR ============
 export function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew = false, editIndex = 0 }) {
@@ -145,7 +145,7 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
             {!showMore && s.grouping && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted + "88" }}>{s.grouping}{s.curve !== "constant" ? ` · ${s.curve === "accel" ? "→" : "←"}${s.endTempo}` : ""}</span>}
           </button>
           {showMore && <>
-          <Row label="Grouping">
+          <Row label={t("row_grouping")}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                 {gPresets.map(p => <button key={p} onClick={() => upd("grouping", p)} style={{ padding: "4px 8px", borderRadius: 6, border: `1px solid ${s.grouping === p ? C.downbeat : C.border}`, background: s.grouping === p ? C.downbeat + "22" : "transparent", color: s.grouping === p ? C.downbeat : C.textMuted, fontSize: 12, fontFamily: "'DM Mono',monospace", cursor: "pointer" }}>{p}</button>)}
@@ -162,10 +162,10 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
             </div>
           </Row>
 
-          <Row label="Curve">{["constant", "accel", "rit"].map(c => <button key={c} onClick={() => upd("curve", c)} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`, background: s.curve === c ? C.downbeat + "22" : "transparent", color: s.curve === c ? C.downbeat : C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", cursor: "pointer" }}>{c === "constant" ? "—" : c === "accel" ? "accel." : "rit."}</button>)}</Row>
+          <Row label={t("row_curve")}>{["constant", "accel", "rit"].map(c => <button key={c} onClick={() => upd("curve", c)} style={{ padding: "8px 14px", borderRadius: 8, border: `1px solid ${s.curve === c ? C.downbeat : C.border}`, background: s.curve === c ? C.downbeat + "22" : "transparent", color: s.curve === c ? C.downbeat : C.textMuted, fontSize: 13, fontFamily: "'Outfit',sans-serif", cursor: "pointer" }}>{c === "constant" ? "—" : c === "accel" ? "accel." : "rit."}</button>)}</Row>
           {s.curve !== "constant" && <Row label={I.arrow(14)}><div style={{ display: "flex", alignItems: "center", gap: 8 }}><div style={{ color: C.text, display: "flex", alignItems: "center", minWidth: 30 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={18} /></div><span style={{ color: C.textMuted, fontSize: 18, fontFamily: "'DM Mono',monospace" }}>=</span><Stp value={s.endTempo} onChange={sET} min={10} max={400} /></div></Row>}
 
-          {isAdv && <Row label="Expressive">
+          {isAdv && <Row label={t("row_expressive")}>
             <button onClick={() => upd("expressive", !s.expressive)} style={{ background: s.expressive ? C.accent + "22" : "transparent", border: `1px solid ${s.expressive ? C.accent : C.border}`, borderRadius: 8, padding: "6px 12px", cursor: "pointer", color: s.expressive ? C.accent : C.textMuted, fontSize: 12, fontFamily: "'Outfit',sans-serif" }}>{s.expressive ? "●" : "○"}</button>
           </Row>}
           {isAdv && s.expressive && s.beatMap && <div style={{ marginBottom: 14, padding: 12, background: C.surface, borderRadius: 10, border: `1px solid ${C.accent}33` }}>
@@ -174,7 +174,7 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
                 <div key={idx} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 56, marginBottom: 6 }}>
                   <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{idx + 1}</div>
                   <NI value={b.tempo} onChange={v => updBeat(idx, "tempo", v)} min={10} max={400} step={1} style={{ width: 52, height: 36, fontSize: 14 }} />
-                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} data-tip="Fermata" style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14, display: "flex", alignItems: "center" }}>{I.fermata(18)}</button>
+                  <button onClick={() => updBeat(idx, "fermata", !b.fermata)} data-tip={t("fermata")} style={{ background: b.fermata ? C.downbeat + "22" : "transparent", border: `1px solid ${b.fermata ? C.downbeat : C.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer", color: b.fermata ? C.downbeat : C.textMuted, fontSize: 14, display: "flex", alignItems: "center" }}>{I.fermata(18)}</button>
                   {b.fermata && <>
                     <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
                       <NI value={b.fermataHold} onChange={v => updBeat(idx, "fermataHold", v)} min={0} max={16} step={0.5} style={{ width: 40, height: 24, fontSize: 11 }} />
@@ -203,7 +203,7 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
 }
 
 // ============ SECTION CARD ============
-export const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx, onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx, tempoHistory }, ref) {
+export const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total: tot, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx, onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx, tempoHistory }, ref) {
   const isT = s.type === "timed";
   const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
   const [revealed, setRevealed] = useState(false);
@@ -235,9 +235,9 @@ export const SecCard = React.forwardRef(function SecCard({ section: s, index: i,
           </button>
         ) : (
           <>
-            <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} data-tip-b="Up" style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
+            <button disabled={i === 0} onClick={e => { e.stopPropagation(); onMove(-1); }} data-tip-b={t("up")} style={{ background: "none", border: "none", color: i === 0 ? C.border : C.textMuted, cursor: i === 0 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowUp(14)}</button>
             <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted, textAlign: "center", lineHeight: 1 }}>{i + 1}</div>
-            <button disabled={i === t - 1} onClick={e => { e.stopPropagation(); onMove(1); }} data-tip-b="Down" style={{ background: "none", border: "none", color: i === t - 1 ? C.border : C.textMuted, cursor: i === t - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
+            <button disabled={i === tot - 1} onClick={e => { e.stopPropagation(); onMove(1); }} data-tip-b={t("down")} style={{ background: "none", border: "none", color: i === tot - 1 ? C.border : C.textMuted, cursor: i === tot - 1 ? "default" : "pointer", padding: 2, display: "flex" }}>{I.arrowDown(14)}</button>
           </>
         )}
       </div>
@@ -246,6 +246,6 @@ export const SecCard = React.forwardRef(function SecCard({ section: s, index: i,
         <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.text, flex: 1 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={16} /><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.textMuted }}>=</span><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 15 }}>{s.tempo}</span>{s.curve !== "constant" && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.accent, marginLeft: 4 }}>{s.curve === "accel" ? "→" : "←"}{s.endTempo}</span>}</div>
         <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: s.loop ? C.downbeat : C.text }}>{s.loop ? "∞" : `${s.bars}b`}</div>{tempoHistory && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 2 }}>{tempoHistory.lastTempo != null && <span style={{ color: C.practice }}>↗{tempoHistory.lastTempo}</span>}{tempoHistory.bestTempo != null && <span style={{ color: C.downbeat }}>★{tempoHistory.bestTempo}</span>}</div>}</div>
       </>)}
-      <button onClick={e => { e.stopPropagation(); onStartHere(); }} data-tip-b="Play here" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
+      <button onClick={e => { e.stopPropagation(); onStartHere(); }} data-tip-b={t("play_here")} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
     </div></div>);
 });
