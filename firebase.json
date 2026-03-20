@@ -1,25 +1,59 @@
-{
-  "firestore": {
-    "database": "(default)",
-    "location": "nam5",
-    "rules": "firestore.rules",
-    "indexes": "firestore.indexes.json"
-  },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "disallowLegacyRuntimeConfig": true,
-      "ignore": [
-        "node_modules",
-        ".git",
-        "firebase-debug.log",
-        "firebase-debug.*.log",
-        "*.local"
-      ]
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── tempus_rooms (Sync Mode) ──
+    // Room lifecycle: host creates, members join via pending→admitted flow.
+    // NOTE: Adding Firebase Anonymous Auth would allow locking writes to
+    // request.auth.uid == deviceId, significantly tightening these rules.
+    match /tempus_rooms/{code} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(["code", "hostId", "status", "sections", "members", "createdAt"])
+                    && request.resource.data.code == code
+                    && request.resource.data.status == "lobby";
+      allow update: if true;  // host commands, member joins, heartbeats
+      allow delete: if true;  // host teardown
+
+      // Presence subcollection (heartbeats — separated to avoid triggering room snapshot)
+      match /presence/{deviceId} {
+        allow read, write: if true;
+      }
     }
-  ],
-  "database": {
-    "rules": "database.rules.json"
+
+    // ── tempus_clusters (Device Linking) ──
+    // Cluster contains linked devices, shared profiles, tempo log.
+    match /tempus_clusters/{clusterId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(["deviceIds", "devices", "createdAt"])
+                    && request.resource.data.deviceIds is list
+                    && request.resource.data.deviceIds.size() >= 2
+                    && request.resource.data.deviceIds.size() <= 10;
+      // Only devices in the cluster can update it
+      // Without auth this is aspirational — enforced client-side for now.
+      // With anonymous auth: request.auth.uid in resource.data.deviceIds
+      allow update: if request.resource.data.deviceIds is list
+                    && request.resource.data.deviceIds.size() <= 10;
+      // Dissolution: last device removes the doc
+      allow delete: if true;
+    }
+
+    // ── tempus_clock_cal (ephemeral calibration docs) ──
+    // Written and deleted within seconds during clock sync.
+    match /tempus_clock_cal/{deviceId} {
+      allow read, write, delete: if true;
+    }
+
+    // ── tempus_backups (silent per-device backup) ──
+    // Each device writes its own backup doc keyed by deviceId.
+    match /tempus_backups/{deviceId} {
+      allow read: if true;
+      allow write: if request.resource.data.keys().hasAll(["deviceId", "lastUpdated"])
+                   && request.resource.data.deviceId == deviceId;
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
