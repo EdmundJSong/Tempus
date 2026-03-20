@@ -49,6 +49,7 @@ const FIREBASE_CONFIG = {
 const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY" && FIREBASE_CONFIG.apiKey !== "disabled";
 
 let _fb = null, _fbDb = null;
+export function fbApp() { return _fb; }
 export async function fbInit() {
   if (_fb) return _fbDb;
   if (!FB_ENABLED) return null;
