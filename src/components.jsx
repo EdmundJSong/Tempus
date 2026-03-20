@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import { C, BU, pG, sG, pM, mkM, mkT, mkBeatMap } from "./utils";
 import { useTapTempo } from "./metronome";
+import { t } from "./i18n";
 
 // ============ ICONS ============
 const Icon = ({ d, children, size = 18, fill = "none", strokeWidth = 1.5, viewBox = "0 0 24 24" }) => (
@@ -109,13 +110,13 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
     <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div className="modal-content" style={{ width: "100%", maxWidth: 440, background: C.bg, borderTop: `1px solid ${C.border}`, borderRadius: "16px 16px 0 0", padding: "20px 20px 32px", maxHeight: "85vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{isNew ? "New Section" : `Edit Section ${editIndex}`}</div>
-          <button className="close-btn" onClick={onClose} data-tip-b="Close">{I.x(18)}</button>
+          <div style={{ fontFamily: "'Outfit',sans-serif", fontSize: 16, color: C.text, fontWeight: 600 }}>{isNew ? t("new_section") : `${t("edit_section")} ${editIndex}`}</div>
+          <button className="close-btn" onClick={onClose} data-tip-b={t("close")}>{I.x(18)}</button>
         </div>
         {/* Type toggle - hidden in basic */}
         {!isBas && <div style={{ display: "flex", gap: 8, marginBottom: 18 }}>
-          <button onClick={() => swT("metered")} style={{ ...oB(isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.music(14)} Metered</button>
-          <button onClick={() => swT("timed")} style={{ ...oB(!isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.clock(14)} Timed</button>
+          <button onClick={() => swT("metered")} style={{ ...oB(isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.music(14)} {t("metered")}</button>
+          <button onClick={() => swT("timed")} style={{ ...oB(!isMet), display: "flex", alignItems: "center", gap: 6, flex: 1, justifyContent: "center" }}>{I.clock(14)} {t("timed")}</button>
         </div>}
         {isMet ? (<>
           <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 18 }}>
@@ -132,8 +133,8 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
             </div>
           </div>
           {/* Bars + Loop */}
-          <Row label="Bars">
-            <button onClick={() => upd("loop", !s.loop)} data-tip="Loop" style={{ background: s.loop ? C.downbeat + "22" : "transparent", border: `1px solid ${s.loop ? C.downbeat : C.border}`, borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: s.loop ? C.downbeat : C.textMuted, display: "flex", alignItems: "center" }}>{I.loop(16)}</button>
+          <Row label={t("row_bars")}>
+            <button onClick={() => upd("loop", !s.loop)} data-tip={t("loop")} style={{ background: s.loop ? C.downbeat + "22" : "transparent", border: `1px solid ${s.loop ? C.downbeat : C.border}`, borderRadius: 8, padding: "6px 8px", cursor: "pointer", color: s.loop ? C.downbeat : C.textMuted, display: "flex", alignItems: "center" }}>{I.loop(16)}</button>
             {!s.loop && <Stp value={s.bars} onChange={v => upd("bars", v)} min={1} max={999} />}
             {s.loop && <span style={{ color: C.downbeat, fontSize: 13, fontFamily: "'DM Mono',monospace" }}>∞</span>}
           </Row>
@@ -187,13 +188,13 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
           </div>}
           </>}
         </>) : (<>
-          <Row label="Duration"><StpF value={s.duration} onChange={v => upd("duration", v)} min={0.5} max={600} /><span style={{ color: C.textMuted, fontSize: 15, fontFamily: "'DM Mono',monospace", marginLeft: 6 }}>s</span></Row>
-          <Row label="Markers"><input inputMode="decimal" value={s.markers} onChange={e => upd("markers", e.target.value)} style={{ ...nI, width: 200, textAlign: "left", padding: "0 12px", fontSize: 14 }} placeholder="e.g. 3, 7.5, 12" /></Row>
+          <Row label={t("row_duration")}><StpF value={s.duration} onChange={v => upd("duration", v)} min={0.5} max={600} /><span style={{ color: C.textMuted, fontSize: 15, fontFamily: "'DM Mono',monospace", marginLeft: 6 }}>{t("seconds_short")}</span></Row>
+          <Row label={t("row_markers")}><input inputMode="decimal" value={s.markers} onChange={e => upd("markers", e.target.value)} style={{ ...nI, width: 200, textAlign: "left", padding: "0 12px", fontSize: 14 }} placeholder={t("markers_placeholder")} /></Row>
           <div style={{ fontSize: 12, color: C.textMuted, marginBottom: 14, marginLeft: 82, fontFamily: "'DM Mono',monospace" }}>{pM(s.markers).length}▸</div>
         </>)}
         <div style={{ display: "flex", gap: 10, marginTop: 22 }}>
-          {onDelete && <button onClick={() => { onDelete(s.id); onClose(); }} data-tip="Delete" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`, background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.trash(16)}</button>}
-          <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }} data-tip="Duplicate" style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.copy(16)}</button>
+          {onDelete && <button onClick={() => { onDelete(s.id); onClose(); }} data-tip={t("delete")} style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.danger}33`, background: `${C.danger}11`, color: C.danger, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.trash(16)}</button>}
+          <button onClick={() => { onSave({ ...s, id: Date.now() + Math.random(), type: s.type }, true); onClose(); }} data-tip={t("duplicate")} style={{ flex: 0, padding: "10px 16px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center" }}>{I.copy(16)}</button>
           <div style={{ flex: 1 }} />
           <button onClick={() => { if (gV) { onSave(s); onClose(); } }} style={{ flex: 0, padding: "12px 24px", borderRadius: 8, border: "none", background: gV ? C.downbeat : C.sub, color: gV ? "#000" : C.textMuted, fontSize: 14, fontWeight: 600, cursor: gV ? "pointer" : "default", fontFamily: "'Outfit',sans-serif" }}>{isNew ? I.plus(16) : I.save(16)}</button>
         </div>
@@ -202,7 +203,7 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
 }
 
 // ============ SECTION CARD ============
-export const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx, onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx }, ref) {
+export const SecCard = React.forwardRef(function SecCard({ section: s, index: i, total: t, onClick, onStartHere, onMove, onDelete, onDragStart, onDragEnter, onDragOver, onDragEnd, onDrop, dragIdx, dropIdx, onGripTouchStart, cancelTouchDrag, tDrag, tDropIdx, tempoHistory }, ref) {
   const isT = s.type === "timed";
   const isTouch = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)")?.matches;
   const [revealed, setRevealed] = useState(false);
@@ -243,7 +244,7 @@ export const SecCard = React.forwardRef(function SecCard({ section: s, index: i,
       {isT ? (<>{I.clock(16)}<div style={{ flex: 1, fontFamily: "'DM Mono',monospace", fontSize: 15, color: C.text }}>{s.duration}s</div><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.textMuted }}>{pM(s.markers).length}▸</div></>) : (<>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 18, fontWeight: 700, color: C.text, lineHeight: 1, textAlign: "center", minWidth: 30, display: "flex", flexDirection: "column", alignItems: "center" }}><span>{s.tsNum}</span><div style={{ height: 1, width: "100%", background: C.textMuted, margin: "1px 0" }} /><span>{s.tsDen}</span><div style={{ fontSize: 9, color: C.textMuted, fontWeight: 400, marginTop: 3 }}>{s.grouping}</div></div>
         <div style={{ display: "flex", alignItems: "center", gap: 3, color: C.text, flex: 1 }}><NoteSVG type={s.beatUnit} dotted={s.dotted} size={16} /><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 13, color: C.textMuted }}>=</span><span style={{ fontFamily: "'DM Mono',monospace", fontSize: 15 }}>{s.tempo}</span>{s.curve !== "constant" && <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 11, color: C.accent, marginLeft: 4 }}>{s.curve === "accel" ? "→" : "←"}{s.endTempo}</span>}</div>
-        <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: s.loop ? C.downbeat : C.text }}>{s.loop ? "∞" : `${s.bars}b`}</div></div>
+        <div style={{ textAlign: "right" }}><div style={{ fontFamily: "'DM Mono',monospace", fontSize: 14, color: s.loop ? C.downbeat : C.text }}>{s.loop ? "∞" : `${s.bars}b`}</div>{tempoHistory && <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, display: "flex", gap: 6, justifyContent: "flex-end", marginTop: 2 }}>{tempoHistory.lastTempo != null && <span style={{ color: C.practice }}>↗{tempoHistory.lastTempo}</span>}{tempoHistory.bestTempo != null && <span style={{ color: C.downbeat }}>★{tempoHistory.bestTempo}</span>}</div>}</div>
       </>)}
       <button onClick={e => { e.stopPropagation(); onStartHere(); }} data-tip-b="Play here" style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>{I.play(14)}</button>
     </div></div>);
