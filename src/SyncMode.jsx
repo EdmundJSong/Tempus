@@ -781,6 +781,24 @@ async function getRTDB() {
   return _rtdbModule;
 }
 
+// ============ DEVICE NAME HELPER ============
+function parseDeviceName() {
+  try {
+    const ua = navigator.userAgent || "";
+    if (/iPad/.test(ua)) return "iPad";
+    if (/iPhone/.test(ua)) return "iPhone";
+    if (/Android/.test(ua)) {
+      const m = ua.match(/;\s*([^;)]+)\s*Build\//);
+      return m ? m[1].trim().slice(0, 20) : "Android";
+    }
+    if (/Macintosh/.test(ua)) return "Mac";
+    if (/Windows/.test(ua)) return "Windows";
+    if (/CrOS/.test(ua)) return "ChromeOS";
+    if (/Linux/.test(ua)) return "Linux";
+    return "Device";
+  } catch { return "Device"; }
+}
+
 // ============ LINK CODE HELPERS ============
 function genLinkCode() {
   return String(Math.floor(100000 + Math.random() * 900000));
@@ -842,7 +860,7 @@ async function createCluster(deviceIdA, deviceIdB) {
   await fs.setDoc(fs.doc(db, "tempus_clusters", clusterId), {
     deviceIds: [deviceIdA, deviceIdB],
     devices: {
-      [deviceIdA]: { joinedAt: now, lastSeen: now, name: navigator.userAgent?.slice(0, 40) || "Device" },
+      [deviceIdA]: { joinedAt: now, lastSeen: now, name: parseDeviceName() },
       [deviceIdB]: { joinedAt: now, lastSeen: now, name: "" }
     },
     profiles: [],
@@ -853,52 +871,85 @@ async function createCluster(deviceIdA, deviceIdB) {
   return clusterId;
 }
 
+// Host-only: find or create cluster, write clusterId to RTDB for joiner to read
 async function completeLinkHandshake(code) {
   const codeData = await pollLinkCode(code);
   if (!codeData || !codeData.joinedDeviceId) return null;
   const deviceId = getDeviceId();
   const hostId = codeData.hostDeviceId;
   const joinId = codeData.joinedDeviceId;
-  // Determine if this device is host or joiner
-  const isHost = deviceId === hostId;
-  const otherDeviceId = isHost ? joinId : hostId;
-  // Check if either device already has a cluster
+  if (deviceId !== hostId) return null; // only host creates clusters
   const db = await fbInit(); if (!db) return null;
   const fs = await getFS();
-  // Look for existing cluster containing this device
+  // Query for existing cluster containing this device (indexed, not full scan)
   let existingClusterId = null;
   try {
-    const snap = await fs.getDocs(fs.collection(db, "tempus_clusters"));
-    snap.forEach(doc => {
-      const d = doc.data();
-      if (d.deviceIds?.includes(deviceId)) existingClusterId = doc.id;
-    });
+    const q = fs.query(fs.collection(db, "tempus_clusters"), fs.where("deviceIds", "array-contains", deviceId));
+    const snap = await fs.getDocs(q);
+    snap.forEach(doc => { existingClusterId = doc.id; });
   } catch {}
   let clusterId;
   if (existingClusterId) {
-    // Add the other device to existing cluster
+    // Add joiner to existing cluster
     const clRef = fs.doc(db, "tempus_clusters", existingClusterId);
     const clSnap = await fs.getDoc(clRef);
     if (clSnap.exists()) {
       const data = clSnap.data();
-      if (!data.deviceIds.includes(otherDeviceId)) {
+      if (!data.deviceIds.includes(joinId)) {
         await fs.updateDoc(clRef, {
-          deviceIds: [...data.deviceIds, otherDeviceId],
-          [`devices.${otherDeviceId}`]: { joinedAt: Date.now(), lastSeen: Date.now(), name: "" },
+          deviceIds: [...data.deviceIds, joinId],
+          [`devices.${joinId}`]: { joinedAt: Date.now(), lastSeen: Date.now(), name: "" },
           lastUpdated: Date.now()
         });
       }
     }
     clusterId = existingClusterId;
   } else {
-    // Create new cluster
     clusterId = await createCluster(hostId, joinId);
   }
-  // Store clusterId locally
+  // Write clusterId to RTDB so joiner can read it
+  try {
+    const mod = await getRTDB();
+    await mod.update(mod.ref(mod._db, `link_codes/${code}`), { clusterId });
+  } catch {}
+  // Store locally
   try { localStorage.setItem("tempus_clusterId", clusterId); } catch {}
-  // Clean up the link code
-  await cleanupLinkCode(code);
   return clusterId;
+}
+
+// Joiner: poll RTDB for clusterId written by host, then join the cluster
+async function joinClusterFromCode(code, maxWaitMs = 15000) {
+  const deviceId = getDeviceId();
+  const start = Date.now();
+  // Poll RTDB until host writes clusterId
+  while (Date.now() - start < maxWaitMs) {
+    const data = await pollLinkCode(code);
+    if (!data) throw new Error("Code expired or removed");
+    if (data.clusterId) {
+      const clusterId = data.clusterId;
+      // Ensure this device is in the cluster
+      const db = await fbInit(); if (!db) throw new Error("Firebase not available");
+      const fs = await getFS();
+      const clRef = fs.doc(db, "tempus_clusters", clusterId);
+      const clSnap = await fs.getDoc(clRef);
+      if (clSnap.exists()) {
+        const clData = clSnap.data();
+        if (!clData.deviceIds?.includes(deviceId)) {
+          await fs.updateDoc(clRef, {
+            deviceIds: [...clData.deviceIds, deviceId],
+            [`devices.${deviceId}`]: { joinedAt: Date.now(), lastSeen: Date.now(), name: parseDeviceName() },
+            lastUpdated: Date.now()
+          });
+        }
+      }
+      // Store locally and clean up RTDB code
+      try { localStorage.setItem("tempus_clusterId", clusterId); } catch {}
+      await cleanupLinkCode(code);
+      return clusterId;
+    }
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  throw new Error("Handshake timed out");
 }
 
 async function readCluster(clusterId) {
@@ -918,7 +969,7 @@ async function updateClusterLastSeen(clusterId) {
   try {
     await fs.updateDoc(fs.doc(db, "tempus_clusters", clusterId), {
       [`devices.${deviceId}.lastSeen`]: Date.now(),
-      [`devices.${deviceId}.name`]: navigator.userAgent?.slice(0, 40) || "Device",
+      [`devices.${deviceId}.name`]: parseDeviceName(),
       lastUpdated: Date.now()
     });
   } catch {}
@@ -1047,16 +1098,19 @@ export function DeviceLinkModal({ link, onClose }) {
   const [error, setError] = useState(null);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const pollRef = useRef(null);
+  const ttlRef = useRef(null);
   const leaveTimer = useRef(null);
 
   useEffect(() => { if (isLinked) setView("devices"); }, [isLinked]);
   useEffect(() => () => {
     if (pollRef.current) clearInterval(pollRef.current);
+    if (ttlRef.current) clearTimeout(ttlRef.current);
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
   }, []);
 
   // Generate code and poll for joiner
   const handleGenerate = async () => {
+    if (!navigator.onLine) { setError(t("offline_link")); return; }
     setLoading(true); setError(null);
     try {
       const code = await createLinkCode();
@@ -1066,19 +1120,22 @@ export function DeviceLinkModal({ link, onClose }) {
       pollRef.current = setInterval(async () => {
         try {
           const data = await pollLinkCode(code);
-          if (!data) { clearInterval(pollRef.current); setError(t("err_code_expired")); setView("entry"); return; }
+          if (!data) { clearInterval(pollRef.current); pollRef.current = null; setError(t("err_code_expired")); setView("entry"); return; }
           if (data.joinedDeviceId) {
             clearInterval(pollRef.current); pollRef.current = null;
+            if (ttlRef.current) { clearTimeout(ttlRef.current); ttlRef.current = null; }
             const cId = await completeLinkHandshake(code);
             if (cId) { linkComplete(cId); setView("devices"); }
             else { setError(t("err_handshake")); setView("entry"); }
           }
         } catch {}
       }, 2000);
-      // Auto-expire after TTL
-      setTimeout(() => {
+      // Auto-expire after TTL (only fires if handshake never completed)
+      if (ttlRef.current) clearTimeout(ttlRef.current);
+      ttlRef.current = setTimeout(() => {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         cleanupLinkCode(code);
+        ttlRef.current = null;
       }, LINK_CODE_TTL);
     } catch (e) { setError(e.message || t("err_create_fail")); }
     setLoading(false);
@@ -1087,11 +1144,12 @@ export function DeviceLinkModal({ link, onClose }) {
   // Join with entered code
   const handleJoin = async () => {
     if (inputCode.length !== 6) { setError(t("err_6digit")); return; }
+    if (!navigator.onLine) { setError(t("offline_link")); return; }
     setLoading(true); setError(null);
     try {
       await joinWithLinkCode(inputCode);
-      // Now complete handshake from joiner side
-      const cId = await completeLinkHandshake(inputCode);
+      // Wait for host to create/assign cluster, then join it
+      const cId = await joinClusterFromCode(inputCode);
       if (cId) { linkComplete(cId); setView("devices"); }
       else { setError(t("err_handshake")); }
     } catch (e) { setError(e.message || t("err_join_link")); }
@@ -1113,6 +1171,7 @@ export function DeviceLinkModal({ link, onClose }) {
 
   const cancelGenerate = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    if (ttlRef.current) { clearTimeout(ttlRef.current); ttlRef.current = null; }
     if (generatedCode) cleanupLinkCode(generatedCode);
     setGeneratedCode(null); setView("entry");
   };
