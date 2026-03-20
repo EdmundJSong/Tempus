@@ -1137,7 +1137,7 @@ export function DeviceLinkModal({ link, onClose }) {
         cleanupLinkCode(code);
         ttlRef.current = null;
       }, LINK_CODE_TTL);
-    } catch (e) { setError(e.message || t("err_create_fail")); }
+    } catch (e) { console.error("Device Link: createLinkCode failed", e); setError(e.message || t("err_create_fail")); }
     setLoading(false);
   };
 
@@ -1188,6 +1188,7 @@ export function DeviceLinkModal({ link, onClose }) {
   if (view === "entry") return (
     <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
       <div style={hdr}><div style={ttl}>{I.desktop(18)} {t("my_devices")}</div><button className="close-btn" onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <button onClick={handleGenerate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "..." : I.plus(16)}</button>
         <button onClick={() => setView("join")} style={bo(LC)}>{I.sync(14)}</button>
