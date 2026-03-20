@@ -751,19 +751,16 @@ export function SyncToast({ message }) {
 }
 
 // ============ RTDB MODULE ============
-let _rtdbModule = null;
+let _rtdbMod = null, _rtdbDb = null;
 async function getRTDB() {
-  if (_rtdbModule && _rtdbModule._db) return _rtdbModule;
-  // Reset on retry (previous init may have failed silently)
-  _rtdbModule = null;
-  await fbInit(); // ensure Firebase app exists
+  if (_rtdbMod && _rtdbDb) return { mod: _rtdbMod, db: _rtdbDb };
+  await fbInit();
   const { getApps } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js");
-  const mod = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js");
+  _rtdbMod = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-database.js");
   const apps = getApps();
   if (apps.length === 0) throw new Error("Firebase app not initialized");
-  mod._db = mod.getDatabase(apps[0], RTDB_URL);
-  _rtdbModule = mod;
-  return _rtdbModule;
+  _rtdbDb = _rtdbMod.getDatabase(apps[0], RTDB_URL);
+  return { mod: _rtdbMod, db: _rtdbDb };
 }
 
 // ============ DEVICE NAME HELPER ============
@@ -790,8 +787,8 @@ function genLinkCode() {
 }
 
 async function createLinkCode() {
-  const mod = await getRTDB();
-  const db = mod._db;
+  const { mod, db } = await getRTDB();
+  
   const deviceId = getDeviceId();
   const code = genLinkCode();
   const codeRef = mod.ref(db, `link_codes/${code}`);
@@ -805,8 +802,8 @@ async function createLinkCode() {
 }
 
 async function joinWithLinkCode(code) {
-  const mod = await getRTDB();
-  const db = mod._db;
+  const { mod, db } = await getRTDB();
+  
   const deviceId = getDeviceId();
   const codeRef = mod.ref(db, `link_codes/${code}`);
   // Use transaction to prevent race condition
@@ -822,16 +819,16 @@ async function joinWithLinkCode(code) {
 }
 
 async function pollLinkCode(code) {
-  const mod = await getRTDB();
-  const db = mod._db;
+  const { mod, db } = await getRTDB();
+  
   const snap = await mod.get(mod.ref(db, `link_codes/${code}`));
   return snap.val();
 }
 
 async function cleanupLinkCode(code) {
   try {
-    const mod = await getRTDB();
-    const db = mod._db;
+    const { mod, db } = await getRTDB();
+    
     await mod.remove(mod.ref(db, `link_codes/${code}`));
   } catch {}
 }
@@ -894,8 +891,8 @@ async function completeLinkHandshake(code) {
   }
   // Write clusterId to RTDB so joiner can read it
   try {
-    const mod = await getRTDB();
-    await mod.update(mod.ref(mod._db, `link_codes/${code}`), { clusterId });
+    const { mod, db } = await getRTDB();
+    await mod.update(mod.ref(db, `link_codes/${code}`), { clusterId });
   } catch {}
   // Store locally
   try { localStorage.setItem("tempus_clusterId", clusterId); } catch {}
