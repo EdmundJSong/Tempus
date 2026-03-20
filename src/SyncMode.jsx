@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { fbInit, getDeviceId, C, buildTL } from "./utils";
 import { I, nI, SyncIcon } from "./components";
+import { t } from "./i18n";
 
 // ============ SYNC CONSTANTS ============
 const SYNC_COLOR = "#06b6d4";
@@ -277,13 +278,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     unsubRef.current = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
       if (!snap.exists()) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
-        if (originalSections.current) showToast("Room closed by host");
+        if (originalSections.current) showToast(t("toast_room_closed"));
         return;
       }
       const d = snap.data(); const myId = getDeviceId();
       if (d.kicked?.includes(myId)) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
-        showToast("You were removed by the host"); return;
+        showToast(t("toast_removed")); return;
       }
       // On first snapshot, initialize lastCmdSeq and mark connection as ready
       if (firstSnapshot) {
@@ -299,7 +300,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       const sectionsChanged = newSJ !== roomSectionsJsonRef.current;
       if (sectionsChanged) roomSectionsJsonRef.current = newSJ;
       setSyncState(prev => ({
-        ...prev, code, role, hostId: d.hostId, hostName: d.hostName || "Host", status: d.status,
+        ...prev, code, role, hostId: d.hostId, hostName: d.hostName || "♛", status: d.status,
         members: d.members || {}, pending: d.pending || {},
         sections: sectionsChanged ? d.sections : (prev?.sections || d.sections),
         commandSeq: d.commandSeq || 0, command: d.command, startAtMs: d.startAtMs,
@@ -363,7 +364,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
         pending: {}, sections: sectionsRef.current, commandSeq: 0, command: null,
         startAtMs: null, resumeFromBar: 1, countInBars: settingsRef.current.countIn || 1, isPending: false, isAdmitted: true });
       await subscribeToRoom(code, "host"); return code;
-    } catch (err) { showToast(err.message || "Failed to create room"); return null; }
+    } catch (err) { showToast(err.message || t("err_create_fail")); return null; }
   }, [deviceId, subscribeToRoom, showToast]);
 
   const doJoinRoom = useCallback(async (code, displayName) => {
@@ -376,7 +377,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       setSyncState({ code, role: "member", status: "lobby", members: {}, pending: {},
         sections: [], commandSeq: 0, command: null, isPending: !admitted, isAdmitted: admitted });
       await subscribeToRoom(code, "member"); return true;
-    } catch (err) { showToast(err.message || "Failed to join room"); return false; }
+    } catch (err) { showToast(err.message || t("err_join_fail")); return false; }
   }, [subscribeToRoom, showToast]);
 
   const doLeaveRoom = useCallback(async () => {
@@ -456,7 +457,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (!roomCode || !isHost) return;
     // Host stops locally immediately
     exitPlayRef.current();
-    showToast("Sync reset — all devices reloaded");
+    showToast(t("toast_sync_reset"));
     // Write to Firestore for members
     updateRoomSections(roomCode, sectionsRef.current);
     sendCommand(roomCode, "sync-reset");
@@ -554,18 +555,18 @@ export function SyncLobby({ sync, onLoadSections, link }) {
   }, [view, syncState?.code]);
 
   const handleCreate = async () => {
-    if (!name.trim()) { setError("Enter your display name"); return; }
+    if (!name.trim()) { setError(t("err_enter_name")); return; }
     setLoading(true); setError(null);
     const c = await doCreateRoom(name.trim()); setLoading(false);
     if (c) { setView("room"); setTimeout(() => setShowLobby(false), 500); }
   };
 
   const handleJoin = async () => {
-    if (!name.trim()) { setError("Enter your display name"); return; }
-    if (code.length !== 4) { setError("Enter a 4-digit room code"); return; }
+    if (!name.trim()) { setError(t("err_enter_name")); return; }
+    if (code.length !== 4) { setError(t("err_enter_code")); return; }
     setLoading(true); setError(null);
     const ok = await doJoinRoom(code, name.trim()); setLoading(false);
-    if (ok) setView("room"); else setError("Could not join room");
+    if (ok) setView("room"); else setError(t("err_join_fail_2"));
   };
 
   const handleLeave = async () => {
@@ -612,11 +613,11 @@ export function SyncLobby({ sync, onLoadSections, link }) {
   // UNLINK PROMPT (device is linked to a cluster — must unlink before syncing)
   if (view === "unlink" && isDeviceLinked) return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync_mode")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ textAlign: "center", padding: "16px 0" }}>
         <div style={{ display: "flex", justifyContent: "center", marginBottom: 12, color: LINK_COLOR }}>{I.desktop(24)}</div>
         <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 16 }}>
-          Device linking active. Unlink to use Sync Mode.
+          {t("unlink_to_sync")}
         </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -629,44 +630,44 @@ export function SyncLobby({ sync, onLoadSections, link }) {
   // ENTRY (Sync Lobby)
   if (view === "entry") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync_mode")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-        <button onClick={() => setView("create")} style={bp}>Create Room</button>
-        <button onClick={() => setView("join")} style={bo(SYNC_COLOR)}>Join Room</button>
+        <button onClick={() => setView("create")} style={bp}>{t("create_room")}</button>
+        <button onClick={() => setView("join")} style={bo(SYNC_COLOR)}>{t("join_room")}</button>
       </div>
-      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>Up to {MAX_MEMBERS} devices can sync together.</div>
+      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>{t("sync_hint").replace("{n}", MAX_MEMBERS)}</div>
     </div></div>
   );
 
   // CREATE
   if (view === "create") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Create Room</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name" autoFocus style={inp} onKeyDown={e => { if (e.key === "Enter") handleCreate(); }} />
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("create_room")}</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder={t("ph_display_name")} autoFocus style={inp} onKeyDown={e => { if (e.key === "Enter") handleCreate(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
-      <button onClick={handleCreate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "Creating..." : "Create Room"}</button>
+      <button onClick={handleCreate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? t("creating") : t("create_room")}</button>
     </div></div>
   );
 
   // JOIN
   if (view === "join") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Join Room</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
-      <input value={name} onChange={e => setName(e.target.value)} placeholder="Your display name" autoFocus style={inp} />
-      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 6 }}>Room code</div>
-      <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="0000" inputMode="numeric" style={{ ...inp, letterSpacing: code ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("join_room")}</div><button className="close-btn" onClick={() => setView("entry")} style={closeBtn}>{I.x(18)}</button></div>
+      <input value={name} onChange={e => setName(e.target.value)} placeholder={t("ph_display_name")} autoFocus style={inp} />
+      <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 6 }}>{t("room_code")}</div>
+      <input value={code} onChange={e => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder={t("ph_room_code")} inputMode="numeric" style={{ ...inp, letterSpacing: code ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
-      <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "Joining..." : "Join Room"}</button>
+      <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? t("joining") : t("join_room")}</button>
     </div></div>
   );
 
   // WAITING ROOM (member pending)
   if (!isHost && syncState?.isPending) return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Waiting Room</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("waiting_room")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ textAlign: "center", padding: "32px 0" }}>
-        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Waiting for the host to let you in...</div>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>Room {syncState.code}</div>
+        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("waiting_host")}</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>{t("room_n")} {syncState.code}</div>
         <div style={{ marginTop: 8 }}><div className="sync-pulse" style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, margin: "0 auto" }} /></div>
       </div>
       <button onClick={handleLeave} style={bo(C.textMuted)}>{I.x(14)}</button>
@@ -676,10 +677,10 @@ export function SyncLobby({ sync, onLoadSections, link }) {
   // LATE JOIN during performance
   if (!isHost && syncState?.isAdmitted && syncState?.status === "playing") return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Sync Mode</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("sync_mode")}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
       <div style={{ textAlign: "center", padding: "32px 0" }}>
-        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Performance in progress</div>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>Waiting for next start...</div>
+        <div style={{ fontSize: 14, color: C.text, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("perf_in_progress")}</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif" }}>{t("waiting_next_start")}</div>
         <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 16 }}>
           {Object.keys(members).map(id => <div key={id} style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR }} />)}
         </div>
@@ -691,18 +692,18 @@ export function SyncLobby({ sync, onLoadSections, link }) {
   // ROOM MANAGEMENT (host: manage members; anyone: view room)
   return (
     <div className="modal-bg" style={mBg} onClick={close}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> Room {syncState?.code}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}><SyncIcon size={18} /> {t("room_n")} {syncState?.code}</div><button className="close-btn" onClick={close} style={closeBtn}>{I.x(18)}</button></div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16 }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 28, color: SYNC_COLOR, letterSpacing: 6, fontWeight: 700 }}>{syncState?.code}</div>
         <button onClick={() => navigator.clipboard?.writeText(syncState?.code || "")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: 6, display: "flex" }}>{I.copy(14)}</button>
       </div>
-      <div style={{ textAlign: "center", fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace", marginBottom: 16 }}>{memberCount}/{MAX_MEMBERS} members</div>
+      <div style={{ textAlign: "center", fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace", marginBottom: 16 }}>{memberCount}/{MAX_MEMBERS} {t("members_label")}</div>
 
       {/* Pending (host) */}
       {isHost && pendingList.length > 0 && <div style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span>Pending ({pendingList.length})</span>
+          <span>{t("pending_n")} ({pendingList.length})</span>
           {pendingList.length > 1 && <button onClick={() => doAdmitAll()} style={{ background: "none", border: `1px solid ${SYNC_COLOR}55`, borderRadius: 6, color: SYNC_COLOR, fontSize: 11, cursor: "pointer", padding: "3px 8px", fontFamily: "'Outfit',sans-serif" }}>✓ ×{pendingList.length}</button>}
         </div>
         {pendingList.map(([id, info]) => (
@@ -717,7 +718,7 @@ export function SyncLobby({ sync, onLoadSections, link }) {
 
       {/* Members */}
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>Members</div>
+        <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("members")}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, flexShrink: 0, boxShadow: `0 0 6px ${SYNC_COLOR}` }} />
           <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || "♛"}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>♛</span></div>
@@ -1065,12 +1066,12 @@ export function DeviceLinkModal({ link, onClose }) {
       pollRef.current = setInterval(async () => {
         try {
           const data = await pollLinkCode(code);
-          if (!data) { clearInterval(pollRef.current); setError("Code expired"); setView("entry"); return; }
+          if (!data) { clearInterval(pollRef.current); setError(t("err_code_expired")); setView("entry"); return; }
           if (data.joinedDeviceId) {
             clearInterval(pollRef.current); pollRef.current = null;
             const cId = await completeLinkHandshake(code);
             if (cId) { linkComplete(cId); setView("devices"); }
-            else { setError("Handshake failed"); setView("entry"); }
+            else { setError(t("err_handshake")); setView("entry"); }
           }
         } catch {}
       }, 2000);
@@ -1079,21 +1080,21 @@ export function DeviceLinkModal({ link, onClose }) {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
         cleanupLinkCode(code);
       }, LINK_CODE_TTL);
-    } catch (e) { setError(e.message || "Failed to generate code"); }
+    } catch (e) { setError(e.message || t("err_create_fail")); }
     setLoading(false);
   };
 
   // Join with entered code
   const handleJoin = async () => {
-    if (inputCode.length !== 6) { setError("Enter a 6-digit code"); return; }
+    if (inputCode.length !== 6) { setError(t("err_6digit")); return; }
     setLoading(true); setError(null);
     try {
       await joinWithLinkCode(inputCode);
       // Now complete handshake from joiner side
       const cId = await completeLinkHandshake(inputCode);
       if (cId) { linkComplete(cId); setView("devices"); }
-      else { setError("Handshake failed"); }
-    } catch (e) { setError(e.message || "Could not join"); }
+      else { setError(t("err_handshake")); }
+    } catch (e) { setError(e.message || t("err_join_link")); }
     setLoading(false);
   };
 
@@ -1127,19 +1128,19 @@ export function DeviceLinkModal({ link, onClose }) {
   // ENTRY
   if (view === "entry") return (
     <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}>{I.desktop(18)} My Devices</div><button className="close-btn" onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}>{I.desktop(18)} {t("my_devices")}</div><button className="close-btn" onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <button onClick={handleGenerate} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "..." : I.plus(16)}</button>
         <button onClick={() => setView("join")} style={bo(LC)}>{I.sync(14)}</button>
       </div>
-      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>Link devices to sync profiles &amp; tempo history.</div>
+      <div style={{ marginTop: 16, fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", textAlign: "center" }}>{t("link_hint")}</div>
     </div></div>
   );
 
   // WAITING FOR JOINER
   if (view === "waiting") return (
     <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}>{I.desktop(18)} My Devices</div><button className="close-btn" onClick={cancelGenerate} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}>{I.desktop(18)} {t("my_devices")}</div><button className="close-btn" onClick={cancelGenerate} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
       <div style={{ textAlign: "center", padding: "16px 0" }}>
         <div style={{ fontFamily: "'DM Mono',monospace", fontSize: 36, color: LC, letterSpacing: 8, fontWeight: 700, marginBottom: 12 }}>{generatedCode}</div>
         <div style={{ marginBottom: 8 }}>
@@ -1156,7 +1157,7 @@ export function DeviceLinkModal({ link, onClose }) {
   // JOIN
   if (view === "join") return (
     <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}>{I.desktop(18)} My Devices</div><button className="close-btn" onClick={() => setView("entry")} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}>{I.desktop(18)} {t("my_devices")}</div><button className="close-btn" onClick={() => setView("entry")} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
       <input value={inputCode} onChange={e => setInputCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" inputMode="numeric" autoFocus style={{ ...inp, letterSpacing: inputCode ? 6 : 2, textAlign: "center", fontSize: 22, fontFamily: "'DM Mono',monospace", maxWidth: "100%", boxSizing: "border-box", margin: 0, marginBottom: 10 }} onKeyDown={e => { if (e.key === "Enter") handleJoin(); }} />
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
       <button onClick={handleJoin} disabled={loading} style={{ ...bp, opacity: loading ? 0.6 : 1 }}>{loading ? "..." : I.sync(16)}</button>
@@ -1170,7 +1171,7 @@ export function DeviceLinkModal({ link, onClose }) {
 
   return (
     <div className="modal-bg" style={mBg} onClick={onClose}><div className="modal-content" style={mBox} onClick={e => e.stopPropagation()}>
-      <div style={hdr}><div style={ttl}>{I.desktop(18)} My Devices</div><button className="close-btn" onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
+      <div style={hdr}><div style={ttl}>{I.desktop(18)} {t("my_devices")}</div><button className="close-btn" onClick={onClose} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", display: "flex" }}>{I.x(18)}</button></div>
 
       <div style={{ marginBottom: 16 }}>
         {deviceList.map(([id, info]) => {
