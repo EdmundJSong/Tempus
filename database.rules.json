@@ -2,31 +2,20 @@
   "rules": {
     "link_codes": {
       "$code": {
-        // Only authenticated users may read
-        ".read": "auth != null",
-
-        // Create: authenticated, code must not already exist, creatorAuthUid must match caller
-        ".write": "auth != null && (
-          (!data.exists() && newData.child('creatorAuthUid').val() == auth.uid)
-          || (
-            data.exists()
-            && data.child('joinedDeviceId').val() == null
-            && newData.child('joinedDeviceId').val() != null
-            && newData.child('creatorDeviceId').val() == data.child('creatorDeviceId').val()
-            && newData.child('creatorAuthUid').val() == data.child('creatorAuthUid').val()
-            && newData.child('clusterId').val() == data.child('clusterId').val()
-            && newData.child('createdAt').val() == data.child('createdAt').val()
-            && newData.child('expiresAt').val() == data.child('expiresAt').val()
-          )
-          || (
-            data.exists()
-            && data.child('creatorAuthUid').val() == auth.uid
-            && !newData.exists()
-          )
-        )",
-
-        // Validate shape on create
-        ".validate": "newData.hasChildren(['creatorDeviceId', 'creatorAuthUid', 'clusterId', 'createdAt', 'expiresAt'])"
+        // Anyone can read a code (for polling)
+        ".read": true,
+        // Create: must have hostDeviceId, joinedDeviceId null, valid expiry
+        ".write": true,
+        ".validate": "newData.hasChildren(['hostDeviceId', 'createdAt', 'expiresAt'])",
+        "joinedDeviceId": {
+          // Once set to a non-null string, cannot be changed
+          // (prevents a second joiner from overwriting)
+          ".validate": "!data.exists() || data.val() == null || data.val() == newData.val()"
+        },
+        "clusterId": {
+          // Only writable once (host writes after cluster creation)
+          ".validate": "newData.isString() && (!data.exists() || data.val() == null)"
+        }
       }
     },
 
