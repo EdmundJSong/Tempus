@@ -173,8 +173,8 @@ export default function Tempus() {
 
   // ============ SYNC MODE ============
   const syncPause = useCallback(() => { met.stop(); setIsP(false); }, [met]);
-  const sync = useSync({ sections, settings, met, go, exitPlay, pause: syncPause });
   const handleSyncLoadSections = useCallback((s) => { if (Array.isArray(s) && s.length > 0) setSections(s); }, []);
+  const sync = useSync({ sections, settings, met, go, exitPlay, pause: syncPause, ps, onRestoreSections: handleSyncLoadSections });
 
   // ============ DEVICE LINKING ============
   const link = useDeviceLink({ syncInRoom: sync.isInRoom });
@@ -237,6 +237,8 @@ export default function Tempus() {
       const secIdx = barInfo.si;
       const sec = prev[secIdx];
       if (!sec || sec.type === "timed") return prev;
+      // Block split for sections with tempo curves or expressive beat maps — post-split data would be invalid
+      if (sec.curve !== "constant" || (sec.expressive && sec.beatMap)) return prev;
       const barInSec = barInfo.bin;
       if (barInSec <= 1 || barInSec >= sec.bars) return prev;
       const elapsed1 = barInSec - 1, elapsed2 = sec.bars - (barInSec - 1);
@@ -380,8 +382,6 @@ export default function Tempus() {
           {settings.appMode !== "basic" && <button onClick={() => { if (!navigator.onLine && !sync.isInRoom) { setOfflinePrompt(t("offline_sync")); return; } sync.setShowLobby(true); }} data-tip-b={t("sync")} style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", minWidth: 44, minHeight: 44, justifyContent: "center", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
           <button onClick={() => setShowSet(true)} data-tip-b={t("settings")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", minWidth: 44, minHeight: 44, justifyContent: "center", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
           {settings.appMode !== "basic" && !sync.isMemberLocked && (() => {
-            const hasOverflowItems = true; // Library + Save always present in non-basic mode
-            if (!hasOverflowItems) return null;
             return (<div style={{ position: "relative" }}>
               <button onClick={() => setShowOverflow(v => !v)} data-tip-b={t("more")} style={{ background: showOverflow ? C.surface : "none", border: `1px solid ${showOverflow ? C.textMuted + "55" : C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", minWidth: 44, minHeight: 44, justifyContent: "center", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.more(18)}</button>
               {showOverflow && <>
