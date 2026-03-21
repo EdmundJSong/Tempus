@@ -132,7 +132,7 @@ export function LibP({ onLoad, onClose }) {
       const blob = new Blob([json], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a"); a.href = url; a.download = "tempus-profiles.json"; a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) { }
   };
   const importFile = () => {
