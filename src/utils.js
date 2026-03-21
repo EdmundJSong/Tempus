@@ -56,21 +56,25 @@ const FIREBASE_CONFIG = {
 };
 const FB_ENABLED = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY" && FIREBASE_CONFIG.apiKey !== "disabled";
 
-let _fb = null, _fbDb = null;
+let _fb = null, _fbDb = null, _fbInitPromise = null;
 export async function fbInit() {
   if (_fb) return _fbDb;
   if (!FB_ENABLED) return null;
-  try {
-    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js");
-    const { getFirestore } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
-    const { getAuth, signInAnonymously } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js");
-    _fb = initializeApp(FIREBASE_CONFIG);
-    _fbDb = getFirestore(_fb);
-    // Anonymous auth — required for auth-gated Firestore rules
-    const auth = getAuth(_fb);
-    if (!auth.currentUser) await signInAnonymously(auth);
-    return _fbDb;
-  } catch { return null; }
+  if (_fbInitPromise) return _fbInitPromise;
+  _fbInitPromise = (async () => {
+    try {
+      const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js");
+      const { getFirestore } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+      const { getAuth, signInAnonymously } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js");
+      _fb = initializeApp(FIREBASE_CONFIG);
+      _fbDb = getFirestore(_fb);
+      // Anonymous auth — required for auth-gated Firestore rules
+      const auth = getAuth(_fb);
+      if (!auth.currentUser) await signInAnonymously(auth);
+      return _fbDb;
+    } catch { _fbInitPromise = null; return null; }
+  })();
+  return _fbInitPromise;
 }
 
 let _fbSyncTimer = null;
