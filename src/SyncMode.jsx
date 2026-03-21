@@ -104,13 +104,16 @@ async function kickAll(code) {
 
 async function sendCommand(code, command, extra = {}) {
   try {
+    const t0 = Date.now();
+    console.log(`[SYNC-DIAG] sendCommand START | cmd=${command} | t=${t0} | code=${code}`);
     const db = await fbInit(); if (!db) { console.error("sendCommand: no db"); return; }
     const fs = await getFS();
     const status = command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" || command === "sync-reset" ? "stopped" : undefined;
     const updates = { command, commandSeq: fs.increment(1), ...extra };
     if (status) updates.status = status;
     await fs.updateDoc(fs.doc(db, "tempus_rooms", code), updates);
-  } catch (e) { console.error("sendCommand failed:", command, e); }
+    console.log(`[SYNC-DIAG] sendCommand DONE | cmd=${command} | wrote in ${Date.now() - t0}ms`);
+  } catch (e) { console.error("[SYNC-DIAG] sendCommand FAILED:", command, e); }
 }
 
 async function updateRoomSections(code, sections) {
@@ -224,12 +227,14 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   // Process command directly in snapshot callback (not useEffect) to avoid React batching issues
   const processCommand = useCallback((d, isAdmitted) => {
-    if (!isAdmitted || roleRef.current === "host") return;
     const seq = d.commandSeq || 0;
     const cmd = d.command;
+    console.log(`[SYNC-DIAG] processCommand | cmd=${cmd} | seq=${seq} | lastSeq=${lastCmdSeq.current} | isAdmitted=${isAdmitted} | role=${roleRef.current}`);
+    if (!isAdmitted || roleRef.current === "host") { console.log(`[SYNC-DIAG] processCommand SKIPPED (host or not admitted)`); return; }
     const startAtMs = d.startAtMs;
-    if (seq <= lastCmdSeq.current) return;
+    if (seq <= lastCmdSeq.current) { console.log(`[SYNC-DIAG] processCommand SKIPPED (seq ${seq} <= lastSeq ${lastCmdSeq.current})`); return; }
     lastCmdSeq.current = seq;
+    console.log(`[SYNC-DIAG] processCommand EXECUTING | cmd=${cmd} | seq=${seq} | t=${Date.now()}`);
     const sNow = Date.now() - clockOffsetRef.current;
     if (cmd === "start" || cmd === "restart") {
       if (!startAtMs) return;
@@ -257,12 +262,14 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     roleRef.current = role;
     let firstSnapshot = true;
     unsubRef.current = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
+      console.log(`[SYNC-DIAG] onSnapshot FIRED | t=${Date.now()} | exists=${snap.exists()} | role=${role}`);
       if (!snap.exists()) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
         if (originalSections.current) showToast(t("toast_room_closed"));
         return;
       }
       const d = snap.data(); const myId = getDeviceId();
+      console.log(`[SYNC-DIAG] onSnapshot DATA | cmd=${d.command} | seq=${d.commandSeq} | lastSeq=${lastCmdSeq.current} | status=${d.status} | inMembers=${!!(d.members?.[myId])} | inPending=${!!(d.pending?.[myId])}`);
       const nowInMembers = !!(d.members?.[myId]);
       const nowInPending = !!(d.pending?.[myId]);
       // Detect removal: was admitted, now gone from both members and pending
@@ -274,6 +281,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       if (nowInMembers) admittedRef.current = true;
       // On first snapshot, initialize lastCmdSeq and mark connection as ready
       if (firstSnapshot) {
+        console.log(`[SYNC-DIAG] FIRST SNAPSHOT — syncReady → true | t=${Date.now()} | initSeq=${d.commandSeq || 0}`);
         lastCmdSeq.current = d.commandSeq || 0;
         firstSnapshot = false;
         setSyncReady(true);
@@ -386,7 +394,9 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const SYNC_LEAD_MS = 1000; // buffer for Firestore propagation to members
 
   const doStart = useCallback(async () => {
-    if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
+    console.log(`[SYNC-DIAG] doStart called | t=${Date.now()} | syncReady=${syncReadyRef.current} | roomCode=${roomCode}`);
+    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doStart BLOCKED — syncReady=${syncReadyRef.current}, roomCode=${roomCode}`); return; }
+    try { metRef.current.tap(); } catch {}
     const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
     const startMs = sNow + SYNC_LEAD_MS; // expressed in server time
@@ -397,13 +407,16 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   }, [roomCode]);
 
   const doPause = useCallback(async () => {
-    if (!roomCode || !syncReadyRef.current) return;
+    console.log(`[SYNC-DIAG] doPause called | t=${Date.now()} | syncReady=${syncReadyRef.current}`);
+    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doPause BLOCKED`); return; }
     pauseRef.current();
     await sendCommand(roomCode, "pause");
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
-    if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
+    console.log(`[SYNC-DIAG] doResume called | t=${Date.now()} | syncReady=${syncReadyRef.current}`);
+    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doResume BLOCKED`); return; }
+    try { metRef.current.tap(); } catch {}
     const sNow = Date.now() - clockOffsetRef.current;
     const startMs = sNow + SYNC_LEAD_MS;
     const tl = buildTL(sectionsRef.current);
@@ -413,13 +426,16 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
-    if (!roomCode || !syncReadyRef.current) return;
+    console.log(`[SYNC-DIAG] doStop called | t=${Date.now()} | syncReady=${syncReadyRef.current}`);
+    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doStop BLOCKED`); return; }
     exitPlayRef.current();
     await sendCommand(roomCode, "stop");
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
-    if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
+    console.log(`[SYNC-DIAG] doRestart called | t=${Date.now()} | syncReady=${syncReadyRef.current}`);
+    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doRestart BLOCKED`); return; }
+    try { metRef.current.tap(); } catch {}
     const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
     const startMs = sNow + SYNC_LEAD_MS;
