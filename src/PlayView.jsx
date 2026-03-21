@@ -48,7 +48,7 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
   if (nxt && !isCI) { if (isT) { if (ps.remaining != null && ps.remaining <= 10) upN = nxt.type === "timed" ? `${nxt.duration}s ${t("free_dur")}` : `${nxt.tsNum}/${nxt.tsDen} ${t("at_tempo")} ${nxt.tempo}`; } else { const bis = tl.filter(b => b.si === si); if (bis.length > 0 && bis[bis.length - 1].ab - ab <= 1) upN = nxt.type === "timed" ? `${nxt.duration}s ${t("free_dur")}` : `${nxt.tsNum}/${nxt.tsDen} ${t("at_tempo")} ${nxt.tempo}`; } }
   const isRec = mode === "record";
 
-  const handleTap = e => { if (isRec && onSplit) { const el = e.target; if (el.closest && (el.closest("button") || el.closest("input"))) return; onSplit(ab); setSplitMsg(`${t("marked_bar")} ${ab}`); if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); splitMsgTimer.current = setTimeout(() => setSplitMsg(null), 1200); } };
+  const handleTap = e => { if (isRec && onSplit && isP && !isCI && !isEnded) { const el = e.target; if (el.closest && (el.closest("button") || el.closest("input"))) return; onSplit(ab); setSplitMsg(`${t("marked_bar")} ${ab}`); if (splitMsgTimer.current) clearTimeout(splitMsgTimer.current); splitMsgTimer.current = setTimeout(() => setSplitMsg(null), 1200); } };
 
   const cR = 120, cC = 2 * Math.PI * cR; let prg = 0;
   if (isEnded) prg = 1;
