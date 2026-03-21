@@ -105,7 +105,6 @@ async function kickAll(code) {
 async function sendCommand(code, command, extra = {}) {
   try {
     const t0 = Date.now();
-    console.log(`[SYNC-DIAG] sendCommand START | cmd=${command} | t=${t0} | code=${code}`);
     const status = command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" || command === "sync-reset" ? "stopped" : undefined;
 
     // FAST PATH: Write command to RTDB (~50-150ms vs Firestore ~800-1400ms)
@@ -113,7 +112,6 @@ async function sendCommand(code, command, extra = {}) {
     const cmdData = { command, seq: t0, ...extra };
     if (status) cmdData.status = status;
     await mod.set(mod.ref(rtdb, `sync_commands/${code}`), cmdData);
-    console.log(`[SYNC-DIAG] sendCommand RTDB DONE | cmd=${command} | wrote in ${Date.now() - t0}ms`);
 
     // SLOW PATH (fire-and-forget): Update Firestore status for room metadata UI
     if (status) {
@@ -122,7 +120,7 @@ async function sendCommand(code, command, extra = {}) {
         fs.updateDoc(fs.doc(db, "tempus_rooms", code), { status }).catch(() => {});
       }).catch(() => {});
     }
-  } catch (e) { console.error("[SYNC-DIAG] sendCommand FAILED:", command, e); }
+  } catch {}
 }
 
 async function updateRoomSections(code, sections) {
@@ -242,12 +240,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const processCommand = useCallback((d, isAdmitted) => {
     const seq = d.seq || 0;
     const cmd = d.command;
-    console.log(`[SYNC-DIAG] processCommand | cmd=${cmd} | seq=${seq} | lastSeq=${lastCmdSeq.current} | isAdmitted=${isAdmitted} | role=${roleRef.current}`);
-    if (!isAdmitted || roleRef.current === "host") { console.log(`[SYNC-DIAG] processCommand SKIPPED (host or not admitted)`); return; }
+    if (!isAdmitted || roleRef.current === "host") return;
     const startAtMs = d.startAtMs;
-    if (seq <= lastCmdSeq.current) { console.log(`[SYNC-DIAG] processCommand SKIPPED (seq ${seq} <= lastSeq ${lastCmdSeq.current})`); return; }
+    if (seq <= lastCmdSeq.current) return;
     lastCmdSeq.current = seq;
-    console.log(`[SYNC-DIAG] processCommand EXECUTING | cmd=${cmd} | seq=${seq} | t=${Date.now()}`);
     const sNow = Date.now() - clockOffsetRef.current;
     if (cmd === "start" || cmd === "restart") {
       if (!startAtMs) return;
@@ -285,12 +281,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
         rtdbUnsub = mod.onValue(cmdRef, (snap) => {
           const d = snap.val();
           if (!d || !d.command) return; // no command yet
-          console.log(`[SYNC-DIAG] RTDB onValue | cmd=${d.command} | seq=${d.seq} | t=${Date.now()}`);
           // First RTDB snapshot: initialize seq baseline, don't execute
           if (firstRtdb) {
             firstRtdb = false;
             lastCmdSeq.current = d.seq || 0;
-            console.log(`[SYNC-DIAG] RTDB FIRST VALUE — initSeq=${d.seq || 0}`);
             return;
           }
           // Update syncState status immediately from RTDB (faster than Firestore)
@@ -299,17 +293,12 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
               startAtMs: d.startAtMs, resumeFromBar: d.resumeFromBar, countInBars: d.countInBars } : prev);
           }
           processCommand(d, admittedRef.current);
-        }, (err) => {
-          console.error("[SYNC-DIAG] RTDB command listener error:", err);
-        });
-      } catch (e) {
-        console.error("[SYNC-DIAG] RTDB command listener setup failed:", e);
-      }
+        }, () => {});
+      } catch {}
     }
 
     // --- FIRESTORE ROOM METADATA LISTENER (members, sections, kick detection) ---
     const fsUnsub = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
-      console.log(`[SYNC-DIAG] FS onSnapshot FIRED | t=${Date.now()} | exists=${snap.exists()} | role=${role}`);
       if (!snap.exists()) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
         if (originalSections.current) showToast(t("toast_room_closed"));
@@ -327,7 +316,6 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       if (nowInMembers) admittedRef.current = true;
       // On first snapshot, mark connection as ready
       if (firstSnapshot) {
-        console.log(`[SYNC-DIAG] FIRST FS SNAPSHOT — syncReady → true | t=${Date.now()}`);
         firstSnapshot = false;
         setSyncReady(true);
       }
@@ -431,9 +419,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     const restore = originalSections.current;
+    showToast(t("toast_left"));
     setSyncState(null); setSyncReady(false); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null; admittedRef.current = false;
     return restore;
-  }, [roomCode]);
+  }, [roomCode, showToast]);
 
   const doAdmit = useCallback((id) => roomCode && admitMember(roomCode, id), [roomCode]);
   const doAdmitAll = useCallback(() => roomCode && admitAll(roomCode), [roomCode]);
@@ -443,8 +432,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const SYNC_LEAD_MS = 500; // RTDB propagation is ~50-150ms; 500ms gives comfortable margin
 
   const doStart = useCallback(async () => {
-    console.log(`[SYNC-DIAG] doStart called | t=${Date.now()} | syncReady=${syncReadyRef.current} | roomCode=${roomCode}`);
-    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doStart BLOCKED`); return; }
+    if (!roomCode || !syncReadyRef.current) return;
     try { metRef.current.tap(); } catch {}
     const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
@@ -454,15 +442,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   }, [roomCode]);
 
   const doPause = useCallback(async () => {
-    console.log(`[SYNC-DIAG] doPause called | t=${Date.now()} | syncReady=${syncReadyRef.current}`);
-    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doPause BLOCKED`); return; }
+    if (!roomCode || !syncReadyRef.current) return;
     pauseRef.current();
     await sendCommand(roomCode, "pause");
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
-    console.log(`[SYNC-DIAG] doResume called | t=${Date.now()} | syncReady=${syncReadyRef.current}`);
-    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doResume BLOCKED`); return; }
+    if (!roomCode || !syncReadyRef.current) return;
     try { metRef.current.tap(); } catch {}
     const sNow = Date.now() - clockOffsetRef.current;
     const startMs = sNow + SYNC_LEAD_MS;
@@ -473,15 +459,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
-    console.log(`[SYNC-DIAG] doStop called | t=${Date.now()} | syncReady=${syncReadyRef.current}`);
-    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doStop BLOCKED`); return; }
+    if (!roomCode || !syncReadyRef.current) return;
     exitPlayRef.current();
     await sendCommand(roomCode, "stop");
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
-    console.log(`[SYNC-DIAG] doRestart called | t=${Date.now()} | syncReady=${syncReadyRef.current}`);
-    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doRestart BLOCKED`); return; }
+    if (!roomCode || !syncReadyRef.current) return;
     try { metRef.current.tap(); } catch {}
     const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
@@ -784,7 +768,7 @@ export function SyncLobby({ sync, onLoadSections, link }) {
         })}
       </div>
 
-      {isHost && memberList.length > 0 && <button onClick={handleKickAll} style={{ ...bo(confirmKickAll ? C.danger : C.textMuted), borderColor: confirmKickAll ? C.danger + "88" : C.border, color: confirmKickAll ? C.danger : C.textMuted, fontSize: 12, marginBottom: 8 }}>{confirmKickAll ? <>{I.x(12)} <span style={{ fontWeight: 700 }}>?</span></> : <>{I.x(12)} ×{memberList.length}</>}</button>}
+      {isHost && memberList.length > 0 && <button onClick={handleKickAll} style={{ ...bo(confirmKickAll ? C.danger : C.textMuted), borderColor: confirmKickAll ? C.danger + "88" : C.border, color: confirmKickAll ? C.danger : C.textMuted, fontSize: 12, marginBottom: 8 }}>{confirmKickAll ? <>{I.x(12)} <span style={{ fontWeight: 700 }}>?</span></> : <>{I.x(12)} {t("remove_all")}</>}</button>}
       {!isHost && syncState?.isAdmitted && <button onClick={handleLeave} style={bo(C.textMuted)}>{I.x(14)}</button>}
       <button onClick={close} style={{ ...bo(SYNC_COLOR), marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>{I.chevL(14)}</button>
     </div></div>
@@ -1317,7 +1301,7 @@ export function DeviceLinkModal({ link, onClose }) {
 
       {deviceList.length >= 2 && (
         <button onClick={handleLeave} style={{ ...bo(confirmLeave ? C.danger : C.textMuted), borderColor: confirmLeave ? C.danger + "88" : C.textMuted + "55", color: confirmLeave ? C.danger : C.textMuted }}>
-          {confirmLeave ? <>{I.unlink(14)}<span style={{ fontWeight: 700 }}>?</span></> : I.unlink(14)}
+          {confirmLeave ? <>{I.unlink(14)}<span style={{ fontWeight: 700 }}>?</span></> : <>{I.unlink(14)} {t("unlink_device")}</>}
         </button>
       )}
     </div></div>
