@@ -7,7 +7,7 @@ import { t } from "./i18n";
 const nv = { padding: "8px 14px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", justifyContent: "center" };
 const tB = { width: 56, height: 56, borderRadius: "50%", border: "none", background: C.downbeat, color: "#000", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 24px ${C.downbeat}33` };
 export const tS = { width: 44, height: 44, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" };
-const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap", minWidth: 44 };
+const qS = { padding: "4px 10px", borderRadius: 6, border: `1px solid ${C.border}`, background: "transparent", color: C.textMuted, cursor: "pointer", fontSize: 10, fontFamily: "'DM Mono',monospace", whiteSpace: "nowrap", minWidth: 44, minHeight: 44 };
 
 // ============ PLAY VIEW ============
 export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResume, onRestart, onGoToBar, onPrevSec, onNextSec, vis, isP, muted, onMute, onExit, mode, onSplit, onTapTempo, tapBpm, tapFlash, settings, onSettings, syncLocked }) {
@@ -24,10 +24,15 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
     if (!flashFnRef) return;
     flashFnRef.current = (beatType) => {
       if (overlayRef.current) {
-        const c = beatType === 0 ? C.downbeat : beatType === 1 ? C.accent : C.text;
-        const o = beatType === 0 ? 0.35 : beatType === 1 ? 0.2 : 0.08;
-        overlayRef.current.style.background = c;
+        const c = beatType === 0 ? C.downbeat : beatType === 1 ? C.accent : C.textMuted;
+        const o = beatType === 0 ? 0.5 : beatType === 1 ? 0.3 : 0.1;
+        overlayRef.current.style.background = `radial-gradient(circle at 50% 50%, ${c} 0%, transparent 50%)`;
         overlayRef.current.style.opacity = o;
+      }
+      const ringEl = overlayRef.current?.parentElement?.querySelector("circle:nth-of-type(2)");
+      if (ringEl && beatType === 0) {
+        ringEl.style.strokeWidth = "12";
+        setTimeout(() => { ringEl.style.strokeWidth = "8"; }, 80);
       }
       if (numRef.current && beatType === 0) numRef.current.classList.add("pump");
       if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -60,7 +65,7 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
 
   return (
     <div onClick={handleTap} style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 50, fontFamily: "'DM Mono',monospace", boxShadow: borderColor ? `inset 0 0 0 4px ${borderColor}, inset 0 0 30px ${borderColor}44` : undefined }}>
-      {showF && <div ref={overlayRef} style={{ position: "absolute", inset: 0, opacity: 0, transition: "opacity 0.05s", pointerEvents: "none" }} />}
+      {showF && <div ref={overlayRef} style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: "min(320px, 55vh)", height: "min(320px, 55vh)", opacity: 0, transition: "opacity 0.05s", pointerEvents: "none", zIndex: 0 }} />}
       {splitMsg && <div style={{ position: "absolute", inset: 0, background: C.record, opacity: 0.15, pointerEvents: "none", transition: "opacity 0.3s" }} />}
 
       {/* TOP BAR */}
@@ -78,7 +83,15 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
         <div style={{ position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "min(260px, 45vh)", height: "min(260px, 45vh)" }}>
           <svg width="100%" height="100%" viewBox="0 0 280 280" style={{ position: "absolute", inset: 0, transform: "rotate(-90deg)", pointerEvents: "none" }}>
             <circle cx={140} cy={140} r={cR} fill="none" stroke={C.border} strokeWidth={8} />
-            <circle cx={140} cy={140} r={cR} fill="none" stroke={borderColor || C.downbeat} strokeWidth={8} strokeDasharray={cC} strokeDashoffset={sDo} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.1s linear" }} />
+            {!isCI && !isT && !isEnded && Array.from({ length: tsN || 1 }).map((_, i) => {
+              const angle = (i / (tsN || 1)) * 2 * Math.PI;
+              const x1 = 140 + Math.cos(angle) * 112;
+              const y1 = 140 + Math.sin(angle) * 112;
+              const x2 = 140 + Math.cos(angle) * 120;
+              const y2 = 140 + Math.sin(angle) * 120;
+              return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke={C.border} strokeOpacity={0.5} strokeWidth={2} strokeLinecap="round" />;
+            })}
+            <circle cx={140} cy={140} r={cR} fill="none" stroke={borderColor || C.downbeat} strokeWidth={8} strokeDasharray={cC} strokeDashoffset={sDo} strokeLinecap="round" style={{ transition: "stroke-dashoffset 0.1s linear, stroke-width 0.1s ease" }} />
           </svg>
           <div style={{ fontSize: 20, color: C.textMuted, fontWeight: 700, display: "flex", flexDirection: "column", alignItems: "center", lineHeight: 1.1, position: "relative", zIndex: 1, marginBottom: 8 }}>
             {isEnded ? "" : isCI ? <><span style={{ fontSize: 14 }}>{t("count_in")}</span>{settings?.countIn > 1 && tsN > 0 && ps.beatsLeft != null && <span style={{ fontSize: 14, color: C.downbeat, fontWeight: 600 }}>{settings.countIn - Math.ceil(ps.beatsLeft / tsN) + 1} / {settings.countIn}</span>}</> : isT ? <span style={{ display: "flex", alignItems: "center", gap: 6 }}>{I.clock(18)} {t("free")}</span> : (<><span>{tsN}</span><div style={{ height: 1, width: 30, background: C.textMuted, margin: "2px 0" }} /><span>{tsD}</span></>)}
@@ -99,7 +112,7 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
           </>}
         </div>
         <div style={{ height: 24, display: "flex", alignItems: "center", justifyContent: "center", marginTop: 4 }}>
-          {showD && !isT && !isCI && !isEnded && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? c : `${c}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)", border: on ? `2px solid ${c}` : "2px solid transparent", transform: on ? "scale(1.1)" : "scale(1)", boxShadow: on ? `0 0 10px ${c}66` : "none" }} />; })}</div>}
+          {showD && !isT && !isCI && !isEnded && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{(ps.allBeatTypes || []).map((b, i) => { const on = i === bei, c = b === 0 ? C.downbeat : b === 1 ? C.accent : C.sub; const isDownbeat = b === 0; const isAccent = b === 1; return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: isDownbeat ? 2 : isAccent ? 4 : "50%", background: on ? c : `${c}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1), transform 0.1s", border: on ? `2px solid ${c}` : "2px solid transparent", transform: on ? (isDownbeat ? "scale(1.1) rotate(45deg)" : "scale(1.1)") : (isDownbeat ? "scale(1) rotate(45deg)" : "scale(1)"), boxShadow: on ? `0 0 10px ${c}66` : "none" }} />; })}</div>}
           {showD && isT && !isEnded && ps.totalMarkers > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 280 }}>{Array.from({ length: ps.totalMarkers }).map((_, i) => { const on = i === ps.markerIdx, past = i < (ps.markerIdx || 0); return <div key={i} style={{ width: on ? 16 : 10, height: on ? 16 : 10, borderRadius: "50%", background: on ? C.downbeat : past ? `${C.downbeat}88` : `${C.sub}55`, transition: "all 0.1s cubic-bezier(0.34, 1.56, 0.64, 1)", border: on ? `2px solid ${C.downbeat}` : "2px solid transparent", transform: on ? "scale(1.1)" : "scale(1)", boxShadow: on ? `0 0 10px ${C.downbeat}66` : "none" }} />; })}</div>}
         </div>
         {/* Record hint - reserved height */}
