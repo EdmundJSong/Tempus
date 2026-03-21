@@ -275,34 +275,36 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     roleRef.current = role;
     let firstSnapshot = true;
 
-    // --- RTDB COMMAND LISTENER (fast path: ~50-150ms delivery) ---
+    // --- RTDB COMMAND LISTENER (members only — host processes commands locally) ---
     let rtdbUnsub = null;
-    let firstRtdb = true;
-    try {
-      const { mod, db: rtdb } = await getRTDB();
-      const cmdRef = mod.ref(rtdb, `sync_commands/${code}`);
-      rtdbUnsub = mod.onValue(cmdRef, (snap) => {
-        const d = snap.val();
-        if (!d || !d.command) return; // no command yet
-        console.log(`[SYNC-DIAG] RTDB onValue | cmd=${d.command} | seq=${d.seq} | t=${Date.now()}`);
-        // First RTDB snapshot: initialize seq baseline, don't execute
-        if (firstRtdb) {
-          firstRtdb = false;
-          lastCmdSeq.current = d.seq || 0;
-          console.log(`[SYNC-DIAG] RTDB FIRST VALUE — initSeq=${d.seq || 0}`);
-          return;
-        }
-        // Update syncState status immediately from RTDB (faster than Firestore)
-        if (d.status) {
-          setSyncState(prev => prev ? { ...prev, status: d.status, command: d.command,
-            startAtMs: d.startAtMs, resumeFromBar: d.resumeFromBar, countInBars: d.countInBars } : prev);
-        }
-        processCommand(d, admittedRef.current);
-      }, (err) => {
-        console.error("[SYNC-DIAG] RTDB command listener error:", err);
-      });
-    } catch (e) {
-      console.error("[SYNC-DIAG] RTDB command listener setup failed:", e);
+    if (role === "member") {
+      let firstRtdb = true;
+      try {
+        const { mod, db: rtdb } = await getRTDB();
+        const cmdRef = mod.ref(rtdb, `sync_commands/${code}`);
+        rtdbUnsub = mod.onValue(cmdRef, (snap) => {
+          const d = snap.val();
+          if (!d || !d.command) return; // no command yet
+          console.log(`[SYNC-DIAG] RTDB onValue | cmd=${d.command} | seq=${d.seq} | t=${Date.now()}`);
+          // First RTDB snapshot: initialize seq baseline, don't execute
+          if (firstRtdb) {
+            firstRtdb = false;
+            lastCmdSeq.current = d.seq || 0;
+            console.log(`[SYNC-DIAG] RTDB FIRST VALUE — initSeq=${d.seq || 0}`);
+            return;
+          }
+          // Update syncState status immediately from RTDB (faster than Firestore)
+          if (d.status) {
+            setSyncState(prev => prev ? { ...prev, status: d.status, command: d.command,
+              startAtMs: d.startAtMs, resumeFromBar: d.resumeFromBar, countInBars: d.countInBars } : prev);
+          }
+          processCommand(d, admittedRef.current);
+        }, (err) => {
+          console.error("[SYNC-DIAG] RTDB command listener error:", err);
+        });
+      } catch (e) {
+        console.error("[SYNC-DIAG] RTDB command listener setup failed:", e);
+      }
     }
 
     // --- FIRESTORE ROOM METADATA LISTENER (members, sections, kick detection) ---
