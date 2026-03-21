@@ -192,6 +192,7 @@ export default function Tempus() {
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
   const [showClearModal, setShowClearModal] = useState(false);
+  const [showOverflow, setShowOverflow] = useState(false);
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
@@ -211,7 +212,7 @@ export default function Tempus() {
           else { met.tap(); go(0); }
         }
       }
-      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setShowClearModal(false); sync.setShowLobby(false); }
+      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setShowClearModal(false); setShowOverflow(false); sync.setShowLobby(false); }
       else if (isP && !sync.isMemberLocked && e.code === "ArrowLeft") jumpSec(-1);
       else if (isP && !sync.isMemberLocked && e.code === "ArrowRight") jumpSec(1);
     };
@@ -367,16 +368,33 @@ export default function Tempus() {
         .sync-glow-pulse { animation: syncGlowBright 1.2s ease-in-out; }
       `}</style>
 
+      {/* TOOLBAR
+         Mobile discoverability: long-press tooltips were considered but deferred —
+         users can discover via the overflow menu labels instead.
+         Always visible: New, Sync, Settings, ⋮ overflow.
+         Overflow: Library, Save, Video (conditional), Dual (conditional). */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
         <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
           {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={t("new_label")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{I.fileNew(18)}</button>}
-          {videoUrl && !sync.isMemberLocked && <button onClick={() => { if (!navigator.onLine) { setOfflinePrompt(t("offline_video")); return; } setShowVideo(true); }} data-tip-b={t("video")} style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
-          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b={t("library")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
-          {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b={t("save")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
           {settings.appMode !== "basic" && <button onClick={() => { if (!navigator.onLine && !sync.isInRoom) { setOfflinePrompt(t("offline_sync")); return; } sync.setShowLobby(true); }} data-tip-b={t("sync")} style={{ background: sync.isInRoom ? sync.SYNC_COLOR + "22" : "none", border: `1px solid ${sync.isInRoom ? sync.SYNC_COLOR : C.border}`, borderRadius: 8, color: sync.isInRoom ? sync.SYNC_COLOR : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.sync(18)}</button>}
-          {settings.appMode === "advanced" && settings.dualTempo && !sync.isMemberLocked && <button onClick={() => setShowDual(true)} data-tip-b={t("dual")} style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'DM Mono',monospace" }}>A|B</button>}
           <button onClick={() => setShowSet(true)} data-tip-b={t("settings")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.gear(18)}</button>
+          {settings.appMode !== "basic" && !sync.isMemberLocked && (() => {
+            const hasOverflowItems = true; // Library + Save always present in non-basic mode
+            if (!hasOverflowItems) return null;
+            return (<div style={{ position: "relative" }}>
+              <button onClick={() => setShowOverflow(v => !v)} data-tip-b={t("more")} style={{ background: showOverflow ? C.surface : "none", border: `1px solid ${showOverflow ? C.textMuted + "55" : C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.more(18)}</button>
+              {showOverflow && <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setShowOverflow(false)} />
+                <div style={{ position: "absolute", top: "100%", right: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 6, marginTop: 4, minWidth: 160, boxShadow: "0 8px 30px rgba(0,0,0,0.5)" }}>
+                  <button onClick={() => { setShowLib(true); setShowOverflow(false); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13, fontFamily: "'Outfit',sans-serif" }}>{I.folder(16)} {t("library")}</button>
+                  <button onClick={() => { setShowSave(true); setShowOverflow(false); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderRadius: 6, color: C.text, cursor: "pointer", fontSize: 13, fontFamily: "'Outfit',sans-serif" }}>{I.save(16)} {t("save")}</button>
+                  {videoUrl && <button onClick={() => { if (!navigator.onLine) { setOfflinePrompt(t("offline_video")); setShowOverflow(false); return; } setShowVideo(true); setShowOverflow(false); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderRadius: 6, color: C.accent, cursor: "pointer", fontSize: 13, fontFamily: "'Outfit',sans-serif" }}>▶ {t("video")}</button>}
+                  {settings.appMode === "advanced" && settings.dualTempo && <button onClick={() => { setShowDual(true); setShowOverflow(false); }} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "none", border: "none", borderRadius: 6, color: C.accent, cursor: "pointer", fontSize: 13, fontFamily: "'Outfit',sans-serif" }}>A|B {t("dual")}</button>}
+                </div>
+              </>}
+            </div>);
+          })()}
         </div>
       </div>
 
