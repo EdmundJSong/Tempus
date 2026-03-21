@@ -160,50 +160,11 @@ function withTimeout(promise, ms, fallback) {
   ]).finally(() => clearTimeout(timer));
 }
 
-// Multi-ping: 7 Firestore round-trips, discard worst RTTs, take median offset.
+// Single-ping calibration: 1 write + 1 read + 1 delete = ~300-500ms
 // offset = localTime - serverTime. To get server-equivalent time: Date.now() - offset
 async function _calibrateClockInner() {
   try {
     const db = await fbInit(); if (!db) return 0;
-    const fs = await getFS();
-    const deviceId = getDeviceId();
-    const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
-    const PINGS = 7;
-    const samples = [];
-    for (let p = 0; p < PINGS; p++) {
-      const localBefore = Date.now();
-      await fs.setDoc(calRef, { t: fs.serverTimestamp() });
-      const localAfter = Date.now();
-      const snap = await fs.getDoc(calRef);
-      const serverMs = snap.data()?.t?.toMillis?.();
-      if (serverMs) {
-        const rtt = localAfter - localBefore;
-        const offset = ((localBefore + localAfter) / 2) - serverMs;
-        samples.push({ rtt, offset });
-      }
-    }
-    try { await fs.deleteDoc(calRef); } catch {}
-    if (samples.length === 0) return 0;
-    // Discard highest and lowest RTT samples (outliers from network jitter)
-    if (samples.length >= 5) {
-      samples.sort((a, b) => a.rtt - b.rtt);
-      samples.splice(-1, 1); // remove worst RTT
-      samples.splice(0, 1);  // remove best RTT (can also be anomalous)
-    }
-    // Return median offset from remaining samples
-    samples.sort((a, b) => a.offset - b.offset);
-    return samples[Math.floor(samples.length / 2)].offset;
-  } catch (e) { console.error("calibrateClock error:", e); return 0; }
-}
-// Public wrapper: 10s timeout so UI never hangs
-async function calibrateClock() {
-  return withTimeout(_calibrateClockInner(), 10000, 0);
-}
-
-// Lightweight single-ping recalibration (for periodic refresh, not initial setup)
-async function recalibrateSingle() {
-  try {
-    const db = await fbInit(); if (!db) return null;
     const fs = await getFS();
     const deviceId = getDeviceId();
     const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
@@ -214,8 +175,12 @@ async function recalibrateSingle() {
     const serverMs = snap.data()?.t?.toMillis?.();
     try { await fs.deleteDoc(calRef); } catch {}
     if (serverMs) return ((localBefore + localAfter) / 2) - serverMs;
-    return null;
-  } catch { return null; }
+    return 0;
+  } catch (e) { console.error("calibrateClock error:", e); return 0; }
+}
+// Public wrapper: 5s timeout so UI never hangs
+async function calibrateClock() {
+  return withTimeout(_calibrateClockInner(), 5000, 0);
 }
 
 // ============ useSync HOOK ============
@@ -347,10 +312,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     heartbeatRef.current = setInterval(async () => {
       heartbeat(roomCode);
       heartbeatCount.current++;
-      // Recalibrate every 3rd heartbeat (~30s) to combat clock drift
-      if (heartbeatCount.current % 3 === 0) {
-        const newOffset = await recalibrateSingle();
-        if (newOffset != null) clockOffsetRef.current = newOffset;
+      // Recalibrate every 6th heartbeat (~60s) to combat clock drift
+      if (heartbeatCount.current % 6 === 0) {
+        const newOffset = await calibrateClock();
+        if (newOffset !== 0) clockOffsetRef.current = newOffset;
       }
     }, HEARTBEAT_MS);
     return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
@@ -367,7 +332,8 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     try {
       setSyncReady(false);
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
-      clockOffsetRef.current = await calibrateClock();
+      // Calibrate in background — don't block room creation
+      calibrateClock().then(offset => { clockOffsetRef.current = offset; });
       const code = await createRoom(sectionsRef.current, settingsRef.current);
       const db = await fbInit(); const fs = await getFS();
       await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { hostName: displayName, [`members.${deviceId}.name`]: displayName });
@@ -384,7 +350,8 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     try {
       setSyncReady(false);
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
-      clockOffsetRef.current = await calibrateClock();
+      // Calibrate in background — don't block room join
+      calibrateClock().then(offset => { clockOffsetRef.current = offset; });
       const { admitted } = await joinRoomPending(code, displayName);
       lastCmdSeq.current = 0; originalSections.current = JSON.parse(JSON.stringify(sectionsRef.current));
       setSyncState({ code, role: "member", status: "lobby", members: {}, pending: {},
