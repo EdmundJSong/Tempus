@@ -330,7 +330,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       const sectionsChanged = newSJ !== roomSectionsJsonRef.current;
       if (sectionsChanged) roomSectionsJsonRef.current = newSJ;
       setSyncState(prev => ({
-        ...prev, code, role, hostId: d.hostId, hostName: d.hostName || "♛",
+        ...prev, code, role, hostId: d.hostId, hostName: d.hostName || "Host",
         status: d.status || prev?.status, // prefer RTDB-updated status if already set
         members: d.members || {}, pending: d.pending || {},
         sections: sectionsChanged ? d.sections : (prev?.sections || d.sections),
@@ -759,7 +759,7 @@ export function SyncLobby({ sync, onLoadSections, link }) {
         <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 8 }}>{t("members")}</div>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: `1px solid ${C.border}` }}>
           <div style={{ width: 8, height: 8, borderRadius: "50%", background: SYNC_COLOR, flexShrink: 0, boxShadow: `0 0 6px ${SYNC_COLOR}` }} />
-          <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace" }}>{members[syncState?.hostId]?.name || "♛"}<span style={{ fontSize: 10, color: SYNC_COLOR, marginLeft: 6 }}>♛</span></div>
+          <div style={{ flex: 1, fontSize: 13, color: C.text, fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center" }}>{members[syncState?.hostId]?.name || "Host"}<span style={{ display: "flex", color: SYNC_COLOR, marginLeft: 6 }}>{I.hostCrown(12)}</span></div>
         </div>
         {memberList.map(([id, info]) => {
           const pres = presence[id];
