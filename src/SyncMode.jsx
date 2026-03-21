@@ -22,6 +22,8 @@ async function getFS() {
   if (!_fsModule) _fsModule = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
   return _fsModule;
 }
+// Pre-warm Firestore module on import
+getFS().catch(() => {});
 
 function genRoomCode() { return String(Math.floor(1000 + Math.random() * 9000)); }
 
@@ -46,7 +48,7 @@ async function createRoom(sections, settings, displayName, _retries = 0) {
     commandSeq: 0, command: null, startAtMs: null,
     resumeFromBar: 1, countInBars: settings.countIn || 1,
     members: { [deviceId]: { name: displayName, joinedAt: Date.now(), lastSeen: Date.now() } },
-    pending: {}, kicked: [], createdAt: Date.now()
+    pending: {}, createdAt: Date.now()
   });
   return code;
 }
@@ -59,7 +61,6 @@ async function joinRoomPending(code, displayName) {
   if (!snap.exists()) throw new Error("Room not found");
   const data = snap.data();
   const deviceId = getDeviceId();
-  if (data.kicked?.includes(deviceId)) throw new Error("You were removed from this room");
   if (Object.keys(data.members || {}).length + Object.keys(data.pending || {}).length >= MAX_MEMBERS) throw new Error("Room is full");
   if (data.members?.[deviceId]) {
     await fs.updateDoc(ref, { [`members.${deviceId}.name`]: displayName, [`members.${deviceId}.lastSeen`]: Date.now() });
@@ -89,26 +90,27 @@ async function admitAll(code) {
 
 async function kickMember(code, memberId) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
-  const snap = await fs.getDoc(fs.doc(db, "tempus_rooms", code)); if (!snap.exists()) return;
-  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${memberId}`]: fs.deleteField(), kicked: [...(snap.data().kicked || []), memberId] });
+  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${memberId}`]: fs.deleteField() });
 }
 
 async function kickAll(code) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
   const snap = await fs.getDoc(fs.doc(db, "tempus_rooms", code)); if (!snap.exists()) return;
-  const data = snap.data(); const updates = {}; const kicked = [...(data.kicked || [])];
-  for (const id of Object.keys(data.members || {})) { if (id !== data.hostId) { updates[`members.${id}`] = fs.deleteField(); kicked.push(id); } }
-  for (const id of Object.keys(data.pending || {})) { updates[`pending.${id}`] = fs.deleteField(); kicked.push(id); }
-  updates.kicked = kicked;
+  const data = snap.data(); const updates = {};
+  for (const id of Object.keys(data.members || {})) { if (id !== data.hostId) { updates[`members.${id}`] = fs.deleteField(); } }
+  for (const id of Object.keys(data.pending || {})) { updates[`pending.${id}`] = fs.deleteField(); }
   if (Object.keys(updates).length > 0) await fs.updateDoc(fs.doc(db, "tempus_rooms", code), updates);
 }
 
 async function sendCommand(code, command, extra = {}) {
-  const db = await fbInit(); if (!db) return; const fs = await getFS();
-  const status = command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" || command === "sync-reset" ? "stopped" : undefined;
-  const updates = { command, commandSeq: fs.increment(1), ...extra };
-  if (status) updates.status = status;
-  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), updates);
+  try {
+    const db = await fbInit(); if (!db) { console.error("sendCommand: no db"); return; }
+    const fs = await getFS();
+    const status = command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" || command === "sync-reset" ? "stopped" : undefined;
+    const updates = { command, commandSeq: fs.increment(1), ...extra };
+    if (status) updates.status = status;
+    await fs.updateDoc(fs.doc(db, "tempus_rooms", code), updates);
+  } catch (e) { console.error("sendCommand failed:", command, e); }
 }
 
 async function updateRoomSections(code, sections) {
@@ -218,6 +220,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const roomSectionsJsonRef = useRef(null);
   const roleRef = useRef(null); // track role in refs for snapshot callback
+  const admittedRef = useRef(false); // track admission for kick detection
 
   // Process command directly in snapshot callback (not useEffect) to avoid React batching issues
   const processCommand = useCallback((d, isAdmitted) => {
@@ -260,10 +263,15 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
         return;
       }
       const d = snap.data(); const myId = getDeviceId();
-      if (d.kicked?.includes(myId)) {
+      const nowInMembers = !!(d.members?.[myId]);
+      const nowInPending = !!(d.pending?.[myId]);
+      // Detect removal: was admitted, now gone from both members and pending
+      if (admittedRef.current && !nowInMembers && !nowInPending && !firstSnapshot) {
+        admittedRef.current = false;
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
         showToast(t("toast_removed")); return;
       }
+      if (nowInMembers) admittedRef.current = true;
       // On first snapshot, initialize lastCmdSeq and mark connection as ready
       if (firstSnapshot) {
         lastCmdSeq.current = d.commandSeq || 0;
@@ -286,6 +294,9 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
         isPending: !!(d.pending?.[myId]) && !(d.members?.[myId]),
         isAdmitted
       }));
+    }, (err) => {
+      console.error("Sync onSnapshot error:", err);
+      showToast("Connection lost — rejoin room");
     });
   }, [showToast, processCommand]);
 
@@ -363,7 +374,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     const restore = originalSections.current;
-    setSyncState(null); setSyncReady(false); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null;
+    setSyncState(null); setSyncReady(false); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null; admittedRef.current = false;
     return restore;
   }, [roomCode]);
 
@@ -378,42 +389,42 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
     const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
-    const t = sNow + SYNC_LEAD_MS; // expressed in server time
+    const startMs = sNow + SYNC_LEAD_MS; // expressed in server time
     // Call go() immediately — audio scheduler handles precise timing via syncDelayMs
     goRef.current(0, ci, SYNC_LEAD_MS);
-    // Write to Firestore for members (fire-and-forget)
-    sendCommand(roomCode, "start", { startAtMs: t, countInBars: ci });
+    // Write to Firestore for members
+    await sendCommand(roomCode, "start", { startAtMs: startMs, countInBars: ci });
   }, [roomCode]);
 
   const doPause = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return;
     pauseRef.current();
-    sendCommand(roomCode, "pause");
+    await sendCommand(roomCode, "pause");
   }, [roomCode]);
 
   const doResume = useCallback(async (barNum = 1) => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
     const sNow = Date.now() - clockOffsetRef.current;
-    const t = sNow + SYNC_LEAD_MS;
+    const startMs = sNow + SYNC_LEAD_MS;
     const tl = buildTL(sectionsRef.current);
     const idx = tl.findIndex(b => b.ab === barNum);
     if (idx >= 0) goRef.current(idx, 0, SYNC_LEAD_MS);
-    sendCommand(roomCode, "resume", { startAtMs: t, resumeFromBar: barNum });
+    await sendCommand(roomCode, "resume", { startAtMs: startMs, resumeFromBar: barNum });
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return;
     exitPlayRef.current();
-    sendCommand(roomCode, "stop");
+    await sendCommand(roomCode, "stop");
   }, [roomCode]);
 
   const doRestart = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return; try { metRef.current.tap(); } catch {}
     const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
-    const t = sNow + SYNC_LEAD_MS;
+    const startMs = sNow + SYNC_LEAD_MS;
     goRef.current(0, ci, SYNC_LEAD_MS);
-    sendCommand(roomCode, "restart", { startAtMs: t, countInBars: ci });
+    await sendCommand(roomCode, "restart", { startAtMs: startMs, countInBars: ci });
   }, [roomCode]);
 
   // Auto-send sections to Firestore with debounce when host edits (Fix 4)
@@ -433,12 +444,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doSyncReset = useCallback(async () => {
     if (!roomCode || !isHost) return;
-    // Host stops locally immediately
     exitPlayRef.current();
     showToast(t("toast_sync_reset"));
-    // Write to Firestore for members
-    updateRoomSections(roomCode, sectionsRef.current);
-    sendCommand(roomCode, "sync-reset");
+    await updateRoomSections(roomCode, sectionsRef.current);
+    await sendCommand(roomCode, "sync-reset");
   }, [roomCode, isHost, showToast]);
 
   const isMemberLocked = isInRoom && !isHost;
