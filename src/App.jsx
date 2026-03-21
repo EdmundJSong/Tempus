@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { useSync, SyncLobby, SyncStatusBar, SyncToast, useDeviceLink, DeviceLinkModal } from "./SyncMode";
 import { useMetronome } from "./metronome";
 import { useTapTempo } from "./metronome";
-import { C, _getLS, _setLS, mkM, buildTL, scaleSections, gCD, fbSyncDebounced, getTempoHistory, saveTempoHistory } from "./utils";
+import { C, _getLS, _setLS, mkM, buildTL, scaleSections, gCD, fbSyncDebounced, fbInit, getTempoHistory, saveTempoHistory } from "./utils";
 import { I, SecCard, SecEd } from "./components";
 import PlayView from "./PlayView";
 import VideoView from "./VideoView";
@@ -41,6 +41,8 @@ export default function Tempus() {
   const [settings, setSettings] = useState(() => { try { const saved = _getLS("tempus_settings"); if (saved) { const p = JSON.parse(saved); if (p.pitched !== undefined && !p.clickSound) { p.clickSound = p.pitched ? "sine" : "noise"; delete p.pitched; } return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, showTempoHistory: false, offlineMode: false, lang: "en", ...p }; } } catch {} return { accented: true, clickSound: "sine", visualMode: "dots+flash", countIn: 1, appMode: "default", downbeatOnly: false, silentInterval: 0, dualTempo: false, showTempoHistory: false, offlineMode: false, lang: "en" }; });
   useEffect(() => { _setLS("tempus_settings", JSON.stringify(settings)); }, [settings]);
   useEffect(() => { setLang(settings.lang || "en"); }, [settings.lang]);
+  // Pre-warm Firebase SDK on mount so Sync/Link don't cold-start
+  useEffect(() => { fbInit().catch(() => {}); }, []);
   const [offlinePrompt, setOfflinePrompt] = useState(null);
   // SW register/unregister based on offlineMode setting
   useEffect(() => {
