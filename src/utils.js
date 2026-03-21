@@ -9,7 +9,15 @@ const _memStore = {};
 export function _getLS(k) { try { return localStorage.getItem(k); } catch { return _memStore[k] || null; } }
 export function _setLS(k, v) { try { localStorage.setItem(k, v); } catch { _memStore[k] = v; } }
 export function ldP() { try { return JSON.parse(_getLS(SK)) || []; } catch { return []; } }
-export function svP(p) { _setLS(SK, JSON.stringify(p)); try { const sec = JSON.parse(_getLS("tempus_sections")) || []; fbSyncDebounced(sec, p); } catch {} }
+
+// Profile change listener — used by useDeviceLink to push local edits to cluster
+let _profileChangeListener = null;
+let _skipProfileNotify = false;
+export function registerProfileChangeListener(fn) { _profileChangeListener = fn; }
+export function unregisterProfileChangeListener() { _profileChangeListener = null; }
+export function setSkipProfileNotify(v) { _skipProfileNotify = v; }
+
+export function svP(p) { _setLS(SK, JSON.stringify(p)); try { const sec = JSON.parse(_getLS("tempus_sections")) || []; fbSyncDebounced(sec, p); } catch {} if (!_skipProfileNotify && _profileChangeListener) { try { _profileChangeListener(p); } catch {} } }
 
 // ============ TEMPO HISTORY ============
 export function getTempoHistory(profileId) {
