@@ -932,7 +932,7 @@ async function completeLinkHandshake(code) {
       const data = clSnap.data();
       if (!data.deviceIds.includes(joinId)) {
         await fs.updateDoc(clRef, {
-          deviceIds: [...data.deviceIds, joinId],
+          deviceIds: fs.arrayUnion(joinId),
           [`devices.${joinId}`]: { joinedAt: Date.now(), lastSeen: Date.now(), name: "" },
           lastUpdated: Date.now()
         });
@@ -971,7 +971,7 @@ async function joinClusterFromCode(code, maxWaitMs = 15000) {
         const clData = clSnap.data();
         if (!clData.deviceIds?.includes(deviceId)) {
           await fs.updateDoc(clRef, {
-            deviceIds: [...clData.deviceIds, deviceId],
+            deviceIds: fs.arrayUnion(deviceId),
             [`devices.${deviceId}`]: { joinedAt: Date.now(), lastSeen: Date.now(), name: parseDeviceName() },
             lastUpdated: Date.now()
           });
@@ -1099,16 +1099,10 @@ export function useDeviceLink({ syncInRoom = false }) {
   }, [clusterId, deviceId]);
 
   // For mutual exclusion: unlink before entering sync room
+  // removeDeviceFromCluster already handles dissolution when ≤1 device remains
   const unlinkDeviceForSync = useCallback(async () => {
     if (!clusterId) return;
-    const data = await readCluster(clusterId);
-    const remaining = (data?.deviceIds || []).filter(id => id !== deviceId);
-    if (remaining.length <= 1) {
-      // Dissolve cluster entirely
-      await removeDeviceFromCluster(clusterId, deviceId);
-    } else {
-      await removeDeviceFromCluster(clusterId, deviceId);
-    }
+    await removeDeviceFromCluster(clusterId, deviceId);
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
     setClusterId(null); setClusterData(null);
@@ -1297,7 +1291,7 @@ export function DeviceLinkModal({ link, onClose }) {
               <div style={{ width: 8, height: 8, borderRadius: "50%", background: isSelf ? LC : stale ? C.textMuted : LC, flexShrink: 0, boxShadow: (isSelf || !stale) ? `0 0 6px ${LC}` : "none" }} />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, color: isSelf ? LC : (stale ? C.textMuted : C.text), fontFamily: "'DM Mono',monospace", display: "flex", alignItems: "center", gap: 6 }}>
-                  {shortId}
+                  {info.name || shortId}
                   {isSelf && <span style={{ fontSize: 9, color: LC, fontFamily: "'Outfit',sans-serif" }}>←</span>}
                 </div>
                 {info.lastSeen && <div style={{ fontSize: 10, color: C.textMuted + "88", fontFamily: "'DM Mono',monospace" }}>
