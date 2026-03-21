@@ -21,7 +21,7 @@ export const I = {
   chevL: s => <Icon size={s || 18} d="M15 18l-6-6 6-6" />,
   chevR: s => <Icon size={s || 18} d="M9 18l6-6-6-6" />,
   plus: s => <Icon size={s || 20} d="M12 5v14 M5 12h14" />,
-  trash: s => <Icon size={s || 16} d="M3 6h18 M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2 M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />,
+  trash: s => <Icon size={s || 16} d="M3 6h18 M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6 M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2 M10 11v6 M14 11v6" />,
   copy: s => <Icon size={s || 16} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2 M12 8h6a2 2 0 012 2v8a2 2 0 01-2 2h-6a2 2 0 01-2-2v-8a2 2 0 012-2z" />,
   arrowUp: s => <Icon size={s || 16} d="M12 19V5 M5 12l7-7 7 7" />,
   arrowDown: s => <Icon size={s || 16} d="M12 5v14 M5 12l7 7 7-7" />,
@@ -30,10 +30,10 @@ export const I = {
   volOff: s => <Icon size={s || 18} d="M11 5L6 9H2v6h4l5 4V5z M23 9l-6 6 M17 9l6 6" />,
   clock: s => <Icon size={s || 18} d="M12 6v6l4 2"><circle cx="12" cy="12" r="10" /></Icon>,
   music: s => <Icon size={s || 14} d="M9 18V5l12-2v13 M9 18a3 3 0 11-6 0 3 3 0 016 0z M21 16a3 3 0 11-6 0 3 3 0 016 0z" />,
-  gear: s => <Icon size={s || 18} d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"><circle cx="12" cy="12" r="3" /></Icon>,
+  gear: s => <Icon size={s || 18} d="M12 16a4 4 0 100-8 4 4 0 000 8z"><path d="M12 3v2 M12 19v2 M5.64 5.64l1.41 1.41 M16.95 16.95l1.41 1.41 M3 12h2 M19 12h2 M5.64 18.36l1.41-1.41 M16.95 7.05l1.41-1.41" vectorEffect="non-scaling-stroke" /></Icon>,
   arrow: s => <Icon size={s || 14} d="M5 12h14m-7-7l7 7-7 7" />,
   restart: s => <Icon size={s || 18} d="M1 4v6h6 M3.51 15a9 9 0 102.13-9.36L1 10" />,
-  save: s => <Icon size={s || 18} d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z M17 21v-8H7v8 M7 3v5h8" />,
+  save: s => <Icon size={s || 18} d="M19 21H5a2 2 0 01-2-2v-4 M12 3v13 M8 12l4 4 4-4" />,
   folder: s => <Icon size={s || 18} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />,
   search: s => <Icon size={s || 18} d="M11 17a6 6 0 100-12 6 6 0 000 12z M21 21l-4.35-4.35" />,
   rec: s => <Icon size={s || 18} fill="currentColor" stroke="none"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" strokeWidth={1.5} /><circle cx="12" cy="12" r="4" /></Icon>,
@@ -45,7 +45,9 @@ export const I = {
   unlink: s => <Icon size={s || 18} d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71 M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71 M8 8l8 8" />,
   desktop: s => <Icon size={s || 24} d="M20 17H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2z M12 17v4 M8 21h8" />,
   fermata: s => <Icon size={s || 18}><path d="M4 14 Q12 2 20 14" vectorEffect="non-scaling-stroke" /><circle cx="12" cy="14" r="2" fill="currentColor" stroke="none" /></Icon>,
-  more: s => <Icon size={s || 18} fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></Icon>
+  more: s => <Icon size={s || 18} fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></Icon>,
+  hostCrown: s => <Icon size={s || 18} d="M4 19h16 M4 19l2-11 4 4 2-5 2 5 4-4 2 11" />,
+  gripHandle: s => <Icon size={s || 18}><path d="M8 9h8 M8 15h8 M6 9h.01 M6 15h.01" strokeWidth="2.5" vectorEffect="non-scaling-stroke" /></Icon>
 };
 
 // ============ SVG NOTE ============
@@ -80,7 +82,7 @@ export function TapBtn({ onTap, size = "sm", flash = false }) {
 }
 
 // ============ BEAT UNIT PICKER ============
-export function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip={t("beat_unit")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 38, minHeight: 42 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
+export function BUP({ beatUnit, dotted, onSelect }) { const [open, setOpen] = useState(false); const all = BU.flatMap(u => [{ ...u, dotted: false }, { ...u, dotted: true }]); return (<div style={{ position: "relative" }}><button onClick={() => setOpen(!open)} data-tip={t("beat_unit")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 6px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center", minWidth: 44, minHeight: 44 }}><NoteSVG type={beatUnit} dotted={dotted} size={20} /></button>{open && <><div style={{ position: "fixed", inset: 0, zIndex: 200 }} onClick={() => setOpen(false)} /><div style={{ position: "absolute", top: "100%", left: 0, zIndex: 201, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 8, marginTop: 4, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 4, minWidth: 120 }}>{all.map((u, i) => <button key={i} onClick={() => { onSelect(u.id, u.dotted); setOpen(false); }} style={{ background: u.id === beatUnit && u.dotted === dotted ? C.downbeat + "22" : "transparent", border: u.id === beatUnit && u.dotted === dotted ? `1px solid ${C.downbeat}` : "1px solid transparent", borderRadius: 6, padding: "6px 4px", cursor: "pointer", color: C.text, display: "flex", alignItems: "center", justifyContent: "center" }}><NoteSVG type={u.id} dotted={u.dotted} size={18} /></button>)}</div></>}</div>); }
 
 // ============ SECTION EDITOR ============
 export function SecEd({ section, onSave, onClose, onDelete, appMode = "default", isNew = false, editIndex = 0 }) {
@@ -232,8 +234,8 @@ export const SecCard = React.forwardRef(function SecCard({ section: s, index: i,
     <div className="sec-card" draggable={!isTouch} onDragStart={!isTouch && onDragStart ? e => onDragStart(e, i) : undefined} onDragEnter={!isTouch && onDragEnter ? e => onDragEnter(e, i) : undefined} onDragOver={!isTouch ? onDragOver : undefined} onDragEnd={!isTouch ? onDragEnd : undefined} onDrop={!isTouch && onDrop ? e => onDrop(e, i) : undefined} onClick={handleCardClick} onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd} style={{ background: C.surface, borderRadius: 10, padding: "12px 14px", border: `1px solid ${(tDropIdx === i && tDrag && tDrag.idx !== i) ? C.accent : dropIdx === i ? C.accent : (s.capturedDuration ? C.record + "44" : C.border)}`, cursor: "pointer", display: "flex", alignItems: "center", gap: 12, transform: isDragged ? `translateY(${tDrag.offsetY}px)` : `translateX(${swX}px) translateY(${shiftY}px)`, transition: isDragged ? "box-shadow 0.2s" : (swRef.current.swiping ? "none" : "transform 0.25s ease, border 0.15s"), position: "relative", zIndex: isDragged ? 10 : 1, opacity: dragIdx === i ? 0.5 : 1, boxShadow: isDragged ? "0 8px 30px rgba(0,0,0,0.5)" : undefined }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, minWidth: 24, alignItems: "center" }}>
         {isTouch && !showReorder ? (
-          <button onTouchStart={e => { e.stopPropagation(); onGripTouchStart(i, e); }} onTouchEnd={e => { e.stopPropagation(); if (!tDrag) cancelTouchDrag(); }} onTouchMove={e => { if (!tDrag) cancelTouchDrag(); }} onClick={e => { e.stopPropagation(); if (!tDrag) setShowReorder(true); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex", flexDirection: "column", gap: 1, touchAction: "none" }}>
-            <span style={{ fontSize: 14, lineHeight: 1, letterSpacing: 2 }}>☰</span>
+          <button onTouchStart={e => { e.stopPropagation(); onGripTouchStart(i, e); }} onTouchEnd={e => { e.stopPropagation(); if (!tDrag) cancelTouchDrag(); }} onTouchMove={e => { if (!tDrag) cancelTouchDrag(); }} onClick={e => { e.stopPropagation(); if (!tDrag) setShowReorder(true); }} style={{ background: "none", border: "none", color: C.textMuted, cursor: "pointer", padding: 4, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, touchAction: "none" }}>
+            <span style={{ display: "flex", justifyContent: "center" }}>{I.gripHandle(14)}</span>
             <span style={{ fontFamily: "'DM Mono',monospace", fontSize: 10, color: C.textMuted, lineHeight: 1 }}>{i + 1}</span>
           </button>
         ) : (
