@@ -126,10 +126,10 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
         </div>
         {/* Quick settings */}
         {settings && onSettings && <div style={{ display: "flex", gap: 6, justifyContent: "center", pointerEvents: "auto" }}>
-          <button onClick={() => onSettings({ ...settings, accented: !settings.accented })} style={qS}>{settings.accented ? t("accent") : t("flat")}</button>
-          <button onClick={() => { const all = settings.appMode === "advanced" ? ["sine", "noise", "wood", "rim", "clave", "cowbell"] : ["sine", "noise"]; const idx = Math.max(0, all.indexOf(settings.clickSound)); onSettings({ ...settings, clickSound: all[(idx + 1) % all.length] }); }} style={qS}>{{ sine: t("sound_sine"), noise: t("sound_noise"), wood: t("sound_wood"), rim: t("sound_rim"), clave: t("sound_clave"), cowbell: t("sound_cowbell") }[settings.clickSound] || t("sound_sine")}</button>
-          <button onClick={() => { const m = ["dots", "dots+flash", "flash"]; const i = (m.indexOf(settings.visualMode) + 1) % m.length; onSettings({ ...settings, visualMode: m[i] }); }} style={qS}><span style={{ opacity: settings.visualMode.includes("dots") ? 1 : 0.25 }}>●</span> <span style={{ opacity: settings.visualMode.includes("flash") ? 1 : 0.25 }}>◻</span></button>
-          <button onClick={() => onSettings({ ...settings, countIn: (settings.countIn + 1) % 3 })} style={qS}>{settings.countIn === 0 ? t("no_count_in") : `${settings.countIn} ${t("n_count_in")}`}</button>
+          <button onClick={() => onSettings(prev => ({ ...prev, accented: !prev.accented }))} style={qS}>{settings.accented ? t("accent") : t("flat")}</button>
+          <button onClick={() => onSettings(prev => { const all = prev.appMode === "advanced" ? ["sine", "noise", "wood", "rim", "clave", "cowbell"] : ["sine", "noise"]; const idx = Math.max(0, all.indexOf(prev.clickSound)); return { ...prev, clickSound: all[(idx + 1) % all.length] }; })} style={qS}>{{ sine: t("sound_sine"), noise: t("sound_noise"), wood: t("sound_wood"), rim: t("sound_rim"), clave: t("sound_clave"), cowbell: t("sound_cowbell") }[settings.clickSound] || t("sound_sine")}</button>
+          <button onClick={() => onSettings(prev => { const m = ["dots", "dots+flash", "flash"]; const i = (m.indexOf(prev.visualMode) + 1) % m.length; return { ...prev, visualMode: m[i] }; })} style={qS}><span style={{ opacity: settings.visualMode.includes("dots") ? 1 : 0.25 }}>●</span> <span style={{ opacity: settings.visualMode.includes("flash") ? 1 : 0.25 }}>◻</span></button>
+          <button onClick={() => onSettings(prev => ({ ...prev, countIn: (prev.countIn + 1) % 3 }))} style={qS}>{settings.countIn === 0 ? t("no_count_in") : `${settings.countIn} ${t("n_count_in")}`}</button>
         </div>}
         {/* Transport */}
         <div style={{ display: "flex", gap: 16, alignItems: "center", pointerEvents: "auto" }}>
