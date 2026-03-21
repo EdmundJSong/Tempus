@@ -9,7 +9,9 @@ export function useMetronome(externalCtx) {
   const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) { sa.current.pause(); sa.current.currentTime = 0; } }, []);
   const silentStart = useRef(0);
   const clk = useCallback((ctx, time, bt) => {
-    const { accented, clickSound = "sine", muted, downbeatOnly, silentInterval } = sR.current; if (muted) return;
+    const { accented, clickSound = "sine", muted, downbeatOnly, silentInterval } = sR.current;
+    console.warn('[CLK]', { muted, clickSound, bt, drift: (ctx.currentTime - time).toFixed(4), ctxState: ctx.state, silentInterval, downbeatOnly });
+    if (muted) return;
     // Floor: never schedule in the past — expired gain envelopes produce silence
     const t0 = Math.max(time, ctx.currentTime);
     if (downbeatOnly && bt !== 0) return;
@@ -43,7 +45,7 @@ export function useMetronome(externalCtx) {
         if (!tsF.current) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedStart", ab: bar.ab, si: bar.si, dur: bar.tDur }); tsF.current = true; }
         if (bar.mk && tsM.current < bar.mk.length && el >= bar.mk[tsM.current] - 0.02) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedMarker", ab: bar.ab, si: bar.si, el, dur: bar.tDur, mt: bar.mk[tsM.current], mi: tsM.current, tm: bar.mk.length }); tsM.current++; }
         if (cbR.current) cbR.current({ type: "timedTick", ab: bar.ab, si: bar.si, el, rem: Math.max(0, bar.tDur - el), dur: bar.tDur });
-        if (el >= bar.tDur) { tsS.current = 0; tsM.current = 0; tsF.current = false; nb.current = ctx.currentTime + 0.05; bi.current++; continue; } nb.current += 0.05; return;
+        if (el >= bar.tDur) { console.warn('[TIMED-EXIT]', { bi: bi.current, nextBi: bi.current + 1, nextBar: tl[bi.current + 1], nbBefore: nb.current, ctxTime: ctx.currentTime }); tsS.current = 0; tsM.current = 0; tsF.current = false; nb.current = ctx.currentTime + 0.05; bi.current++; continue; } nb.current += 0.05; return;
       }
       // Fermata hold in progress
       if (inFerm.current) {
@@ -59,7 +61,9 @@ export function useMetronome(externalCtx) {
         nb.current += 0.05; return;
       }
       const pbc = bar.perBeatCd;
-      const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
+      const bt = bar.bts[bei.current] ?? 2;
+      if (bar.si >= 1) console.warn('[BEAT]', { si: bar.si, bi: bi.current, bei: bei.current, bt, ab: bar.ab, nb: nb.current.toFixed(4), ctx: ctx.currentTime.toFixed(4), isT: bar.isT });
+      clk(ctx, nb.current, bt);
       const beatCd = Math.max(0.01, pbc ? (pbc[bei.current]?.cd ?? pbc[0]?.cd ?? 0.5) : (bar.cd ?? 0.5));
       const beatTempo = pbc ? pbc[bei.current]?.cd ? Math.round(60 / (pbc[bei.current].cd / ((D2Q[bar.tsD] || 1) / (BU.find(x => x.id === "q")?.q || 1)))) : bar.tempo : bar.tempo;
       if (cbR.current) cbR.current({ type: "beat", barIdx: bi.current, beatIdx: bei.current, bt, ab: bar.ab, tsN: bar.tsN, tsD: bar.tsD, tempo: beatTempo, si: bar.si });
