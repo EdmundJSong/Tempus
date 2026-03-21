@@ -266,6 +266,10 @@ const S = {
   remove_all:      { en: "Remove all",      "zh-CN": "全部移除",   "zh-TW": "全部移除",   ja: null, ko: null },
   toast_left:      { en: "You left the room","zh-CN": "你已离开房间","zh-TW": "你已離開房間", ja: null, ko: null },
   unlink_device:   { en: "Unlink this device","zh-CN": "取消链接此设备","zh-TW": "取消連結此裝置", ja: null, ko: null },
+  sync_profiles_syncing: { en: "Syncing profiles…", "zh-CN": "同步资料中…", "zh-TW": "同步資料中…", ja: null, ko: null },
+  sync_profiles_synced:  { en: "Profiles synced",   "zh-CN": "资料已同步",   "zh-TW": "資料已同步",   ja: null, ko: null },
+  sync_profiles_error:   { en: "Sync failed",       "zh-CN": "同步失败",     "zh-TW": "同步失敗",     ja: null, ko: null },
+  err_too_many_profiles: { en: "Too many profiles to sync (max {n})", "zh-CN": "资料过多无法同步（上限{n}）", "zh-TW": "資料過多無法同步（上限{n}）", ja: null, ko: null },
 
   // ============ 11. VIDEO VIEW ============
 
