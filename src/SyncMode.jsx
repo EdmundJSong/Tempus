@@ -94,7 +94,7 @@ async function admitAll(code) {
 
 async function kickMember(code, memberId) {
   const db = await fbInit(); if (!db) return; const fs = await getFS();
-  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${memberId}`]: fs.deleteField() });
+  await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { [`members.${memberId}`]: fs.deleteField(), [`pending.${memberId}`]: fs.deleteField() });
 }
 
 async function kickAll(code) {
@@ -204,7 +204,7 @@ async function calibrateClock() {
 }
 
 // ============ useSync HOOK ============
-export function useSync({ sections, settings, met, go, exitPlay, pause }) {
+export function useSync({ sections, settings, met, go, exitPlay, pause, ps, onRestoreSections }) {
   const [syncState, setSyncState] = useState(null);
   const [showLobby, setShowLobby] = useState(false);
   const [toast, setToast] = useState(null);
@@ -218,13 +218,16 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const toastTimer = useRef(null);
   const clockOffsetRef = useRef(0); // local - server (ms)
   const serverNow = useCallback(() => Date.now() - clockOffsetRef.current, []);
-  const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const pauseRef = useRef(pause); const sectionsRef = useRef(sections); const settingsRef = useRef(settings);
+  const goRef = useRef(go); const metRef = useRef(met); const exitPlayRef = useRef(exitPlay); const pauseRef = useRef(pause); const sectionsRef = useRef(sections); const settingsRef = useRef(settings); const psRef = useRef(ps);
   useEffect(() => { goRef.current = go; }, [go]);
   useEffect(() => { metRef.current = met; }, [met]);
   useEffect(() => { exitPlayRef.current = exitPlay; }, [exitPlay]);
   useEffect(() => { pauseRef.current = pause; }, [pause]);
   useEffect(() => { sectionsRef.current = sections; }, [sections]);
   useEffect(() => { settingsRef.current = settings; }, [settings]);
+  useEffect(() => { psRef.current = ps; }, [ps]);
+  const restoreRef = useRef(onRestoreSections);
+  useEffect(() => { restoreRef.current = onRestoreSections; }, [onRestoreSections]);
 
   const deviceId = useMemo(() => getDeviceId(), []);
   const isHost = syncState?.role === "host";
@@ -239,6 +242,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const roomSectionsJsonRef = useRef(null);
   const roleRef = useRef(null); // track role in refs for snapshot callback
   const admittedRef = useRef(false); // track admission for kick detection
+  const pausedBarRef = useRef(1); // track bar number on pause for resume
 
   // Process command from RTDB onValue callback (fast path)
   const processCommand = useCallback((d, isAdmitted) => {
@@ -304,8 +308,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     // --- FIRESTORE ROOM METADATA LISTENER (members, sections, kick detection) ---
     const fsUnsub = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
       if (!snap.exists()) {
+        const restore = originalSections.current;
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
-        if (originalSections.current) showToast(t("toast_room_closed"));
+        if (restore) { showToast(t("toast_room_closed")); if (restoreRef.current) restoreRef.current(restore); }
+        originalSections.current = null;
         return;
       }
       const d = snap.data(); const myId = getDeviceId();
@@ -313,9 +319,13 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       const nowInPending = !!(d.pending?.[myId]);
       // Detect removal: was admitted, now gone from both members and pending
       if (admittedRef.current && !nowInMembers && !nowInPending && !firstSnapshot) {
+        const restore = originalSections.current;
         admittedRef.current = false;
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
-        showToast(t("toast_removed")); return;
+        showToast(t("toast_removed"));
+        if (restore && restoreRef.current) restoreRef.current(restore);
+        originalSections.current = null;
+        return;
       }
       if (nowInMembers) admittedRef.current = true;
       // On first snapshot, mark connection as ready
@@ -425,6 +435,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     const restore = originalSections.current;
     showToast(t("toast_left"));
     setSyncState(null); setSyncReady(false); lastCmdSeq.current = 0; originalSections.current = null; lastSectionsJson.current = null; roomSectionsJsonRef.current = null; clockOffsetRef.current = 0; roleRef.current = null; admittedRef.current = false;
+    if (restore && restoreRef.current) restoreRef.current(restore);
     return restore;
   }, [roomCode, showToast]);
 
@@ -447,19 +458,21 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
 
   const doPause = useCallback(async () => {
     if (!roomCode || !syncReadyRef.current) return;
+    pausedBarRef.current = psRef.current?.absoluteBar || 1;
     pauseRef.current();
-    await sendCommand(roomCode, "pause");
+    await sendCommand(roomCode, "pause", { resumeFromBar: pausedBarRef.current });
   }, [roomCode]);
 
-  const doResume = useCallback(async (barNum = 1) => {
+  const doResume = useCallback(async (barNum) => {
     if (!roomCode || !syncReadyRef.current) return;
+    const resumeBar = barNum || pausedBarRef.current || 1;
     try { metRef.current.tap(); } catch {}
     const sNow = Date.now() - clockOffsetRef.current;
     const startMs = sNow + SYNC_LEAD_MS;
     const tl = buildTL(sectionsRef.current);
-    const idx = tl.findIndex(b => b.ab === barNum);
+    const idx = tl.findIndex(b => b.ab === resumeBar);
     if (idx >= 0) goRef.current(idx, 0, SYNC_LEAD_MS);
-    await sendCommand(roomCode, "resume", { startAtMs: startMs, resumeFromBar: barNum });
+    await sendCommand(roomCode, "resume", { startAtMs: startMs, resumeFromBar: resumeBar });
   }, [roomCode]);
 
   const doStop = useCallback(async () => {
@@ -1097,18 +1110,24 @@ async function pushProfilesToCluster(clusterId) {
   try {
     const db = await fbInit(); if (!db) return { ok: false, error: "no_firebase" };
     const fs = await getFS();
-    const profiles = ldP();
-    // Enforce cap
-    if (profiles.length > MAX_PROFILES_PER_CLUSTER) {
-      return { ok: false, error: "too_many_profiles" };
-    }
-    // Trim tempo histories before upload
-    const cleaned = profiles.map(p => ({
+    const localProfiles = ldP();
+    // Read current cluster profiles and merge before writing
+    let remoteProfiles = [];
+    try {
+      const snap = await fs.getDoc(fs.doc(db, "tempus_clusters", clusterId));
+      if (snap.exists()) remoteProfiles = snap.data().profiles || [];
+    } catch {}
+    const merged = mergeProfiles(remoteProfiles, localProfiles);
+    const toWrite = (merged || localProfiles).map(p => ({
       ...p,
       tempoHistory: trimTempoHistory(p.tempoHistory)
     }));
+    // Enforce cap
+    if (toWrite.length > MAX_PROFILES_PER_CLUSTER) {
+      return { ok: false, error: "too_many_profiles" };
+    }
     await fs.updateDoc(fs.doc(db, "tempus_clusters", clusterId), {
-      profiles: cleaned,
+      profiles: toWrite,
       lastUpdated: Date.now()
     });
     return { ok: true };
