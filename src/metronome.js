@@ -103,9 +103,12 @@ export function useTapTempo(onChange) {
     if (taps.current.length >= 3) {
       const intervals = [];
       for (let i = 1; i < taps.current.length; i++) intervals.push(taps.current[i] - taps.current[i - 1]);
-      const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-      const bpm = Math.round(60000 / avg);
-      if (bpm >= 10 && bpm <= 400) { onChange(bpm); setTapBpm(bpm); }
+      const valid = intervals.filter(iv => iv >= 167);
+      if (valid.length >= 2) {
+        const avg = valid.reduce((a, b) => a + b, 0) / valid.length;
+        const bpm = Math.round(60000 / avg);
+        if (bpm >= 20 && bpm <= 360) { onChange(bpm); setTapBpm(bpm); }
+      }
     }
     if (resetTimer.current) clearTimeout(resetTimer.current);
     resetTimer.current = setTimeout(() => { taps.current = []; setTapBpm(null); }, 2000);
