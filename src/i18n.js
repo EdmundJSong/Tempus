@@ -315,6 +315,7 @@ const S = {
   clear_confirm: { en: "Start a new piece? Current sections will be cleared.", "zh-CN": "开始新曲目？当前段落将被清除。", "zh-TW": "開始新曲目？目前段落將被清除。", ja: null, ko: null },
   confirm_clear: { en: "Clear", "zh-CN": "清除", "zh-TW": "清除", ja: null, ko: null },
   dual:        { en: "Dual",  "zh-CN": "双速", "zh-TW": "雙速", ja: null, ko: null },
+  more:        { en: "More",  "zh-CN": "更多", "zh-TW": "更多", ja: null, ko: null },
 
 };
 
