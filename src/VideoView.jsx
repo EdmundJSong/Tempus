@@ -231,7 +231,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
       const b = tlArr[i];
       if (b.isT) { t += b.tDur || 0; } else {
         const pbc = b.perBeatCd;
-        for (let j = 0; j < b.cpb; j++) t += pbc ? (pbc[j]?.cd ?? pbc[0]?.cd ?? 0.5) : (b.cd ?? 0.5);
+        for (let j = 0; j < b.cpb; j++) t += (pbc ? (pbc[j]?.cd ?? pbc[0]?.cd ?? 0.5) : (b.cd ?? 0.5)) + (pbc?.[j]?.hold || 0);
       }
     }
     return t;
