@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { fbInit, getDeviceId, C, buildTL } from "./utils";
+import { fbInit, getDeviceId, C, buildTL, ldP, svP, setSkipProfileNotify, registerProfileChangeListener, unregisterProfileChangeListener } from "./utils";
 import { I, nI, SyncIcon } from "./components";
 import { t } from "./i18n";
 
@@ -15,6 +15,10 @@ const LINK_COLOR = "#ec4899";
 const LINK_GLOW = "rgba(236, 72, 153, 0.4)";
 const LINK_CODE_TTL = 5 * 60 * 1000; // 5 minutes
 const RTDB_URL = "https://tempus-acc0e-default-rtdb.firebaseio.com";
+
+// ============ PROFILE SYNC CONSTANTS ============
+const MAX_PROFILES_PER_CLUSTER = 50;
+const MAX_TEMPO_HISTORY_PER_PROFILE = 200;
 
 // ============ FIRESTORE HELPERS ============
 let _fsModule = null;
@@ -1025,6 +1029,109 @@ async function removeDeviceFromCluster(clusterId, deviceIdToRemove) {
   } catch {}
 }
 
+// ============ PROFILE SYNC HELPERS ============
+
+// Trim tempo history array to max length, keeping newest entries
+function trimTempoHistory(history) {
+  if (!Array.isArray(history)) return [];
+  if (history.length <= MAX_TEMPO_HISTORY_PER_PROFILE) return history;
+  return history
+    .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""))
+    .slice(0, MAX_TEMPO_HISTORY_PER_PROFILE);
+}
+
+// Merge two tempo history arrays: union by timestamp, dedup, trim
+function mergeTempoHistories(localHist, remoteHist) {
+  const local = Array.isArray(localHist) ? localHist : [];
+  const remote = Array.isArray(remoteHist) ? remoteHist : [];
+  const byKey = new Map();
+  // Local entries first, remote overwrites on same key
+  for (const h of local) {
+    const key = `${h.sectionIndex}_${h.timestamp}`;
+    byKey.set(key, h);
+  }
+  for (const h of remote) {
+    const key = `${h.sectionIndex}_${h.timestamp}`;
+    byKey.set(key, h);
+  }
+  return trimTempoHistory([...byKey.values()]);
+}
+
+// Merge remote profiles into local. Returns merged array (or null if no change needed).
+function mergeProfiles(localProfiles, remoteProfiles) {
+  const local = Array.isArray(localProfiles) ? localProfiles : [];
+  const remote = Array.isArray(remoteProfiles) ? remoteProfiles : [];
+  if (remote.length === 0) return null; // nothing to merge
+  const byId = new Map();
+  for (const p of local) byId.set(p.id, p);
+  let changed = false;
+  for (const rp of remote) {
+    if (!rp.id) continue;
+    const lp = byId.get(rp.id);
+    if (!lp) {
+      // New profile from remote — add it
+      byId.set(rp.id, { ...rp, tempoHistory: trimTempoHistory(rp.tempoHistory) });
+      changed = true;
+    } else {
+      // Same ID: last-write-wins by tempoHistoryUpdated
+      const lTime = lp.tempoHistoryUpdated || lp.updatedAt || "";
+      const rTime = rp.tempoHistoryUpdated || rp.updatedAt || "";
+      const mergedHist = mergeTempoHistories(lp.tempoHistory, rp.tempoHistory);
+      if (rTime > lTime) {
+        // Remote is newer — take remote fields, but keep merged history
+        byId.set(rp.id, { ...rp, tempoHistory: mergedHist });
+        changed = true;
+      } else if (mergedHist.length !== (lp.tempoHistory || []).length) {
+        // Local is newer overall, but remote had new history entries
+        byId.set(rp.id, { ...lp, tempoHistory: mergedHist });
+        changed = true;
+      }
+    }
+  }
+  return changed ? [...byId.values()] : null;
+}
+
+// Push local profiles to cluster doc in Firestore
+async function pushProfilesToCluster(clusterId) {
+  if (!clusterId) return { ok: false, error: "no_cluster" };
+  try {
+    const db = await fbInit(); if (!db) return { ok: false, error: "no_firebase" };
+    const fs = await getFS();
+    const profiles = ldP();
+    // Enforce cap
+    if (profiles.length > MAX_PROFILES_PER_CLUSTER) {
+      return { ok: false, error: "too_many_profiles" };
+    }
+    // Trim tempo histories before upload
+    const cleaned = profiles.map(p => ({
+      ...p,
+      tempoHistory: trimTempoHistory(p.tempoHistory)
+    }));
+    await fs.updateDoc(fs.doc(db, "tempus_clusters", clusterId), {
+      profiles: cleaned,
+      lastUpdated: Date.now()
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message || "push_failed" };
+  }
+}
+
+// Pull remote profiles from cluster data and merge into local storage.
+// Returns true if local storage was updated.
+function pullProfilesFromCluster(clusterData) {
+  if (!clusterData?.profiles?.length) return false;
+  const local = ldP();
+  const merged = mergeProfiles(local, clusterData.profiles);
+  if (!merged) return false;
+  // Enforce cap on merged result
+  const capped = merged.slice(0, MAX_PROFILES_PER_CLUSTER);
+  // Write locally without triggering cluster push
+  setSkipProfileNotify(true);
+  try { svP(capped); } finally { setSkipProfileNotify(false); }
+  return true;
+}
+
 // ============ useDeviceLink HOOK ============
 export function useDeviceLink({ syncInRoom = false }) {
   const [clusterId, setClusterId] = useState(() => {
@@ -1032,16 +1139,47 @@ export function useDeviceLink({ syncInRoom = false }) {
   });
   const [clusterData, setClusterData] = useState(null);
   const [showDeviceModal, setShowDeviceModal] = useState(false);
+  const [profileSyncStatus, setProfileSyncStatus] = useState("idle"); // idle | syncing | synced | error
   const unsubRef = useRef(null);
   const heartbeatRef = useRef(null);
+  const pushTimer = useRef(null);
+  const clusterIdRef = useRef(clusterId);
   const deviceId = useMemo(() => getDeviceId(), []);
   const isLinked = !!clusterId;
 
+  // Keep ref in sync for use in listener callback
+  useEffect(() => { clusterIdRef.current = clusterId; }, [clusterId]);
+
+  // Debounced push to cluster when local profiles change
+  const debouncedPush = useCallback((cId) => {
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(async () => {
+      const id = cId || clusterIdRef.current;
+      if (!id) return;
+      setProfileSyncStatus("syncing");
+      const result = await pushProfilesToCluster(id);
+      setProfileSyncStatus(result.ok ? "synced" : "error");
+      if (result.ok) { setTimeout(() => setProfileSyncStatus(prev => prev === "synced" ? "idle" : prev), 3000); }
+    }, 2000);
+  }, []);
+
+  // Register profile change listener (local edits → push to cluster)
+  useEffect(() => {
+    if (!clusterId || syncInRoom) {
+      unregisterProfileChangeListener();
+      return;
+    }
+    registerProfileChangeListener(() => debouncedPush(clusterId));
+    return () => unregisterProfileChangeListener();
+  }, [clusterId, syncInRoom, debouncedPush]);
+
   // Subscribe to cluster changes (auto-suspend during sync rooms)
+  const lastProfilesJsonRef = useRef(null);
   useEffect(() => {
     if (!clusterId || syncInRoom) {
       if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
       if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
+      lastProfilesJsonRef.current = null;
       return;
     }
     let active = true;
@@ -1064,6 +1202,12 @@ export function useDeviceLink({ syncInRoom = false }) {
           return;
         }
         setClusterData(data);
+        // Profile sync: pull remote profiles on change
+        const profJson = JSON.stringify(data.profiles || []);
+        if (profJson !== lastProfilesJsonRef.current) {
+          lastProfilesJsonRef.current = profJson;
+          try { pullProfilesFromCluster(data); } catch {}
+        }
       });
       // Heartbeat
       if (heartbeatRef.current) clearInterval(heartbeatRef.current);
@@ -1078,9 +1222,14 @@ export function useDeviceLink({ syncInRoom = false }) {
     };
   }, [clusterId, syncInRoom, deviceId]);
 
-  const linkComplete = useCallback((newClusterId) => {
+  const linkComplete = useCallback(async (newClusterId) => {
     setClusterId(newClusterId);
     try { localStorage.setItem("tempus_clusterId", newClusterId); } catch {}
+    // Push local profiles to cluster on link
+    setProfileSyncStatus("syncing");
+    const result = await pushProfilesToCluster(newClusterId);
+    setProfileSyncStatus(result.ok ? "synced" : "error");
+    if (result.ok) { setTimeout(() => setProfileSyncStatus(prev => prev === "synced" ? "idle" : prev), 3000); }
   }, []);
 
   const unlinkDevice = useCallback(async () => {
@@ -1088,7 +1237,8 @@ export function useDeviceLink({ syncInRoom = false }) {
     await removeDeviceFromCluster(clusterId, deviceId);
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
-    setClusterId(null); setClusterData(null);
+    if (pushTimer.current) { clearTimeout(pushTimer.current); pushTimer.current = null; }
+    setClusterId(null); setClusterData(null); setProfileSyncStatus("idle");
     try { localStorage.removeItem("tempus_clusterId"); } catch {}
   }, [clusterId, deviceId]);
 
@@ -1099,21 +1249,29 @@ export function useDeviceLink({ syncInRoom = false }) {
     await removeDeviceFromCluster(clusterId, deviceId);
     if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
     if (heartbeatRef.current) { clearInterval(heartbeatRef.current); heartbeatRef.current = null; }
-    setClusterId(null); setClusterData(null);
+    if (pushTimer.current) { clearTimeout(pushTimer.current); pushTimer.current = null; }
+    setClusterId(null); setClusterData(null); setProfileSyncStatus("idle");
     try { localStorage.removeItem("tempus_clusterId"); } catch {}
   }, [clusterId, deviceId]);
+
+  // Cleanup on unmount
+  useEffect(() => () => {
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    unregisterProfileChangeListener();
+  }, []);
 
   return {
     isLinked, clusterId, clusterData, deviceId,
     showDeviceModal, setShowDeviceModal,
     linkComplete, unlinkDevice, unlinkDeviceForSync,
+    profileSyncStatus, debouncedPush,
     LINK_COLOR
   };
 }
 
 // ============ DEVICE LINK MODAL ============
 export function DeviceLinkModal({ link, onClose }) {
-  const { isLinked, clusterId, clusterData, deviceId, linkComplete, unlinkDevice, LINK_COLOR: LC } = link;
+  const { isLinked, clusterId, clusterData, deviceId, linkComplete, unlinkDevice, profileSyncStatus, LINK_COLOR: LC } = link;
   const [view, setView] = useState(isLinked ? "devices" : "entry");
   const [generatedCode, setGeneratedCode] = useState(null);
   const [inputCode, setInputCode] = useState("");
@@ -1298,6 +1456,15 @@ export function DeviceLinkModal({ link, onClose }) {
       </div>
 
       <div style={{ fontSize: 10, color: C.textMuted + "55", fontFamily: "'DM Mono',monospace", marginBottom: 16, textAlign: "center" }}>{clusterData?.deviceIds?.length || 0} {I.desktop(10)}</div>
+
+      {/* Profile sync status */}
+      {profileSyncStatus && profileSyncStatus !== "idle" && (
+        <div style={{ fontSize: 11, fontFamily: "'DM Mono',monospace", textAlign: "center", marginBottom: 12, color: profileSyncStatus === "error" ? C.danger : profileSyncStatus === "synced" ? C.practice : LC, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+          {profileSyncStatus === "syncing" && <><span className="sync-pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: LC, display: "inline-block" }} /> {t("sync_profiles_syncing")}</>}
+          {profileSyncStatus === "synced" && <>{I.checkmark ? I.checkmark(10) : "✓"} {t("sync_profiles_synced")}</>}
+          {profileSyncStatus === "error" && <>{t("sync_profiles_error")}</>}
+        </div>
+      )}
 
       {deviceList.length >= 2 && (
         <button onClick={handleLeave} style={{ ...bo(confirmLeave ? C.danger : C.textMuted), borderColor: confirmLeave ? C.danger + "88" : C.textMuted + "55", color: confirmLeave ? C.danger : C.textMuted }}>
