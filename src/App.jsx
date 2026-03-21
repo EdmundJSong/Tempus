@@ -381,7 +381,7 @@ export default function Tempus() {
       </div>
 
       <div style={{ padding: "8px 16px", maxWidth: 480, margin: "0 auto", display: "flex", gap: 6, fontSize: 12, color: C.textMuted, fontFamily: "'DM Mono',monospace" }}>
-        <span>§{sections.length}</span><span style={{ opacity: 0.4 }}>·</span><span>{totalBars}b</span>
+        <span>{sections.length}</span><span style={{ opacity: 0.4 }}>·</span><span>{totalBars}b</span>
         {totalBars > 0 && <><span style={{ opacity: 0.4 }}>·</span><span>{(() => { const dur = Math.ceil(tl[tl.length - 1].st + tl[tl.length - 1].dur); const m = Math.floor(dur / 60); const s = dur % 60; return `${m}:${s < 10 ? "0" : ""}${s}`; })()}</span></>}
       </div>
 
