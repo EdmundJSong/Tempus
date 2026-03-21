@@ -4,7 +4,7 @@ import { BU, D2Q } from "./utils";
 // ============ AUDIO ENGINE ============
 export function useMetronome(externalCtx) {
   const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, clickSound: "sine", muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false);
-  const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false), kaT = useRef(0);
+  const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false), prmN = useRef(0);
   const init = useCallback(() => { if (externalCtx) { actx.current = externalCtx; return actx.current; } if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, [externalCtx]);
   const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) { sa.current.pause(); sa.current.currentTime = 0; } }, []);
   const silentStart = useRef(0);
@@ -20,22 +20,22 @@ export function useMetronome(externalCtx) {
     }
     const e = accented ? bt : 2;
     if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
+    // Primer: after timed/fermata sections Chrome's audio thread is dormant —
+    // short envelopes expire before the thread processes them. Extend envelopes
+    // for the first few beats so they survive the wake-up latency.
+    const pm = prmN.current > 0; if (pm) prmN.current--;
     switch (clickSound) {
-      case "sine": { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.06); o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.08); break; }
-      case "noise": { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(t0); src.stop(t0 + 0.06); break; }
-      case "wood": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 880 : e === 1 ? 780 : 680; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.03); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 800; fl.Q.value = 15; o.connect(fl); fl.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.05); break; }
-      case "rim": { const v = e === 0 ? 0.85 : e === 1 ? 0.55 : 0.3; const l = Math.floor(ctx.sampleRate * 0.01), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.04); const fl = ctx.createBiquadFilter(); fl.type = "highpass"; fl.frequency.value = 1800; fl.Q.value = 1.2; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(t0); src.stop(t0 + 0.05); const o = ctx.createOscillator(), g2 = ctx.createGain(); o.type = "sine"; o.frequency.value = 1200; g2.gain.setValueAtTime(v * 0.6, t0); g2.gain.exponentialRampToValueAtTime(0.001, t0 + 0.02); o.connect(g2); g2.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.03); break; }
-      case "clave": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 2500 : e === 1 ? 2300 : 2100; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.025); o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.04); break; }
-      case "cowbell": { const v = e === 0 ? 0.75 : e === 1 ? 0.5 : 0.25; const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(); o1.type = "square"; o2.type = "square"; o1.frequency.value = e === 0 ? 565 : 540; o2.frequency.value = e === 0 ? 845 : 800; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.08); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 700; fl.Q.value = 3; o1.connect(fl); o2.connect(fl); fl.connect(g); g.connect(ctx.destination); o1.start(t0); o2.start(t0); o1.stop(t0 + 0.1); o2.stop(t0 + 0.1); break; }
+      case "sine": { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + (pm ? 0.2 : 0.06)); o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + (pm ? 0.25 : 0.08)); break; }
+      case "noise": { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + (pm ? 0.2 : 0.05)); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(t0); src.stop(t0 + (pm ? 0.25 : 0.06)); break; }
+      case "wood": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 880 : e === 1 ? 780 : 680; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + (pm ? 0.2 : 0.03)); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 800; fl.Q.value = 15; o.connect(fl); fl.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + (pm ? 0.25 : 0.05)); break; }
+      case "rim": { const v = e === 0 ? 0.85 : e === 1 ? 0.55 : 0.3; const l = Math.floor(ctx.sampleRate * 0.01), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + (pm ? 0.2 : 0.04)); const fl = ctx.createBiquadFilter(); fl.type = "highpass"; fl.frequency.value = 1800; fl.Q.value = 1.2; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(t0); src.stop(t0 + (pm ? 0.25 : 0.05)); const o = ctx.createOscillator(), g2 = ctx.createGain(); o.type = "sine"; o.frequency.value = 1200; g2.gain.setValueAtTime(v * 0.6, t0); g2.gain.exponentialRampToValueAtTime(0.001, t0 + (pm ? 0.15 : 0.02)); o.connect(g2); g2.connect(ctx.destination); o.start(t0); o.stop(t0 + (pm ? 0.2 : 0.03)); break; }
+      case "clave": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 2500 : e === 1 ? 2300 : 2100; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + (pm ? 0.2 : 0.025)); o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + (pm ? 0.25 : 0.04)); break; }
+      case "cowbell": { const v = e === 0 ? 0.75 : e === 1 ? 0.5 : 0.25; const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(); o1.type = "square"; o2.type = "square"; o1.frequency.value = e === 0 ? 565 : 540; o2.frequency.value = e === 0 ? 845 : 800; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + (pm ? 0.2 : 0.08)); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 700; fl.Q.value = 3; o1.connect(fl); o2.connect(fl); fl.connect(g); g.connect(ctx.destination); o1.start(t0); o2.start(t0); o1.stop(t0 + (pm ? 0.25 : 0.1)); o2.stop(t0 + (pm ? 0.25 : 0.1)); break; }
     }
   }, []);
   const sched = useCallback(() => {
     const ctx = actx.current; if (!ctx || !pl.current) return; const tl = tlR.current;
     if (ctx.state === "suspended") ctx.resume();
-    // Wake: play 1-sample buffer at time 0 to force audio render thread active (same trick as tap())
-    const _wake = () => { try { const b = ctx.createBuffer(1, 1, ctx.sampleRate), s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch {} };
-    // Keepalive: near-silent oscillator every ~2s to prevent Chrome from suspending audio rendering during silent gaps
-    const _ka = () => { if (ctx.currentTime - kaT.current > 2) { kaT.current = ctx.currentTime; try { const o = ctx.createOscillator(), g = ctx.createGain(); g.gain.setValueAtTime(0.001, ctx.currentTime); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.02); o.connect(g); g.connect(ctx.destination); o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.03); } catch {} } };
     let _guard = 0;
     while (nb.current < ctx.currentTime + 0.12 && _guard++ < 200) {
       if (ciL.current > 0) { const bar = tl[bi.current]; if (!bar || bar.isT) { ciL.current = 0; continue; } const ciCd = bar.cd ?? (bar.perBeatCd?.[0]?.cd ?? 0.5); clk(ctx, nb.current, ciL.current % bar.cpb === 0 ? 0 : 2); if (cbR.current) cbR.current({ type: "countIn", beatsLeft: ciL.current, beatInBar: bar.cpb - ((ciL.current - 1) % bar.cpb), totalBeats: bar.cpb }); nb.current += ciCd; ciL.current--; continue; }
@@ -45,20 +45,20 @@ export function useMetronome(externalCtx) {
         if (!tsF.current) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedStart", ab: bar.ab, si: bar.si, dur: bar.tDur }); tsF.current = true; }
         if (bar.mk && tsM.current < bar.mk.length && el >= bar.mk[tsM.current] - 0.02) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedMarker", ab: bar.ab, si: bar.si, el, dur: bar.tDur, mt: bar.mk[tsM.current], mi: tsM.current, tm: bar.mk.length }); tsM.current++; }
         if (cbR.current) cbR.current({ type: "timedTick", ab: bar.ab, si: bar.si, el, rem: Math.max(0, bar.tDur - el), dur: bar.tDur });
-        if (el >= bar.tDur) { _wake(); tsS.current = 0; tsM.current = 0; tsF.current = false; nb.current = ctx.currentTime + 0.15; bi.current++; continue; } _ka(); nb.current += 0.05; return;
+        if (el >= bar.tDur) { prmN.current = 5; tsS.current = 0; tsM.current = 0; tsF.current = false; nb.current = ctx.currentTime + 0.05; bi.current++; continue; } nb.current += 0.05; return;
       }
       // Fermata hold in progress
       if (inFerm.current) {
         const el = nb.current - fermS.current;
         if (cbR.current) cbR.current({ type: "fermataHold", ab: bar.ab, si: bar.si, rem: Math.max(0, fermD.current - el), dur: fermD.current, beatIdx: bei.current });
         if (el >= fermD.current) {
-          _wake(); inFerm.current = false; nb.current = ctx.currentTime + 0.15; bei.current++; if (bei.current >= bar.cpb) {
+          prmN.current = 3; inFerm.current = false; nb.current = ctx.currentTime + 0.05; bei.current++; if (bei.current >= bar.cpb) {
             bei.current = 0; bi.current++;
             const nextBar = tl[bi.current]; if (!nextBar || (nextBar.si !== bar.si)) { if (bar.loop && bar.loopTo != null) { bi.current = bar.loopTo; } }
           }
           continue;
         }
-        _ka(); nb.current += 0.05; return;
+        nb.current += 0.05; return;
       }
       const pbc = bar.perBeatCd;
       const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
@@ -78,7 +78,7 @@ export function useMetronome(externalCtx) {
       }
     }
   }, [clk]);
-  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; silentStart.current = 0; kaT.current = 0; rlwl(); }, [rlwl]);
+  const stop = useCallback(() => { pl.current = false; if (tmr.current) { clearInterval(tmr.current); tmr.current = null; } tsS.current = 0; tsM.current = 0; tsF.current = false; inFerm.current = false; silentStart.current = 0; prmN.current = 0; rlwl(); }, [rlwl]);
   const start = useCallback((tl, from = 0, ci = 0, s = {}) => {
     stop(); const { syncDelayMs, ...audioSettings } = s; sR.current = { accented: true, clickSound: "sine", muted: false, downbeatOnly: false, silentInterval: 0, ...sR.current, ...audioSettings }; tlR.current = tl; bi.current = from; bei.current = 0; tsS.current = 0; tsM.current = 0; tsF.current = false;
     const ctx = init(); if (ctx.state === "suspended") ctx.resume();
