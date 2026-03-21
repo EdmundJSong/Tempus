@@ -191,13 +191,12 @@ export default function Tempus() {
   const goToBar = useCallback(n => { const i = tl.findIndex(b => b.ab === n); if (i >= 0) moveTo(i); }, [tl, moveTo]);
   const jumpSec = useCallback(d => { if (!ps) return; const ns = Math.max(0, Math.min(activeSections.length - 1, ps.sectionIndex + d)), i = tl.findIndex(b => b.si === ns); if (i >= 0) moveTo(i); }, [ps, activeSections, tl, moveTo]);
 
-  const [confirmClear, setConfirmClear] = useState(false);
-  const confirmTimer = useRef(null);
+  const [showClearModal, setShowClearModal] = useState(false);
   useEffect(() => {
     const hkd = e => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
       if (showDual) return; // DualTempo handles its own keys
-      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || confirmClear || sync.showLobby || link.showDeviceModal;
+      const anyModalOpen = editId !== null || showSet || showSave || showLib || showPrac || showVideo || showClearModal || sync.showLobby || link.showDeviceModal;
       if (e.code === "Space") {
         if (anyModalOpen || sync.isMemberLocked) return;
         if (sync.isInRoom && !sync.syncReady) return;
@@ -212,12 +211,12 @@ export default function Tempus() {
           else { met.tap(); go(0); }
         }
       }
-      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setConfirmClear(false); sync.setShowLobby(false); }
+      else if (e.code === "Escape") { setEditId(null); setShowSet(false); setShowSave(false); setShowLib(false); setShowPrac(false); setShowVideo(false); setShowClearModal(false); sync.setShowLobby(false); }
       else if (isP && !sync.isMemberLocked && e.code === "ArrowLeft") jumpSec(-1);
       else if (isP && !sync.isMemberLocked && e.code === "ArrowRight") jumpSec(1);
     };
     window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
-  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, showDual, confirmClear, sync.showLobby, sync.isMemberLocked]);
+  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, showDual, showClearModal, sync.showLobby, sync.isMemberLocked]);
 
   const lastSplitTime = useRef(0);
   const lastSplitBar = useRef(0);
@@ -267,8 +266,10 @@ export default function Tempus() {
 
   const handleClear = () => {
     if (sections.length <= 1 && sections[0]?.tempo === 120 && sections[0]?.tsNum === 4) return;
-    if (!confirmClear) { setConfirmClear(true); if (confirmTimer.current) clearTimeout(confirmTimer.current); confirmTimer.current = setTimeout(() => setConfirmClear(false), 3000); return; }
-    setConfirmClear(false);
+    setShowClearModal(true);
+  };
+  const doClear = () => {
+    setShowClearModal(false);
     const backup = [...sections];
     const backupMeta = { videoUrl, videoSync, loadedProfileId };
     setSections([mkM()]); setEditId(null); setVideoUrl(null); setVideoSync(null); setLoadedProfileId(null);
@@ -327,9 +328,11 @@ export default function Tempus() {
         @keyframes ripple { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(2); opacity: 0; } }
         .sec-card { transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s ease, background 0.15s; position: relative; overflow: hidden; }
         .sec-card::before { content: ''; position: absolute; inset: 0; background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 100%); opacity: 0; transition: opacity 0.3s; }
-        .sec-card:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 16px 40px rgba(0,0,0,0.6); border-color: ${C.textMuted}55; background: ${C.surfaceHover} !important; }
-        .sec-card:hover::before { opacity: 1; }
         .sec-card:active { transform: translateY(0) scale(0.98); }
+        @media (hover: hover) {
+          .sec-card:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 16px 40px rgba(0,0,0,0.6); border-color: ${C.textMuted}55; background: ${C.surfaceHover} !important; }
+          .sec-card:hover::before { opacity: 1; }
+        }
         .glass-pill { background: rgba(20, 20, 28, 0.85); border-radius: 40px; border: 1px solid rgba(255,255,255,0.12); padding: 8px 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
         .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
@@ -343,11 +346,13 @@ export default function Tempus() {
         [data-tip]:hover::after, [data-tip-b]:hover::after { opacity: 1; }
         @media (pointer: coarse) { [data-tip]::after, [data-tip-b]::after { display: none; } }
         button { cursor: pointer; transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.15s ease, opacity 0.15s ease, border-color 0.15s ease; }
-        button:hover:not(:disabled) { opacity: 0.9; }
         button:active:not(:disabled) { opacity: 0.7; transform: scale(0.95); }
         .close-btn { background: none; border: none; color: ${C.textMuted}; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 8px; transition: background 0.15s ease, color 0.15s ease; }
-        .close-btn:hover { background: ${C.surfaceHover}; color: ${C.text}; }
-        .transport-btn:hover:not(:disabled) { transform: translateY(-4px) scale(1.08) !important; box-shadow: 0 16px 40px rgba(0,0,0,0.7) !important; filter: brightness(1.1); }
+        @media (hover: hover) {
+          button:hover:not(:disabled) { opacity: 0.9; }
+          .close-btn:hover { background: ${C.surfaceHover}; color: ${C.text}; }
+          .transport-btn:hover:not(:disabled) { transform: translateY(-4px) scale(1.08) !important; box-shadow: 0 16px 40px rgba(0,0,0,0.7) !important; filter: brightness(1.1); }
+        }
         .transport-btn:active:not(:disabled) { transform: scale(0.9) !important; filter: brightness(0.9); }
         @keyframes modalFadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes modalSlideUp { from { opacity: 0; transform: translateY(24px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
@@ -365,7 +370,7 @@ export default function Tempus() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 16px 8px", maxWidth: 480, margin: "0 auto" }}>
         <div className="grad-text" style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 28, letterSpacing: 3 }}>TEMPUS</div>
         <div style={{ display: "flex", gap: 6 }}>
-          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={confirmClear ? "?" : t("new_label")} style={{ background: confirmClear ? C.danger + "22" : "none", border: `1px solid ${confirmClear ? C.danger : C.border}`, borderRadius: 8, color: confirmClear ? C.danger : C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{I.fileNew(18)}{confirmClear && <span style={{ fontSize: 13, fontWeight: 700 }}>?</span>}</button>}
+          {!sync.isMemberLocked && <button onClick={handleClear} data-tip-b={t("new_label")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontSize: 11, fontFamily: "'Outfit',sans-serif", transition: "all 0.15s" }}>{I.fileNew(18)}</button>}
           {videoUrl && !sync.isMemberLocked && <button onClick={() => { if (!navigator.onLine) { setOfflinePrompt(t("offline_video")); return; } setShowVideo(true); }} data-tip-b={t("video")} style={{ background: "none", border: `1px solid ${C.accent}55`, borderRadius: 8, color: C.accent, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center", fontSize: 12, fontFamily: "'DM Mono',monospace" }}>▶</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowLib(true)} data-tip-b={t("library")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.folder(18)}</button>}
           {settings.appMode !== "basic" && !sync.isMemberLocked && <button onClick={() => setShowSave(true)} data-tip-b={t("save")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 8, color: C.textMuted, padding: "6px 10px", cursor: "pointer", display: "flex", alignItems: "center" }}>{I.save(18)}</button>}
@@ -418,6 +423,16 @@ export default function Tempus() {
       </div>}
       {showDual && <DualTempo sections={sections} settings={settings} onExit={() => setShowDual(false)} />}
       {offlinePrompt && <OfflinePrompt message={offlinePrompt} onClose={() => setOfflinePrompt(null)} />}
+      {showClearModal && <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowClearModal(false)}>
+        <div className="modal-content" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, padding: "28px 24px", maxWidth: 300, textAlign: "center" }} onClick={e => e.stopPropagation()}>
+          <div style={{ fontSize: 15, color: C.text, fontFamily: "'Outfit',sans-serif", fontWeight: 600, marginBottom: 8 }}>{t("new_label")}</div>
+          <div style={{ fontSize: 13, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 20 }}>{t("clear_confirm") || "Start a new piece? Current sections will be cleared."}</div>
+          <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
+            <button onClick={() => setShowClearModal(false)} style={{ padding: "8px 20px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("cancel") || "Cancel"}</button>
+            <button onClick={doClear} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: C.danger, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("confirm_clear") || "Clear"}</button>
+          </div>
+        </div>
+      </div>}
     </div>
   );
 }
