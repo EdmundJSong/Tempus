@@ -1,7 +1,7 @@
 // ============ CONSTANTS ============
 export const BU = [{ id: "w", q: 4 }, { id: "h", q: 2 }, { id: "q", q: 1 }, { id: "e", q: 0.5 }, { id: "16", q: 0.25 }, { id: "32", q: 0.125 }];
 export const D2Q = { 1: 4, 2: 2, 4: 1, 8: 0.5, 16: 0.25, 32: 0.125 };
-export const C = { bg: "#050508", surface: "#111116", surfaceHover: "#1A1A24", border: "#282833", text: "#f8f8f8", textMuted: "#a1a1b5", downbeat: "#FFB300", accent: "#8B6CEF", sub: "#2d2d38", danger: "#ff453a", record: "#ff453a", practice: "#32d74b", glowDownbeat: "rgba(255, 179, 0, 0.4)", glowPractice: "rgba(50, 215, 75, 0.4)", glowRecord: "rgba(255, 69, 58, 0.4)" };
+export const C = { bg: "#050508", surface: "#111116", surfaceHover: "#1A1A24", border: "#282833", text: "#f8f8f8", textMuted: "#B4B4CC", downbeat: "#FFB300", accent: "#8B6CEF", sub: "#2d2d38", danger: "#ff453a", record: "#ff453a", practice: "#32d74b", glowDownbeat: "rgba(255, 179, 0, 0.4)", glowPractice: "rgba(50, 215, 75, 0.4)", glowRecord: "rgba(255, 69, 58, 0.4)" };
 export const SK = "tempus_profiles";
 
 // ============ LOCAL STORAGE ============
