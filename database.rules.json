@@ -1,18 +1,38 @@
 {
   "rules": {
+    "sync_commands": {
+      "$roomCode": {
+        ".read": "auth != null",
+        ".write": "auth != null"
+      }
+    },
+
     "link_codes": {
       "$code": {
-        ".read": true,
-        ".write": true,
+        ".read": "auth != null",
+        ".write": "auth != null",
         ".validate": "newData.hasChildren(['hostDeviceId', 'createdAt', 'expiresAt'])",
         "joinedDeviceId": {
           ".validate": "!data.exists() || data.val() == null || data.val() == newData.val()"
         },
         "clusterId": {
           ".validate": "newData.isString() && (!data.exists() || data.val() == null)"
+        },
+        "hostDeviceId": {
+          ".validate": "newData.isString()"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "expiresAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "$other": {
+          ".validate": false
         }
       }
     },
+
     "$other": {
       ".read": false,
       ".write": false
