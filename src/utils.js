@@ -55,8 +55,12 @@ export async function fbInit() {
   try {
     const { initializeApp } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js");
     const { getFirestore } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js");
+    const { getAuth, signInAnonymously } = await import("https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js");
     _fb = initializeApp(FIREBASE_CONFIG);
     _fbDb = getFirestore(_fb);
+    // Anonymous auth — required for auth-gated Firestore rules
+    const auth = getAuth(_fb);
+    if (!auth.currentUser) await signInAnonymously(auth);
     return _fbDb;
   } catch { return null; }
 }
