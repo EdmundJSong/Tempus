@@ -96,6 +96,8 @@ export function SecEd({ section, onSave, onClose, onDelete, appMode = "default",
   const swT = t => { if (t === s.type) return; setS(p => (t === "timed" ? { ...mkT(), id: p.id } : { ...mkM(), id: p.id })); };
   // Expressive: init/update beatMap when toggled or tsNum changes
   useEffect(() => { if (s.expressive && (!s.beatMap || s.beatMap.length !== s.tsNum)) upd("beatMap", mkBeatMap(s.tsNum, s.tempo)); }, [s.expressive, s.tsNum]);
+  // Sync beatMap tempos when main tempo changes — only if all beats are uniform (no per-beat customization)
+  useEffect(() => { if (!s.expressive || !s.beatMap || s.beatMap.length === 0) return; const allSame = s.beatMap.every(b => b.tempo === s.beatMap[0].tempo); if (allSame && s.beatMap[0].tempo !== s.tempo) upd("beatMap", s.beatMap.map(b => ({ ...b, tempo: s.tempo }))); }, [s.tempo, s.expressive]);
   const updBeat = (idx, k, v) => { if (!s.beatMap) return; const bm = [...s.beatMap]; bm[idx] = { ...bm[idx], [k]: v }; upd("beatMap", bm); };
 
   // Grouping presets
