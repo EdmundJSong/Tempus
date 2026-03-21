@@ -156,7 +156,9 @@ export function buildTL(sections) {
     const loopFirstIdx = bars.length;
     const totalBeats = s.bars * cpb;
     for (let b = 0; b < s.bars; b++) {
-      const bm = s.expressive && s.beatMap && s.beatMap.length === cpb ? s.beatMap : null;
+      const bmRaw = s.expressive && s.beatMap && s.beatMap.length === cpb ? s.beatMap : null;
+      const bmHasCustom = bmRaw && (bmRaw.some(beat => beat.fermata) || !bmRaw.every(beat => beat.tempo === bmRaw[0].tempo));
+      const bm = bmHasCustom ? bmRaw : null;
       let perBeatCd = null, totalDur = 0;
       if (bm) {
         perBeatCd = bm.map(beat => {
