@@ -151,20 +151,46 @@ async function leaveRoom(code) {
 }
 
 // ============ CLOCK CALIBRATION ============
-// Timeout wrapper — prevents indefinite hangs when Firestore rules block writes
-function withTimeout(promise, ms, fallback) {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise(resolve => { timer = setTimeout(() => resolve(fallback), ms); })
-  ]).finally(() => clearTimeout(timer));
-}
-
-// Single-ping calibration: 1 write + 1 read + 1 delete = ~300-500ms
+// Multi-ping: 7 Firestore round-trips, discard worst RTTs, take median offset.
 // offset = localTime - serverTime. To get server-equivalent time: Date.now() - offset
-async function _calibrateClockInner() {
+async function calibrateClock() {
   try {
     const db = await fbInit(); if (!db) return 0;
+    const fs = await getFS();
+    const deviceId = getDeviceId();
+    const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
+    const PINGS = 7;
+    const samples = [];
+    for (let p = 0; p < PINGS; p++) {
+      const localBefore = Date.now();
+      await fs.setDoc(calRef, { t: fs.serverTimestamp() });
+      const localAfter = Date.now();
+      const snap = await fs.getDoc(calRef);
+      const serverMs = snap.data()?.t?.toMillis?.();
+      if (serverMs) {
+        const rtt = localAfter - localBefore;
+        const offset = ((localBefore + localAfter) / 2) - serverMs;
+        samples.push({ rtt, offset });
+      }
+    }
+    try { await fs.deleteDoc(calRef); } catch {}
+    if (samples.length === 0) return 0;
+    // Discard highest and lowest RTT samples (outliers from network jitter)
+    if (samples.length >= 5) {
+      samples.sort((a, b) => a.rtt - b.rtt);
+      samples.splice(-1, 1); // remove worst RTT
+      samples.splice(0, 1);  // remove best RTT (can also be anomalous)
+    }
+    // Return median offset from remaining samples
+    samples.sort((a, b) => a.offset - b.offset);
+    return samples[Math.floor(samples.length / 2)].offset;
+  } catch { return 0; }
+}
+
+// Lightweight single-ping recalibration (for periodic refresh, not initial setup)
+async function recalibrateSingle() {
+  try {
+    const db = await fbInit(); if (!db) return null;
     const fs = await getFS();
     const deviceId = getDeviceId();
     const calRef = fs.doc(db, "tempus_clock_cal", deviceId);
@@ -175,12 +201,8 @@ async function _calibrateClockInner() {
     const serverMs = snap.data()?.t?.toMillis?.();
     try { await fs.deleteDoc(calRef); } catch {}
     if (serverMs) return ((localBefore + localAfter) / 2) - serverMs;
-    return 0;
-  } catch (e) { console.error("calibrateClock error:", e); return 0; }
-}
-// Public wrapper: 5s timeout so UI never hangs
-async function calibrateClock() {
-  return withTimeout(_calibrateClockInner(), 5000, 0);
+    return null;
+  } catch { return null; }
 }
 
 // ============ useSync HOOK ============
@@ -312,10 +334,10 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     heartbeatRef.current = setInterval(async () => {
       heartbeat(roomCode);
       heartbeatCount.current++;
-      // Recalibrate every 6th heartbeat (~60s) to combat clock drift
-      if (heartbeatCount.current % 6 === 0) {
-        const newOffset = await calibrateClock();
-        if (newOffset !== 0) clockOffsetRef.current = newOffset;
+      // Recalibrate every 3rd heartbeat (~30s) to combat clock drift
+      if (heartbeatCount.current % 3 === 0) {
+        const newOffset = await recalibrateSingle();
+        if (newOffset != null) clockOffsetRef.current = newOffset;
       }
     }, HEARTBEAT_MS);
     return () => { if (heartbeatRef.current) clearInterval(heartbeatRef.current); };
@@ -332,8 +354,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     try {
       setSyncReady(false);
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
-      // Calibrate in background — don't block room creation
-      calibrateClock().then(offset => { clockOffsetRef.current = offset; });
+      clockOffsetRef.current = await calibrateClock();
       const code = await createRoom(sectionsRef.current, settingsRef.current);
       const db = await fbInit(); const fs = await getFS();
       await fs.updateDoc(fs.doc(db, "tempus_rooms", code), { hostName: displayName, [`members.${deviceId}.name`]: displayName });
@@ -350,8 +371,7 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     try {
       setSyncReady(false);
       try { metRef.current.tap(); } catch {} // unlock AudioContext during user gesture
-      // Calibrate in background — don't block room join
-      calibrateClock().then(offset => { clockOffsetRef.current = offset; });
+      clockOffsetRef.current = await calibrateClock();
       const { admitted } = await joinRoomPending(code, displayName);
       lastCmdSeq.current = 0; originalSections.current = JSON.parse(JSON.stringify(sectionsRef.current));
       setSyncState({ code, role: "member", status: "lobby", members: {}, pending: {},
@@ -786,17 +806,16 @@ async function joinWithLinkCode(code) {
   
   const deviceId = getDeviceId();
   const codeRef = mod.ref(db, `link_codes/${code}`);
-  // Read first, then conditional update.
-  // (runTransaction's first callback invocation gets null when there's no local cache,
-  //  which caused permanent aborts. RTDB rules guard against double-join server-side.)
-  const snap = await mod.get(codeRef);
-  const current = snap.val();
-  if (!current) throw new Error("Code not found");
-  if (current.joinedDeviceId) throw new Error("Code already used");
-  if (Date.now() > current.expiresAt) throw new Error("Code expired");
-  if (current.hostDeviceId === deviceId) throw new Error("Cannot join your own code");
-  await mod.update(codeRef, { joinedDeviceId: deviceId });
-  return { ...current, joinedDeviceId: deviceId };
+  // Use transaction to prevent race condition
+  const result = await mod.runTransaction(codeRef, (current) => {
+    if (!current) return undefined; // abort — code not found
+    if (current.joinedDeviceId) return undefined; // abort — already claimed
+    if (Date.now() > current.expiresAt) return undefined; // abort — expired
+    if (current.hostDeviceId === deviceId) return undefined; // abort — can't join own code
+    return { ...current, joinedDeviceId: deviceId };
+  });
+  if (!result.committed) throw new Error("Code invalid, expired, or already used");
+  return result.snapshot.val();
 }
 
 async function pollLinkCode(code) {
@@ -1063,15 +1082,12 @@ export function DeviceLinkModal({ link, onClose }) {
   const pollRef = useRef(null);
   const ttlRef = useRef(null);
   const leaveTimer = useRef(null);
-  const countdownRef = useRef(null);
-  const [countdown, setCountdown] = useState(300); // 5 minutes in seconds
 
   useEffect(() => { if (isLinked) setView("devices"); }, [isLinked]);
   useEffect(() => () => {
     if (pollRef.current) clearInterval(pollRef.current);
     if (ttlRef.current) clearTimeout(ttlRef.current);
     if (leaveTimer.current) clearTimeout(leaveTimer.current);
-    if (countdownRef.current) clearInterval(countdownRef.current);
   }, []);
 
   // Generate code and poll for joiner
@@ -1081,28 +1097,15 @@ export function DeviceLinkModal({ link, onClose }) {
     try {
       const code = await createLinkCode();
       setGeneratedCode(code); setView("waiting");
-      // Start live countdown
-      setCountdown(300);
-      if (countdownRef.current) clearInterval(countdownRef.current);
-      countdownRef.current = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(countdownRef.current); countdownRef.current = null;
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
       // Poll for joiner every 2s
       if (pollRef.current) clearInterval(pollRef.current);
       pollRef.current = setInterval(async () => {
         try {
           const data = await pollLinkCode(code);
-          if (!data) { clearInterval(pollRef.current); pollRef.current = null; if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; } setError(t("err_code_expired")); setView("entry"); return; }
+          if (!data) { clearInterval(pollRef.current); pollRef.current = null; setError(t("err_code_expired")); setView("entry"); return; }
           if (data.joinedDeviceId) {
             clearInterval(pollRef.current); pollRef.current = null;
             if (ttlRef.current) { clearTimeout(ttlRef.current); ttlRef.current = null; }
-            if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
             const cId = await completeLinkHandshake(code);
             if (cId) { linkComplete(cId); setView("devices"); }
             else { setError(t("err_handshake")); setView("entry"); }
@@ -1113,10 +1116,8 @@ export function DeviceLinkModal({ link, onClose }) {
       if (ttlRef.current) clearTimeout(ttlRef.current);
       ttlRef.current = setTimeout(() => {
         if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
-        if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
         cleanupLinkCode(code);
         ttlRef.current = null;
-        setError(t("err_code_expired")); setView("entry");
       }, LINK_CODE_TTL);
     } catch (e) { console.error("Device Link: createLinkCode failed", e); setError(e.message || t("err_create_fail")); }
     setLoading(false);
@@ -1153,7 +1154,6 @@ export function DeviceLinkModal({ link, onClose }) {
   const cancelGenerate = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
     if (ttlRef.current) { clearTimeout(ttlRef.current); ttlRef.current = null; }
-    if (countdownRef.current) { clearInterval(countdownRef.current); countdownRef.current = null; }
     if (generatedCode) cleanupLinkCode(generatedCode);
     setGeneratedCode(null); setView("entry");
   };
@@ -1189,7 +1189,7 @@ export function DeviceLinkModal({ link, onClose }) {
           <button onClick={() => navigator.clipboard?.writeText(generatedCode || "")} style={{ background: "none", border: `1px solid ${C.border}`, borderRadius: 6, color: C.textMuted, cursor: "pointer", padding: 6, display: "inline-flex" }}>{I.copy(14)}</button>
         </div>
         <div className="sync-pulse" style={{ width: 8, height: 8, borderRadius: "50%", background: LC, margin: "12px auto 0" }} />
-        <div style={{ fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", marginTop: 8 }}>{Math.floor(countdown / 60)}:{String(countdown % 60).padStart(2, "0")}</div>
+        <div style={{ fontSize: 11, color: C.textMuted + "88", fontFamily: "'Outfit',sans-serif", marginTop: 8 }}>5:00</div>
       </div>
       {error && <div style={{ fontSize: 12, color: C.danger, marginBottom: 8, fontFamily: "'Outfit',sans-serif" }}>{error}</div>}
       <button onClick={cancelGenerate} style={bo(C.textMuted)}>{I.x(14)}</button>
