@@ -23,6 +23,7 @@ export function useMetronome(externalCtx) {
     }
     const e = accented ? bt : 2;
     if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
+    try {
     switch (clickSound) {
       case "sine": { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.06); o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.08); break; }
       case "noise": { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(t0); src.stop(t0 + 0.06); break; }
@@ -30,7 +31,9 @@ export function useMetronome(externalCtx) {
       case "rim": { const v = e === 0 ? 0.85 : e === 1 ? 0.55 : 0.3; const l = Math.floor(ctx.sampleRate * 0.01), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.04); const fl = ctx.createBiquadFilter(); fl.type = "highpass"; fl.frequency.value = 1800; fl.Q.value = 1.2; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(t0); src.stop(t0 + 0.05); const o = ctx.createOscillator(), g2 = ctx.createGain(); o.type = "sine"; o.frequency.value = 1200; g2.gain.setValueAtTime(v * 0.6, t0); g2.gain.exponentialRampToValueAtTime(0.001, t0 + 0.02); o.connect(g2); g2.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.03); break; }
       case "clave": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 2500 : e === 1 ? 2300 : 2100; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.025); o.connect(g); g.connect(ctx.destination); o.start(t0); o.stop(t0 + 0.04); break; }
       case "cowbell": { const v = e === 0 ? 0.75 : e === 1 ? 0.5 : 0.25; const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(); o1.type = "square"; o2.type = "square"; o1.frequency.value = e === 0 ? 565 : 540; o2.frequency.value = e === 0 ? 845 : 800; g.gain.setValueAtTime(v, t0); g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.08); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 700; fl.Q.value = 3; o1.connect(fl); o2.connect(fl); fl.connect(g); g.connect(ctx.destination); o1.start(t0); o2.start(t0); o1.stop(t0 + 0.1); o2.stop(t0 + 0.1); break; }
+      default: console.error('[CLK] NO MATCH for clickSound:', clickSound);
     }
+    } catch (err) { console.error('[CLK-ERR]', err, { clickSound, t0, ctxTime: ctx.currentTime, ctxState: ctx.state }); }
   }, []);
   const sched = useCallback(() => {
     const ctx = actx.current; if (!ctx || !pl.current) return; const tl = tlR.current;
@@ -45,7 +48,7 @@ export function useMetronome(externalCtx) {
         if (!tsF.current) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedStart", ab: bar.ab, si: bar.si, dur: bar.tDur }); tsF.current = true; }
         if (bar.mk && tsM.current < bar.mk.length && el >= bar.mk[tsM.current] - 0.02) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedMarker", ab: bar.ab, si: bar.si, el, dur: bar.tDur, mt: bar.mk[tsM.current], mi: tsM.current, tm: bar.mk.length }); tsM.current++; }
         if (cbR.current) cbR.current({ type: "timedTick", ab: bar.ab, si: bar.si, el, rem: Math.max(0, bar.tDur - el), dur: bar.tDur });
-        if (el >= bar.tDur) { console.warn('[TIMED-EXIT]', { bi: bi.current, nextBi: bi.current + 1, nextBar: tl[bi.current + 1], nbBefore: nb.current, ctxTime: ctx.currentTime }); tsS.current = 0; tsM.current = 0; tsF.current = false; nb.current = ctx.currentTime + 0.05; bi.current++; continue; } nb.current += 0.05; return;
+        if (el >= bar.tDur) { console.warn('[TIMED-EXIT]', { bi: bi.current, nextBi: bi.current + 1, nextBar: tl[bi.current + 1], nbBefore: nb.current, ctxTime: ctx.currentTime }); try { const _o = ctx.createOscillator(), _g = ctx.createGain(); _o.type = "sine"; _o.frequency.value = 440; _g.gain.setValueAtTime(0.9, ctx.currentTime); _g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3); _o.connect(_g); _g.connect(ctx.destination); _o.start(ctx.currentTime); _o.stop(ctx.currentTime + 0.4); console.warn('[TEST-BEEP] scheduled at', ctx.currentTime); } catch(e) { console.error('[TEST-BEEP-ERR]', e); } tsS.current = 0; tsM.current = 0; tsF.current = false; nb.current = ctx.currentTime + 0.05; bi.current++; continue; } nb.current += 0.05; return;
       }
       // Fermata hold in progress
       if (inFerm.current) {
