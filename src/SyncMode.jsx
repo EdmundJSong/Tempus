@@ -858,16 +858,26 @@ async function joinWithLinkCode(code) {
   
   const deviceId = getDeviceId();
   const codeRef = mod.ref(db, `link_codes/${code}`);
-  // Read first, then conditional update.
+  // Read first, then conditional update with server-side guard.
   // (runTransaction's first callback invocation gets null when there's no local cache,
-  //  which caused permanent aborts. RTDB rules guard against double-join server-side.)
+  //  which caused permanent aborts. RTDB validate rules on joinedDeviceId enforce
+  //  write-once atomicity — the try-catch below handles the rejected-race-loser case.)
   const snap = await mod.get(codeRef);
   const current = snap.val();
   if (!current) throw new Error("Code not found");
   if (current.joinedDeviceId) throw new Error("Code already used");
   if (Date.now() > current.expiresAt) throw new Error("Code expired");
   if (current.hostDeviceId === deviceId) throw new Error("Cannot join your own code");
-  await mod.update(codeRef, { joinedDeviceId: deviceId });
+  // RTDB rules enforce joinedDeviceId write-once (see database.rules.json).
+  // If two devices race past the client-side check above, the server rejects the loser.
+  try {
+    await mod.update(codeRef, { joinedDeviceId: deviceId });
+  } catch (e) {
+    if (e?.code === 'PERMISSION_DENIED' || e?.message?.includes?.('PERMISSION_DENIED')) {
+      throw new Error("Code already used");
+    }
+    throw e;
+  }
   return { ...current, joinedDeviceId: deviceId };
 }
 
