@@ -44,7 +44,8 @@ export const I = {
   swap: s => <Icon size={s || 16} d="M8 7L4 11l4 4 M4 11h11 M16 17l4-4-4-4 M20 13H9" />,
   unlink: s => <Icon size={s || 18} d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71 M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71 M8 8l8 8" />,
   desktop: s => <Icon size={s || 24} d="M20 17H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2h16c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2z M12 17v4 M8 21h8" />,
-  fermata: s => <Icon size={s || 18}><path d="M4 14 Q12 2 20 14" vectorEffect="non-scaling-stroke" /><circle cx="12" cy="14" r="2" fill="currentColor" stroke="none" /></Icon>
+  fermata: s => <Icon size={s || 18}><path d="M4 14 Q12 2 20 14" vectorEffect="non-scaling-stroke" /><circle cx="12" cy="14" r="2" fill="currentColor" stroke="none" /></Icon>,
+  more: s => <Icon size={s || 18} fill="currentColor" stroke="none"><circle cx="12" cy="5" r="1.5" /><circle cx="12" cy="12" r="1.5" /><circle cx="12" cy="19" r="1.5" /></Icon>
 };
 
 // ============ SVG NOTE ============
