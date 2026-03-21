@@ -263,6 +263,9 @@ const S = {
   err_6digit:      { en: "Enter a 6-digit code", "zh-CN": "请输入6位代码", "zh-TW": "請輸入6位代碼", ja: null, ko: null },
   err_join_link:   { en: "Could not join",  "zh-CN": "无法加入",   "zh-TW": "無法加入",   ja: null, ko: null },
   err_code_invalid:{ en: "Code invalid, expired, or already used", "zh-CN": "代码无效、已过期或已使用", "zh-TW": "代碼無效、已過期或已使用", ja: null, ko: null },
+  remove_all:      { en: "Remove all",      "zh-CN": "全部移除",   "zh-TW": "全部移除",   ja: null, ko: null },
+  toast_left:      { en: "You left the room","zh-CN": "你已离开房间","zh-TW": "你已離開房間", ja: null, ko: null },
+  unlink_device:   { en: "Unlink this device","zh-CN": "取消链接此设备","zh-TW": "取消連結此裝置", ja: null, ko: null },
 
   // ============ 11. VIDEO VIEW ============
 
