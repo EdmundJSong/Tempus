@@ -92,6 +92,7 @@ export function useMetronome(externalCtx) {
 export function useTapTempo(onChange) {
   const taps = useRef([]);
   const resetTimer = useRef(null);
+  const flashTimer = useRef(null);
   const [tapBpm, setTapBpm] = useState(null);
   const [tapFlash, setTapFlash] = useState(false);
   const tap = useCallback(() => {
@@ -99,7 +100,9 @@ export function useTapTempo(onChange) {
     taps.current.push(now);
     const cutoff = now - 4000;
     taps.current = taps.current.filter(t => t > cutoff).slice(-8);
-    setTapFlash(true); setTimeout(() => setTapFlash(false), 150);
+    setTapFlash(true);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    flashTimer.current = setTimeout(() => setTapFlash(false), 150);
     if (taps.current.length >= 3) {
       const intervals = [];
       for (let i = 1; i < taps.current.length; i++) intervals.push(taps.current[i] - taps.current[i - 1]);
@@ -113,5 +116,9 @@ export function useTapTempo(onChange) {
     if (resetTimer.current) clearTimeout(resetTimer.current);
     resetTimer.current = setTimeout(() => { taps.current = []; setTapBpm(null); }, 2000);
   }, [onChange]);
+  useEffect(() => () => {
+    if (resetTimer.current) clearTimeout(resetTimer.current);
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+  }, []);
   return { tap, tapBpm, tapFlash };
 }
