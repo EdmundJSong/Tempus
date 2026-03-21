@@ -106,13 +106,22 @@ async function sendCommand(code, command, extra = {}) {
   try {
     const t0 = Date.now();
     console.log(`[SYNC-DIAG] sendCommand START | cmd=${command} | t=${t0} | code=${code}`);
-    const db = await fbInit(); if (!db) { console.error("sendCommand: no db"); return; }
-    const fs = await getFS();
     const status = command === "start" || command === "restart" ? "playing" : command === "pause" ? "paused" : command === "stop" || command === "sync-reset" ? "stopped" : undefined;
-    const updates = { command, commandSeq: fs.increment(1), ...extra };
-    if (status) updates.status = status;
-    await fs.updateDoc(fs.doc(db, "tempus_rooms", code), updates);
-    console.log(`[SYNC-DIAG] sendCommand DONE | cmd=${command} | wrote in ${Date.now() - t0}ms`);
+
+    // FAST PATH: Write command to RTDB (~50-150ms vs Firestore ~800-1400ms)
+    const { mod, db: rtdb } = await getRTDB();
+    const cmdData = { command, seq: t0, ...extra };
+    if (status) cmdData.status = status;
+    await mod.set(mod.ref(rtdb, `sync_commands/${code}`), cmdData);
+    console.log(`[SYNC-DIAG] sendCommand RTDB DONE | cmd=${command} | wrote in ${Date.now() - t0}ms`);
+
+    // SLOW PATH (fire-and-forget): Update Firestore status for room metadata UI
+    if (status) {
+      fbInit().then(async db => {
+        if (!db) return; const fs = await getFS();
+        fs.updateDoc(fs.doc(db, "tempus_rooms", code), { status }).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (e) { console.error("[SYNC-DIAG] sendCommand FAILED:", command, e); }
 }
 
@@ -150,7 +159,11 @@ async function leaveRoom(code) {
     // Clean up presence subcollection doc
     try { await fs.deleteDoc(fs.doc(db, "tempus_rooms", code, "presence", deviceId)); } catch {}
     const snap = await fs.getDoc(ref); if (!snap.exists()) return;
-    if (snap.data().hostId === deviceId) await fs.deleteDoc(ref);
+    if (snap.data().hostId === deviceId) {
+      await fs.deleteDoc(ref);
+      // Host also cleans up RTDB command channel
+      try { const { mod, db: rtdb } = await getRTDB(); await mod.remove(mod.ref(rtdb, `sync_commands/${code}`)); } catch {}
+    }
     else await fs.updateDoc(ref, { [`members.${deviceId}`]: fs.deleteField(), [`pending.${deviceId}`]: fs.deleteField() });
   } catch {}
 }
@@ -225,9 +238,9 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const roleRef = useRef(null); // track role in refs for snapshot callback
   const admittedRef = useRef(false); // track admission for kick detection
 
-  // Process command directly in snapshot callback (not useEffect) to avoid React batching issues
+  // Process command from RTDB onValue callback (fast path)
   const processCommand = useCallback((d, isAdmitted) => {
-    const seq = d.commandSeq || 0;
+    const seq = d.seq || 0;
     const cmd = d.command;
     console.log(`[SYNC-DIAG] processCommand | cmd=${cmd} | seq=${seq} | lastSeq=${lastCmdSeq.current} | isAdmitted=${isAdmitted} | role=${roleRef.current}`);
     if (!isAdmitted || roleRef.current === "host") { console.log(`[SYNC-DIAG] processCommand SKIPPED (host or not admitted)`); return; }
@@ -261,15 +274,46 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
     if (unsubRef.current) unsubRef.current();
     roleRef.current = role;
     let firstSnapshot = true;
-    unsubRef.current = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
-      console.log(`[SYNC-DIAG] onSnapshot FIRED | t=${Date.now()} | exists=${snap.exists()} | role=${role}`);
+
+    // --- RTDB COMMAND LISTENER (fast path: ~50-150ms delivery) ---
+    let rtdbUnsub = null;
+    let firstRtdb = true;
+    try {
+      const { mod, db: rtdb } = await getRTDB();
+      const cmdRef = mod.ref(rtdb, `sync_commands/${code}`);
+      rtdbUnsub = mod.onValue(cmdRef, (snap) => {
+        const d = snap.val();
+        if (!d || !d.command) return; // no command yet
+        console.log(`[SYNC-DIAG] RTDB onValue | cmd=${d.command} | seq=${d.seq} | t=${Date.now()}`);
+        // First RTDB snapshot: initialize seq baseline, don't execute
+        if (firstRtdb) {
+          firstRtdb = false;
+          lastCmdSeq.current = d.seq || 0;
+          console.log(`[SYNC-DIAG] RTDB FIRST VALUE — initSeq=${d.seq || 0}`);
+          return;
+        }
+        // Update syncState status immediately from RTDB (faster than Firestore)
+        if (d.status) {
+          setSyncState(prev => prev ? { ...prev, status: d.status, command: d.command,
+            startAtMs: d.startAtMs, resumeFromBar: d.resumeFromBar, countInBars: d.countInBars } : prev);
+        }
+        processCommand(d, admittedRef.current);
+      }, (err) => {
+        console.error("[SYNC-DIAG] RTDB command listener error:", err);
+      });
+    } catch (e) {
+      console.error("[SYNC-DIAG] RTDB command listener setup failed:", e);
+    }
+
+    // --- FIRESTORE ROOM METADATA LISTENER (members, sections, kick detection) ---
+    const fsUnsub = fs.onSnapshot(fs.doc(db, "tempus_rooms", code), (snap) => {
+      console.log(`[SYNC-DIAG] FS onSnapshot FIRED | t=${Date.now()} | exists=${snap.exists()} | role=${role}`);
       if (!snap.exists()) {
         setSyncState(null); if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
         if (originalSections.current) showToast(t("toast_room_closed"));
         return;
       }
       const d = snap.data(); const myId = getDeviceId();
-      console.log(`[SYNC-DIAG] onSnapshot DATA | cmd=${d.command} | seq=${d.commandSeq} | lastSeq=${lastCmdSeq.current} | status=${d.status} | inMembers=${!!(d.members?.[myId])} | inPending=${!!(d.pending?.[myId])}`);
       const nowInMembers = !!(d.members?.[myId]);
       const nowInPending = !!(d.pending?.[myId]);
       // Detect removal: was admitted, now gone from both members and pending
@@ -279,26 +323,23 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
         showToast(t("toast_removed")); return;
       }
       if (nowInMembers) admittedRef.current = true;
-      // On first snapshot, initialize lastCmdSeq and mark connection as ready
+      // On first snapshot, mark connection as ready
       if (firstSnapshot) {
-        console.log(`[SYNC-DIAG] FIRST SNAPSHOT — syncReady → true | t=${Date.now()} | initSeq=${d.commandSeq || 0}`);
-        lastCmdSeq.current = d.commandSeq || 0;
+        console.log(`[SYNC-DIAG] FIRST FS SNAPSHOT — syncReady → true | t=${Date.now()}`);
         firstSnapshot = false;
         setSyncReady(true);
       }
       const isAdmitted = !!(d.members?.[myId]);
-      // Process commands synchronously in the snapshot callback — not in useEffect
-      processCommand(d, isAdmitted);
-      // Update React state for UI
+      // NOTE: processCommand removed from here — commands now arrive via RTDB (faster)
+      // Update React state for room metadata UI
       const newSJ = JSON.stringify(d.sections);
       const sectionsChanged = newSJ !== roomSectionsJsonRef.current;
       if (sectionsChanged) roomSectionsJsonRef.current = newSJ;
       setSyncState(prev => ({
-        ...prev, code, role, hostId: d.hostId, hostName: d.hostName || "♛", status: d.status,
+        ...prev, code, role, hostId: d.hostId, hostName: d.hostName || "♛",
+        status: d.status || prev?.status, // prefer RTDB-updated status if already set
         members: d.members || {}, pending: d.pending || {},
         sections: sectionsChanged ? d.sections : (prev?.sections || d.sections),
-        commandSeq: d.commandSeq || 0, command: d.command, startAtMs: d.startAtMs,
-        resumeFromBar: d.resumeFromBar, countInBars: d.countInBars,
         isPending: !!(d.pending?.[myId]) && !(d.members?.[myId]),
         isAdmitted
       }));
@@ -306,6 +347,12 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
       console.error("Sync onSnapshot error:", err);
       showToast("Connection lost — rejoin room");
     });
+
+    // Combined unsubscribe
+    unsubRef.current = () => {
+      fsUnsub();
+      if (rtdbUnsub) rtdbUnsub();
+    };
   }, [showToast, processCommand]);
 
   // Section updates from host (member side) — pulse glow instead of toast
@@ -391,18 +438,16 @@ export function useSync({ sections, settings, met, go, exitPlay, pause }) {
   const doKick = useCallback((id) => roomCode && kickMember(roomCode, id), [roomCode]);
   const doKickAll = useCallback(() => roomCode && kickAll(roomCode), [roomCode]);
 
-  const SYNC_LEAD_MS = 1000; // buffer for Firestore propagation to members
+  const SYNC_LEAD_MS = 500; // RTDB propagation is ~50-150ms; 500ms gives comfortable margin
 
   const doStart = useCallback(async () => {
     console.log(`[SYNC-DIAG] doStart called | t=${Date.now()} | syncReady=${syncReadyRef.current} | roomCode=${roomCode}`);
-    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doStart BLOCKED — syncReady=${syncReadyRef.current}, roomCode=${roomCode}`); return; }
+    if (!roomCode || !syncReadyRef.current) { console.warn(`[SYNC-DIAG] doStart BLOCKED`); return; }
     try { metRef.current.tap(); } catch {}
     const ci = settingsRef.current.countIn ?? 1;
     const sNow = Date.now() - clockOffsetRef.current;
-    const startMs = sNow + SYNC_LEAD_MS; // expressed in server time
-    // Call go() immediately — audio scheduler handles precise timing via syncDelayMs
+    const startMs = sNow + SYNC_LEAD_MS;
     goRef.current(0, ci, SYNC_LEAD_MS);
-    // Write to Firestore for members
     await sendCommand(roomCode, "start", { startAtMs: startMs, countInBars: ci });
   }, [roomCode]);
 
@@ -765,6 +810,8 @@ async function getRTDB() {
   _rtdbDb = _rtdbMod.getDatabase(apps[0], RTDB_URL);
   return { mod: _rtdbMod, db: _rtdbDb };
 }
+// Pre-warm RTDB module on import (fast command channel + device linking)
+getRTDB().catch(() => {});
 
 // ============ DEVICE NAME HELPER ============
 function parseDeviceName() {
