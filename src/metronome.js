@@ -68,6 +68,8 @@ export function useMetronome(externalCtx) {
         if (!tsF.current) { if (cbR.current) cbR.current({ type: "timedStart", ab: bar.ab, si: bar.si, dur: bar.tDur }); tsF.current = true; }
         if (bar.mk && tsM.current < bar.mk.length && el >= bar.mk[tsM.current] - 0.02) { if (cbR.current) cbR.current({ type: "timedMarker", ab: bar.ab, si: bar.si, el, dur: bar.tDur, mt: bar.mk[tsM.current], mi: tsM.current, tm: bar.mk.length }); tsM.current++; }
         if (cbR.current) cbR.current({ type: "timedTick", ab: bar.ab, si: bar.si, el, rem: Math.max(0, bar.tDur - el), dur: bar.tDur });
+        // Poke audio thread every ~1s during timed section to prevent dormancy
+        if (el > 0 && Math.floor(el) !== Math.floor(el - 0.05)) prime(ctx);
         // Count-in overlap: 1 bar of fading clicks before timed section ends
         const _nxB = tl[bi.current + 1];
         if (_nxB && !_nxB.isT) {
