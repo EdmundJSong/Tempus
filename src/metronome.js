@@ -67,11 +67,17 @@ export function useMetronome(externalCtx) {
           tsS.current = 0; tsM.current = 0; tsF.current = false;
           const nextBar = tl[bi.current + 1];
           if (nextBar && !nextBar.isT) {
-            // Mirror the proven tap() recovery path when re-entering metered audio.
+            // Silent restart: re-assert audio session exactly like start() does,
+            // without touching the timer or runId — keeps everything running.
+            if (ctx.state === "suspended") ctx.resume();
+            try { sa.current?.play().catch(() => {}); } catch {}
             prime(ctx);
             nb.current = Math.max(nb.current, ctx.currentTime + START_LEAD);
           }
           bi.current++;
+          // If entering metered, return so the next setInterval tick (~20ms)
+          // schedules the first beat after the audio thread has reactivated.
+          if (nextBar && !nextBar.isT) return;
           continue;
         } nb.current += 0.05; return;
       }
