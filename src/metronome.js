@@ -8,8 +8,6 @@ const START_LEAD = 0.1;
 export function useMetronome(externalCtx) {
   const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, clickSound: "sine", muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false), runId = useRef(0);
   const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false);
-  const tci = useRef({ active: false, beatIdx: 0, nextBeatTime: 0, totalBeats: 0, restarted: false });
-  const primerBeats = useRef(0);
   const init = useCallback(() => { if (externalCtx) { actx.current = externalCtx; return actx.current; } if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, [externalCtx]);
   const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) { sa.current.pause(); sa.current.currentTime = 0; } }, []);
   const silentStart = useRef(0);
@@ -22,7 +20,7 @@ export function useMetronome(externalCtx) {
       src.start(0);
     } catch { }
   }, []);
-  const clk = useCallback((ctx, time, bt, vol) => {
+  const clk = useCallback((ctx, time, bt) => {
     const { accented, clickSound = "sine", muted, downbeatOnly, silentInterval } = sR.current; if (muted) return;
     if (downbeatOnly && bt !== 0) return;
     if (silentInterval > 0) {
@@ -32,15 +30,14 @@ export function useMetronome(externalCtx) {
       if (phase >= silentInterval) return;
     }
     const e = accented ? bt : 2;
-    const _dest = (vol != null && vol < 1) ? (() => { const _g = ctx.createGain(); _g.gain.value = vol; _g.connect(ctx.destination); return _g; })() : ctx.destination;
     if (typeof navigator !== "undefined" && "vibrate" in navigator) { try { navigator.vibrate(e === 0 ? [30] : [15]); } catch (err) { } }
     switch (clickSound) {
-      case "sine": { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(_dest); o.start(time); o.stop(time + 0.08); break; }
-      case "noise": { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(_dest); src.start(time); src.stop(time + 0.06); break; }
-      case "wood": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 880 : e === 1 ? 780 : 680; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.03); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 800; fl.Q.value = 15; o.connect(fl); fl.connect(g); g.connect(_dest); o.start(time); o.stop(time + 0.05); break; }
-      case "rim": { const v = e === 0 ? 0.85 : e === 1 ? 0.55 : 0.3; const l = Math.floor(ctx.sampleRate * 0.01), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.04); const fl = ctx.createBiquadFilter(); fl.type = "highpass"; fl.frequency.value = 1800; fl.Q.value = 1.2; src.connect(fl); fl.connect(g); g.connect(_dest); src.start(time); src.stop(time + 0.05); const o = ctx.createOscillator(), g2 = ctx.createGain(); o.type = "sine"; o.frequency.value = 1200; g2.gain.setValueAtTime(v * 0.6, time); g2.gain.exponentialRampToValueAtTime(0.001, time + 0.02); o.connect(g2); g2.connect(_dest); o.start(time); o.stop(time + 0.03); break; }
-      case "clave": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 2500 : e === 1 ? 2300 : 2100; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.025); o.connect(g); g.connect(_dest); o.start(time); o.stop(time + 0.04); break; }
-      case "cowbell": { const v = e === 0 ? 0.75 : e === 1 ? 0.5 : 0.25; const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(); o1.type = "square"; o2.type = "square"; o1.frequency.value = e === 0 ? 565 : 540; o2.frequency.value = e === 0 ? 845 : 800; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.08); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 700; fl.Q.value = 3; o1.connect(fl); o2.connect(fl); fl.connect(g); g.connect(_dest); o1.start(time); o2.start(time); o1.stop(time + 0.1); o2.stop(time + 0.1); break; }
+      case "sine": { const f = e === 0 ? 1000 : e === 1 ? 750 : 500, v = e === 0 ? 0.8 : e === 1 ? 0.5 : 0.25, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = f; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.06); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.08); break; }
+      case "noise": { const l = Math.floor(ctx.sampleRate * 0.025), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const v = e === 0 ? 0.7 : e === 1 ? 0.4 : 0.2, src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.05); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = e === 0 ? 1200 : e === 1 ? 900 : 700; fl.Q.value = 0.8; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(time); src.stop(time + 0.06); break; }
+      case "wood": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 880 : e === 1 ? 780 : 680; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.03); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 800; fl.Q.value = 15; o.connect(fl); fl.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.05); break; }
+      case "rim": { const v = e === 0 ? 0.85 : e === 1 ? 0.55 : 0.3; const l = Math.floor(ctx.sampleRate * 0.01), buf = ctx.createBuffer(1, l, ctx.sampleRate), d = buf.getChannelData(0); for (let i = 0; i < l; i++) d[i] = Math.random() * 2 - 1; const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.04); const fl = ctx.createBiquadFilter(); fl.type = "highpass"; fl.frequency.value = 1800; fl.Q.value = 1.2; src.connect(fl); fl.connect(g); g.connect(ctx.destination); src.start(time); src.stop(time + 0.05); const o = ctx.createOscillator(), g2 = ctx.createGain(); o.type = "sine"; o.frequency.value = 1200; g2.gain.setValueAtTime(v * 0.6, time); g2.gain.exponentialRampToValueAtTime(0.001, time + 0.02); o.connect(g2); g2.connect(ctx.destination); o.start(time); o.stop(time + 0.03); break; }
+      case "clave": { const v = e === 0 ? 0.9 : e === 1 ? 0.6 : 0.3, o = ctx.createOscillator(), g = ctx.createGain(); o.type = "sine"; o.frequency.value = e === 0 ? 2500 : e === 1 ? 2300 : 2100; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.025); o.connect(g); g.connect(ctx.destination); o.start(time); o.stop(time + 0.04); break; }
+      case "cowbell": { const v = e === 0 ? 0.75 : e === 1 ? 0.5 : 0.25; const o1 = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(); o1.type = "square"; o2.type = "square"; o1.frequency.value = e === 0 ? 565 : 540; o2.frequency.value = e === 0 ? 845 : 800; g.gain.setValueAtTime(v, time); g.gain.exponentialRampToValueAtTime(0.001, time + 0.08); const fl = ctx.createBiquadFilter(); fl.type = "bandpass"; fl.frequency.value = 700; fl.Q.value = 3; o1.connect(fl); o2.connect(fl); fl.connect(g); g.connect(ctx.destination); o1.start(time); o2.start(time); o1.stop(time + 0.1); o2.stop(time + 0.1); break; }
     }
   }, []);
   const stop = useCallback((token) => {
@@ -51,8 +48,6 @@ export function useMetronome(externalCtx) {
     ciL.current = 0;
     tsS.current = 0; tsM.current = 0; tsF.current = false;
     inFerm.current = false;
-    tci.current = { active: false, beatIdx: 0, nextBeatTime: 0, totalBeats: 0, restarted: false };
-    primerBeats.current = 0;
     silentStart.current = 0;
     rlwl();
     return true;
@@ -65,57 +60,10 @@ export function useMetronome(externalCtx) {
       const bar = tl[bi.current]; if (!bar) { if (cbR.current) cbR.current({ type: "ended" }); stop(token); return; }
       if (bar.isT) {
         if (tsS.current === 0) { tsS.current = nb.current; tsF.current = false; } const el = nb.current - tsS.current;
-        if (!tsF.current) { if (cbR.current) cbR.current({ type: "timedStart", ab: bar.ab, si: bar.si, dur: bar.tDur }); tsF.current = true; }
-        if (bar.mk && tsM.current < bar.mk.length && el >= bar.mk[tsM.current] - 0.02) { if (cbR.current) cbR.current({ type: "timedMarker", ab: bar.ab, si: bar.si, el, dur: bar.tDur, mt: bar.mk[tsM.current], mi: tsM.current, tm: bar.mk.length }); tsM.current++; }
+        if (!tsF.current) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedStart", ab: bar.ab, si: bar.si, dur: bar.tDur }); tsF.current = true; }
+        if (bar.mk && tsM.current < bar.mk.length && el >= bar.mk[tsM.current] - 0.02) { clk(ctx, nb.current, 0); if (cbR.current) cbR.current({ type: "timedMarker", ab: bar.ab, si: bar.si, el, dur: bar.tDur, mt: bar.mk[tsM.current], mi: tsM.current, tm: bar.mk.length }); tsM.current++; }
         if (cbR.current) cbR.current({ type: "timedTick", ab: bar.ab, si: bar.si, el, rem: Math.max(0, bar.tDur - el), dur: bar.tDur });
-        // Poke audio thread every ~1s during timed section to prevent dormancy
-        if (el > 0 && Math.floor(el) !== Math.floor(el - 0.05)) prime(ctx);
-        // Count-in overlap: 1 bar of fading clicks before timed section ends
-        const _nxB = tl[bi.current + 1];
-        if (_nxB && !_nxB.isT) {
-          const _ciCd = _nxB.perBeatCd ? (_nxB.perBeatCd[0]?.cd ?? 0.5) : (_nxB.cd ?? 0.5);
-          const _oneBarDur = _ciCd * _nxB.cpb;
-          const _ciStart = bar.tDur - _oneBarDur;
-          if (_ciStart > 0 && el >= _ciStart) {
-            if (!tci.current.restarted) {
-              // Silent restart: fresh interval + audio pipeline wake-up
-              clearInterval(tmr.current);
-              if (ctx.state === "suspended") ctx.resume();
-              try { sa.current?.pause(); sa.current.currentTime = 0; sa.current.play().catch(() => {}); } catch {}
-              prime(ctx);
-              tci.current = { active: true, beatIdx: 0, nextBeatTime: ctx.currentTime + START_LEAD, totalBeats: _nxB.cpb, restarted: true };
-              const newToken = ++runId.current;
-              tmr.current = setInterval(() => sched(newToken), 20);
-              return;
-            }
-            // Schedule count-in beats with fade-in volume
-            while (tci.current.active && tci.current.beatIdx < tci.current.totalBeats && tci.current.nextBeatTime < ctx.currentTime + LOOKAHEAD) {
-              const fade = (tci.current.beatIdx + 1) / tci.current.totalBeats;
-              const _bt = _nxB.bts[tci.current.beatIdx] ?? 2;
-              clk(ctx, tci.current.nextBeatTime, _bt, fade);
-              if (cbR.current) cbR.current({ type: "timedCountIn", beatIdx: tci.current.beatIdx, totalBeats: tci.current.totalBeats, fade, tsN: _nxB.tsN, tsD: _nxB.tsD, si: bar.si });
-              const _thisCd = _nxB.perBeatCd ? (_nxB.perBeatCd[tci.current.beatIdx]?.cd ?? _ciCd) : _ciCd;
-              tci.current.nextBeatTime += _thisCd;
-              tci.current.beatIdx++;
-            }
-            if (tci.current.beatIdx >= tci.current.totalBeats) tci.current.active = false;
-          }
-        }
-        if (el >= bar.tDur) {
-          tsS.current = 0; tsM.current = 0; tsF.current = false;
-          tci.current = { active: false, beatIdx: 0, nextBeatTime: 0, totalBeats: 0, restarted: false };
-          const nextBar = tl[bi.current + 1];
-          if (nextBar && !nextBar.isT) {
-            // Safety net: count-in already re-asserted audio session
-            if (ctx.state === "suspended") ctx.resume();
-            prime(ctx);
-            nb.current = Math.max(nb.current, ctx.currentTime + START_LEAD);
-            primerBeats.current = 12;
-          }
-          bi.current++;
-          if (nextBar && !nextBar.isT) return;
-          continue;
-        } nb.current += 0.05; return;
+        if (el >= bar.tDur) { tsS.current = 0; tsM.current = 0; tsF.current = false; bi.current++; continue; } nb.current += 0.05; return;
       }
       // Fermata hold in progress
       if (inFerm.current) {
@@ -131,9 +79,7 @@ export function useMetronome(externalCtx) {
         nb.current += 0.05; return;
       }
       const pbc = bar.perBeatCd;
-      if (primerBeats.current === 12) { try { sa.current?.pause(); sa.current.currentTime = 0; sa.current.play().catch(() => {}); } catch {} prime(ctx); }
       const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
-      if (primerBeats.current > 0) { prime(ctx); primerBeats.current--; }
       const beatCd = Math.max(0.01, pbc ? (pbc[bei.current]?.cd ?? pbc[0]?.cd ?? 0.5) : (bar.cd ?? 0.5));
       const beatTempo = pbc ? pbc[bei.current]?.cd ? Math.round(60 / (pbc[bei.current].cd / ((D2Q[bar.tsD] || 1) / (BU.find(x => x.id === "q")?.q || 1)))) : bar.tempo : bar.tempo;
       if (cbR.current) cbR.current({ type: "beat", barIdx: bi.current, beatIdx: bei.current, bt, ab: bar.ab, tsN: bar.tsN, tsD: bar.tsD, tempo: beatTempo, si: bar.si });
