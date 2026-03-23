@@ -9,6 +9,7 @@ export function useMetronome(externalCtx) {
   const actx = useRef(null), tmr = useRef(null), nb = useRef(0), bi = useRef(0), bei = useRef(0), pl = useRef(false), tlR = useRef([]), cbR = useRef(null), sR = useRef({ accented: true, clickSound: "sine", muted: false }), ciL = useRef(0), wl = useRef(null), sa = useRef(null), tsS = useRef(0), tsM = useRef(0), tsF = useRef(false), runId = useRef(0);
   const fermS = useRef(0), fermD = useRef(0), inFerm = useRef(false);
   const tci = useRef({ active: false, beatIdx: 0, nextBeatTime: 0, totalBeats: 0, restarted: false });
+  const primerBeats = useRef(0);
   const init = useCallback(() => { if (externalCtx) { actx.current = externalCtx; return actx.current; } if (!actx.current) actx.current = new (window.AudioContext || window.webkitAudioContext)(); return actx.current; }, [externalCtx]);
   const rlwl = useCallback(() => { if (wl.current) { wl.current.release().catch(() => { }); wl.current = null; } if (sa.current) { sa.current.pause(); sa.current.currentTime = 0; } }, []);
   const silentStart = useRef(0);
@@ -51,6 +52,7 @@ export function useMetronome(externalCtx) {
     tsS.current = 0; tsM.current = 0; tsF.current = false;
     inFerm.current = false;
     tci.current = { active: false, beatIdx: 0, nextBeatTime: 0, totalBeats: 0, restarted: false };
+    primerBeats.current = 0;
     silentStart.current = 0;
     rlwl();
     return true;
@@ -107,6 +109,7 @@ export function useMetronome(externalCtx) {
             try { sa.current?.pause(); sa.current.currentTime = 0; sa.current.play().catch(() => {}); } catch {}
             prime(ctx);
             nb.current = Math.max(nb.current, ctx.currentTime + START_LEAD);
+            primerBeats.current = 12;
           }
           bi.current++;
           if (nextBar && !nextBar.isT) return;
@@ -128,6 +131,7 @@ export function useMetronome(externalCtx) {
       }
       const pbc = bar.perBeatCd;
       const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
+      if (primerBeats.current > 0) { prime(ctx); primerBeats.current--; }
       const beatCd = Math.max(0.01, pbc ? (pbc[bei.current]?.cd ?? pbc[0]?.cd ?? 0.5) : (bar.cd ?? 0.5));
       const beatTempo = pbc ? pbc[bei.current]?.cd ? Math.round(60 / (pbc[bei.current].cd / ((D2Q[bar.tsD] || 1) / (BU.find(x => x.id === "q")?.q || 1)))) : bar.tempo : bar.tempo;
       if (cbR.current) cbR.current({ type: "beat", barIdx: bi.current, beatIdx: bei.current, bt, ab: bar.ab, tsN: bar.tsN, tsD: bar.tsD, tempo: beatTempo, si: bar.si });
