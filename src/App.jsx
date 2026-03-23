@@ -444,7 +444,7 @@ export default function Tempus() {
       {showClearModal && <div className="modal-bg" style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }} onClick={() => setShowClearModal(false)}>
         <div className="modal-content" style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16, padding: "28px 24px", maxWidth: 300, textAlign: "center" }} onClick={e => e.stopPropagation()}>
           <div style={{ fontSize: 15, color: C.text, fontFamily: "'Outfit',sans-serif", fontWeight: 600, marginBottom: 8 }}>{t("new_label")}</div>
-          <div style={{ fontSize: 13, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 20 }}>{t("clear_confirm") || "Start a new piece? Current sections will be cleared."}</div>
+          <div style={{ fontSize: 13, color: C.textMuted, fontFamily: "'Outfit',sans-serif", marginBottom: 20, whiteSpace: "pre-line" }}>{t("clear_confirm") || "Start a new piece?\nCurrent sections will be cleared."}</div>
           <div style={{ display: "flex", gap: 10, justifyContent: "center" }}>
             <button onClick={() => setShowClearModal(false)} style={{ padding: "8px 20px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("cancel") || "Cancel"}</button>
             <button onClick={doClear} style={{ padding: "8px 20px", borderRadius: 8, border: "none", background: C.danger, color: "#fff", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Outfit',sans-serif" }}>{t("confirm_clear") || "Clear"}</button>
