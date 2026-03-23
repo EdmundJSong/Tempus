@@ -104,9 +104,8 @@ export function useMetronome(externalCtx) {
           tci.current = { active: false, beatIdx: 0, nextBeatTime: 0, totalBeats: 0, restarted: false };
           const nextBar = tl[bi.current + 1];
           if (nextBar && !nextBar.isT) {
-            // Safety net: re-assert audio session at boundary
+            // Safety net: count-in already re-asserted audio session
             if (ctx.state === "suspended") ctx.resume();
-            try { sa.current?.pause(); sa.current.currentTime = 0; sa.current.play().catch(() => {}); } catch {}
             prime(ctx);
             nb.current = Math.max(nb.current, ctx.currentTime + START_LEAD);
             primerBeats.current = 12;
