@@ -77,7 +77,7 @@ export function useMetronome(externalCtx) {
               // Silent restart: fresh interval + audio pipeline wake-up
               clearInterval(tmr.current);
               if (ctx.state === "suspended") ctx.resume();
-              try { sa.current?.play().catch(() => {}); } catch {}
+              try { sa.current?.pause(); sa.current.currentTime = 0; sa.current.play().catch(() => {}); } catch {}
               prime(ctx);
               tci.current = { active: true, beatIdx: 0, nextBeatTime: ctx.currentTime + START_LEAD, totalBeats: _nxB.cpb, restarted: true };
               const newToken = ++runId.current;
@@ -104,7 +104,7 @@ export function useMetronome(externalCtx) {
           if (nextBar && !nextBar.isT) {
             // Safety net: re-assert audio session at boundary
             if (ctx.state === "suspended") ctx.resume();
-            try { sa.current?.play().catch(() => {}); } catch {}
+            try { sa.current?.pause(); sa.current.currentTime = 0; sa.current.play().catch(() => {}); } catch {}
             prime(ctx);
             nb.current = Math.max(nb.current, ctx.currentTime + START_LEAD);
           }
