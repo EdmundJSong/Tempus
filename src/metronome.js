@@ -129,6 +129,7 @@ export function useMetronome(externalCtx) {
         nb.current += 0.05; return;
       }
       const pbc = bar.perBeatCd;
+      if (primerBeats.current === 12) { try { sa.current?.pause(); sa.current.currentTime = 0; sa.current.play().catch(() => {}); } catch {} prime(ctx); }
       const bt = bar.bts[bei.current] ?? 2; clk(ctx, nb.current, bt);
       if (primerBeats.current > 0) { prime(ctx); primerBeats.current--; }
       const beatCd = Math.max(0.01, pbc ? (pbc[bei.current]?.cd ?? pbc[0]?.cd ?? 0.5) : (bar.cd ?? 0.5));
