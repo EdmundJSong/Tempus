@@ -19,6 +19,7 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
   const mountReady = useRef(false);
   const overlayRef = useRef(null);
   const numRef = useRef(null);
+  const ringRef = useRef(null);
   const flashTimer = useRef(null);
   useEffect(() => {
     if (!flashFnRef) return;
@@ -29,10 +30,10 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
         overlayRef.current.style.background = `radial-gradient(circle at 50% 50%, ${c} 0%, transparent 50%)`;
         overlayRef.current.style.opacity = o;
       }
-      const ringEl = overlayRef.current?.parentElement?.querySelector("circle:nth-of-type(2)");
-      if (ringEl && beatType === 0) {
-        ringEl.style.strokeWidth = "12";
-        setTimeout(() => { ringEl.style.strokeWidth = "8"; }, 80);
+      if (!ringRef.current && overlayRef.current?.parentElement) ringRef.current = overlayRef.current.parentElement.querySelector("circle:nth-of-type(2)");
+      if (ringRef.current && beatType === 0) {
+        ringRef.current.style.strokeWidth = "12";
+        setTimeout(() => { if (ringRef.current) ringRef.current.style.strokeWidth = "8"; }, 80);
       }
       if (numRef.current && beatType === 0) numRef.current.classList.add("pump");
       if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -41,7 +42,7 @@ export default function PlayView({ ps, sections, tl, flashFnRef, onPause, onResu
         if (numRef.current) numRef.current.classList.remove("pump");
       }, 80);
     };
-    return () => { flashFnRef.current = null; if (flashTimer.current) clearTimeout(flashTimer.current); };
+    return () => { flashFnRef.current = null; ringRef.current = null; if (flashTimer.current) clearTimeout(flashTimer.current); };
   }, [flashFnRef]);
   useEffect(() => { const tm = setTimeout(() => { mountReady.current = true; }, 600); return () => clearTimeout(tm); }, []);
   const lastAction = useRef(0);
