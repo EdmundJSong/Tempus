@@ -31,6 +31,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
     onClose();
   };
   const pollRef = useRef(null);
+  const syncTmr = useRef(null);
   const [syncActive, setSyncActive] = useState(false);
   const [syncBar, setSyncBar] = useState(null);
   const [syncEnded, setSyncEnded] = useState(false);
@@ -213,6 +214,9 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [vidPlaying, isYT]);
 
+  // Cleanup sync start timer on unmount
+  useEffect(() => () => { if (syncTmr.current) clearTimeout(syncTmr.current); }, []);
+
   // Auto-stop at END marker
   useEffect(() => {
     if (endPt == null || !syncActiveRef.current || !vidPlaying) return;
@@ -252,7 +256,8 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
     setSyncBar(null); syncBarRef.current = null;
     countingInRef.current = vidCountIn > 0;
     setSyncCountIn(vidCountIn > 0);
-    setTimeout(() => {
+    if (syncTmr.current) clearTimeout(syncTmr.current);
+    syncTmr.current = setTimeout(() => {
       if (vidCountIn === 0 && playerRef.current) playerRef.current.playVideo();
       met.tap(); met.start(tl, 0, vidCountIn, { accented: settings.accented, clickSound: settings.clickSound, muted });
       setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
@@ -274,7 +279,8 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
       const useCI = vidCountIn > 0;
       countingInRef.current = useCI;
       setSyncCountIn(useCI);
-      setTimeout(() => {
+      if (syncTmr.current) clearTimeout(syncTmr.current);
+      syncTmr.current = setTimeout(() => {
         if (!useCI && playerRef.current) playerRef.current.playVideo();
         met.tap(); met.start(tl, idx, vidCountIn, { accented: settings.accented, clickSound: settings.clickSound, muted });
         setSyncActive(true); syncActiveRef.current = true; setSyncEnded(false);
@@ -303,7 +309,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
     if (which === "start") { const v = Math.max(0, (startPt || 0) + delta); setStartPt(v); seekTo(v); }
     else { const v = Math.max(0, (endPt || 0) + delta); setEndPt(v); seekTo(v); }
   };
-  const handleSave = () => { if (onSyncPoints) onSyncPoints({ start: startPt, end: endPt }); };
+  const handleSave = () => { if (onSyncPoints) { let s = startPt, e = endPt; if (s != null && e != null && s > e) { s = endPt; e = startPt; setStartPt(s); setEndPt(e); } onSyncPoints({ start: s, end: e }); } };
 
   const adjustTempo = delta => {
     if (!syncBar || !onUpdateSections) return;
@@ -356,7 +362,7 @@ export default function VideoView({ videoUrl, sections, tl, onClose, onSyncPoint
           {isYT ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : isVimeo ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
             : isSC ? <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%" }} />
-            : embedUrl ? <iframe src={embedUrl} style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+            : embedUrl ? <iframe src={embedUrl} title="Video player" style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", border: "none" }} allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
               : <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>{isSafeUrl(videoUrl) ? <a href={videoUrl} target="_blank" rel="noopener noreferrer" style={{ color: C.accent, fontSize: 11 }}>{t("vid_open_browser")}</a> : <span style={{ color: C.danger, fontSize: 11 }}>{t("vid_invalid_url")}</span>}</div>}
         </div>
       </div>
