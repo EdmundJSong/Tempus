@@ -217,7 +217,7 @@ export default function Tempus() {
       else if (isP && !sync.isMemberLocked && e.code === "ArrowRight") jumpSec(1);
     };
     window.addEventListener("keydown", hkd); return () => window.removeEventListener("keydown", hkd);
-  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, showDual, showClearModal, sync.showLobby, sync.isMemberLocked]);
+  }, [isP, exitPlay, go, jumpSec, met, tl, ps, settings, muted, editId, showSet, showSave, showLib, showPrac, showVideo, showDual, showClearModal, sync.showLobby, sync.isMemberLocked, sync.isInRoom, sync.syncReady, sync.isHost, sync.doPause, sync.doStart, sync.setShowLobby, link.showDeviceModal]);
 
   const lastSplitTime = useRef(0);
   const lastSplitBar = useRef(0);
@@ -336,10 +336,10 @@ export default function Tempus() {
           .sec-card:hover { transform: translateY(-3px) scale(1.01); box-shadow: 0 16px 40px rgba(0,0,0,0.6); border-color: ${C.textMuted}55; background: ${C.surfaceHover} !important; }
           .sec-card:hover::before { opacity: 1; }
         }
-        .glass-pill { background: rgba(20, 20, 28, 0.85); border-radius: 40px; border: 1px solid rgba(255,255,255,0.12); padding: 8px 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        .glass-pill { background: rgba(20, 20, 28, 0.95); border-radius: 40px; border: 1px solid rgba(255,255,255,0.12); padding: 8px 16px; box-shadow: 0 12px 40px rgba(0,0,0,0.5); }
         .ambient-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; transition: background 1s ease; }
-        .hdr-text { text-shadow: 0 0 20px currentColor, 0 0 40px currentColor; transition: transform 0.05s ease; }
-        .pump { transform: scale(1.05); }
+        .hdr-text { transition: transform 0.05s ease, color 0.05s ease; }
+        .pump { transform: scale(1.12); color: ${C.downbeat}; }
         .btn-ripple { position: relative; }
         .btn-ripple::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: inherit; z-index: -1; animation: ripple 2.5s cubic-bezier(0.4, 0, 0.2, 1) infinite; }
         [data-tip], [data-tip-b] { position: relative; }
