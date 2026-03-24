@@ -1,6 +1,6 @@
 import React, { useState, useRef, useMemo } from "react";
 import { C, getDeviceId, ldP, svP } from "./utils";
-import { I, nI, oB, NI, Stp, Row, SR } from "./components";
+import { I, nI, oB, NI, Stp, Row } from "./components";
 import { t, setLang, ACTIVE_LANGS, LANG_LABELS, getLang } from "./i18n";
 
 // ============ SETTINGS ============
@@ -143,7 +143,7 @@ export function LibP({ onLoad, onClose }) {
       reader.onload = ev => {
         try {
           const imported = JSON.parse(ev.target.result);
-          if (Array.isArray(imported)) { const merged = [...p]; imported.forEach(ip => { if (!merged.find(x => x.title === ip.title && x.composer === ip.composer)) merged.push({ ...ip, id: Date.now() + Math.random() }); }); svP(merged); sP(merged); }
+          if (Array.isArray(imported)) { const merged = [...p]; imported.forEach(ip => { if (!ip || typeof ip.title !== "string" || !Array.isArray(ip.sections)) return; if (!merged.find(x => x.title === ip.title && x.composer === ip.composer)) merged.push({ ...ip, id: Date.now() + Math.random() }); }); svP(merged); sP(merged); }
         } catch { }
       };
       reader.readAsText(file);
