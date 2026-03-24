@@ -13,9 +13,8 @@ function LandscapePrompt({ onDismiss, onDontShowAgain }) {
   if (isLargeScreen) return null;
   return (
     <div style={{
-      position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.75)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)"
+      position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.9)",
+      display: "flex", alignItems: "center", justifyContent: "center"
     }} onClick={onDismiss}>
       <div style={{
         background: C.bg, border: `1px solid ${C.border}`, borderRadius: 16,
