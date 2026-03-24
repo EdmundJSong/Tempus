@@ -78,7 +78,6 @@ const S = {
 
   // ============ 1. GLOBAL / SHARED ============
 
-  ok:              { en: "OK",        "zh-CN": "好",       "zh-TW": "好",       ja: null, ko: null },
   close:           { en: "Close",     "zh-CN": "关闭",     "zh-TW": "關閉",     ja: null, ko: null },
   cancel:          { en: "Cancel",    "zh-CN": "取消",     "zh-TW": "取消",     ja: null, ko: null },
   save:            { en: "Save",      "zh-CN": "保存",     "zh-TW": "儲存",     ja: null, ko: null },
@@ -108,7 +107,6 @@ const S = {
   practice_mode:   { en: "Practice Mode",  "zh-CN": "练习模式",       "zh-TW": "練習模式",       ja: null, ko: null },
   rec:             { en: "REC",            "zh-CN": "录制",           "zh-TW": "錄製",           ja: null, ko: null },
   count_in:        { en: "Count-in",       "zh-CN": "预备拍",         "zh-TW": "預備拍",         ja: null, ko: null },
-  bar_n:           { en: "Bar",            "zh-CN": "第",             "zh-TW": "第",             ja: null, ko: null }, // used as prefix: "Bar {n}" / "第{n}小节"
   up_next:         { en: "Up Next:",       "zh-CN": "下一段:",        "zh-TW": "下一段:",        ja: null, ko: null },
   free_dur:        { en: "Free",           "zh-CN": "自由",           "zh-TW": "自由",           ja: null, ko: null }, // "{n}s Free"
   at_tempo:        { en: "at",             "zh-CN": "速度",           "zh-TW": "速度",           ja: null, ko: null }, // "{ts} at {tempo}"
@@ -149,9 +147,6 @@ const S = {
   row_curve:          { en: "Curve",             "zh-CN": "曲线",       "zh-TW": "曲線",       ja: null, ko: null },
   row_expressive:     { en: "Expressive",        "zh-CN": "表情",       "zh-TW": "表情",       ja: null, ko: null },
   markers_placeholder:{ en: "e.g. 3, 7.5, 12",  "zh-CN": "如 3, 7.5, 12", "zh-TW": "如 3, 7.5, 12", ja: null, ko: null },
-  curve_constant:     { en: "—",                 "zh-CN": "—",         "zh-TW": "—",         ja: null, ko: null },
-  curve_accel:        { en: "accel.",            "zh-CN": "accel.",    "zh-TW": "accel.",    ja: null, ko: null },
-  curve_rit:          { en: "rit.",              "zh-CN": "rit.",      "zh-TW": "rit.",      ja: null, ko: null },
   duplicate:          { en: "Duplicate",         "zh-CN": "复制",       "zh-TW": "複製",       ja: null, ko: null },
   loop:               { en: "Loop",              "zh-CN": "循环",       "zh-TW": "循環",       ja: null, ko: null },
   beat_unit:          { en: "Beat Unit",         "zh-CN": "拍值",       "zh-TW": "拍值",       ja: null, ko: null },
@@ -175,14 +170,6 @@ const S = {
   sr_count_in:       { en: "Count-in",       "zh-CN": "预备拍",     "zh-TW": "預備拍",     ja: null, ko: null },
   sr_silent_cycle:   { en: "Silent Cycle",   "zh-CN": "静音循环",   "zh-TW": "靜音循環",   ja: null, ko: null },
   sr_dual_tempo:     { en: "Dual Tempo",     "zh-CN": "双速",       "zh-TW": "雙速",       ja: null, ko: null },
-  vis_pulse:         { en: "Pulse",          "zh-CN": "脉冲",       "zh-TW": "脈衝",       ja: null, ko: null },
-  vis_full:          { en: "Full",           "zh-CN": "完整",       "zh-TW": "完整",       ja: null, ko: null },
-  vis_flash:         { en: "Flash",          "zh-CN": "闪烁",       "zh-TW": "閃爍",       ja: null, ko: null },
-  tip_accented:      { en: "Accented",       "zh-CN": "强弱拍",     "zh-TW": "強弱拍",     ja: null, ko: null },
-  tip_flat:          { en: "Flat",           "zh-CN": "均匀",       "zh-TW": "均勻",       ja: null, ko: null },
-  tip_always_audible:{ en: "Always audible", "zh-CN": "始终有声",   "zh-TW": "始終有聲",   ja: null, ko: null },
-  tip_silent_on:     { en: "on,",            "zh-CN": "秒响,",      "zh-TW": "秒響,",      ja: null, ko: null }, // "{n}s on,"
-  tip_silent_off:    { en: "off, repeating", "zh-CN": "秒静, 循环", "zh-TW": "秒靜, 循環", ja: null, ko: null }, // "{n}s off, repeating"
   tip_dual:          { en: "Side-by-side metronomes", "zh-CN": "并列节拍器", "zh-TW": "並列節拍器", ja: null, ko: null },
   tempo_progress:    { en: "Tempo Progress",          "zh-CN": "速度进度",   "zh-TW": "速度進度",   ja: null, ko: null },
   tip_tempo_progress:{ en: "Show last/best tempo per section", "zh-CN": "显示每段上次/最佳速度", "zh-TW": "顯示每段上次/最佳速度", ja: null, ko: null },
@@ -190,7 +177,6 @@ const S = {
   tip_offline:       { en: "Cache app for offline use", "zh-CN": "缓存应用供离线使用", "zh-TW": "快取應用程式供離線使用", ja: null, ko: null },
   device_id:         { en: "Device ID:",     "zh-CN": "设备 ID:",   "zh-TW": "裝置 ID:",   ja: null, ko: null },
   data_local:        { en: "Your data is stored locally and backed up anonymously.", "zh-CN": "数据存储在本地并匿名备份。", "zh-TW": "資料儲存於本地並匿名備份。", ja: null, ko: null },
-  sr_lang:           { en: "Language",       "zh-CN": "语言",       "zh-TW": "語言",       ja: null, ko: null },
 
   // ============ 7. SAVE / LIBRARY ============
 
@@ -239,9 +225,6 @@ const S = {
   members_label:      { en: "members",         "zh-CN": "成员",       "zh-TW": "成員",       ja: null, ko: null }, // "{n}/{max} members"
   pending_n:          { en: "Pending",         "zh-CN": "待审核",     "zh-TW": "待審核",     ja: null, ko: null }, // + count
   members:            { en: "Members",         "zh-CN": "成员",       "zh-TW": "成員",       ja: null, ko: null },
-  err_room_not_found: { en: "Room not found",  "zh-CN": "房间不存在", "zh-TW": "房間不存在", ja: null, ko: null },
-  err_removed:        { en: "You were removed from this room", "zh-CN": "你已被移出此房间", "zh-TW": "你已被移出此房間", ja: null, ko: null },
-  err_room_full:      { en: "Room is full",    "zh-CN": "房间已满",   "zh-TW": "房間已滿",   ja: null, ko: null },
   err_enter_name:     { en: "Enter your display name", "zh-CN": "请输入显示名称", "zh-TW": "請輸入顯示名稱", ja: null, ko: null },
   err_enter_code:     { en: "Enter a 4-digit room code", "zh-CN": "请输入4位房间代码", "zh-TW": "請輸入4位房間代碼", ja: null, ko: null },
   err_create_fail:    { en: "Failed to create room", "zh-CN": "创建房间失败", "zh-TW": "建立房間失敗", ja: null, ko: null },
@@ -262,14 +245,12 @@ const S = {
   err_handshake:   { en: "Handshake failed","zh-CN": "握手失败",   "zh-TW": "握手失敗",   ja: null, ko: null },
   err_6digit:      { en: "Enter a 6-digit code", "zh-CN": "请输入6位代码", "zh-TW": "請輸入6位代碼", ja: null, ko: null },
   err_join_link:   { en: "Could not join",  "zh-CN": "无法加入",   "zh-TW": "無法加入",   ja: null, ko: null },
-  err_code_invalid:{ en: "Code invalid, expired, or already used", "zh-CN": "代码无效、已过期或已使用", "zh-TW": "代碼無效、已過期或已使用", ja: null, ko: null },
   remove_all:      { en: "Remove all",      "zh-CN": "全部移除",   "zh-TW": "全部移除",   ja: null, ko: null },
   toast_left:      { en: "You left the room","zh-CN": "你已离开房间","zh-TW": "你已離開房間", ja: null, ko: null },
   unlink_device:   { en: "Unlink this device","zh-CN": "取消链接此设备","zh-TW": "取消連結此裝置", ja: null, ko: null },
   sync_profiles_syncing: { en: "Syncing profiles…", "zh-CN": "同步资料中…", "zh-TW": "同步資料中…", ja: null, ko: null },
   sync_profiles_synced:  { en: "Profiles synced",   "zh-CN": "资料已同步",   "zh-TW": "資料已同步",   ja: null, ko: null },
   sync_profiles_error:   { en: "Sync failed",       "zh-CN": "同步失败",     "zh-TW": "同步失敗",     ja: null, ko: null },
-  err_too_many_profiles: { en: "Too many profiles to sync (max {n})", "zh-CN": "资料过多无法同步（上限{n}）", "zh-TW": "資料過多無法同步（上限{n}）", ja: null, ko: null },
 
   // ============ 11. VIDEO VIEW ============
 
